@@ -1,0 +1,262 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: "Inter", "Noto Sans JP", system-ui, sans-serif;
+  background: #0b0e13;
+  color: #d6dde8;
+  overflow: hidden;
+}
+
+.app {
+  display: flex;
+  height: 100vh;
+}
+
+.sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: #0e1219;
+  border-right: 1px solid #1c2430;
+}
+
+.brand {
+  padding: 14px 16px;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.03em;
+  border-bottom: 1px solid #1c2430;
+}
+
+.connect-form {
+  display: flex;
+  gap: 6px;
+  padding: 10px;
+  border-bottom: 1px solid #1c2430;
+}
+
+.new-console-btn {
+  flex: 1;
+  background: #1f5f7a;
+  border: none;
+  border-radius: 6px;
+  color: #e6f3f8;
+  font-size: 12px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.new-console-btn:hover {
+  background: #27718f;
+}
+
+.thumb-toggle {
+  flex-shrink: 0;
+  width: 32px;
+  background: #151b26;
+  border: 1px solid #263143;
+  border-radius: 6px;
+  color: #9fb2c8;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.thumb-toggle:hover {
+  background: #1c2536;
+  border-color: #3d6c8f;
+}
+
+.connect-form input {
+  flex: 1;
+  min-width: 0;
+  background: #151b26;
+  border: 1px solid #263143;
+  border-radius: 6px;
+  color: #d6dde8;
+  padding: 6px 8px;
+  font-size: 12px;
+  outline: none;
+}
+
+.connect-form input:focus {
+  border-color: #3d6c8f;
+}
+
+.connect-form button {
+  background: #1f5f7a;
+  border: none;
+  border-radius: 6px;
+  color: #e6f3f8;
+  font-size: 12px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.connect-form button:hover {
+  background: #27718f;
+}
+
+.session-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.session-card {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: #131926;
+  border: 1px solid transparent;
+  cursor: pointer;
+  user-select: none;
+}
+
+.session-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.thumb {
+  width: 100%;
+  height: 110px;
+  border-radius: 6px;
+  background: #11151c;
+  border: 1px solid #1c2430;
+  display: block;
+}
+
+.zoom-overlay {
+  position: fixed;
+  left: 248px;
+  z-index: 100;
+  pointer-events: none;
+  border-radius: 10px;
+  border: 1px solid #2f6f8f;
+  background: #11151c;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  padding: 6px;
+  animation: zoom-in 0.12s ease;
+}
+
+.zoom-canvas {
+  width: 560px;
+  height: 330px;
+  display: block;
+  border-radius: 6px;
+}
+
+@keyframes zoom-in {
+  from {
+    opacity: 0;
+    transform: translateX(-6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.session-card:hover {
+  background: #182136;
+}
+
+.session-card.active {
+  border-color: #2f6f8f;
+  background: #16233a;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-dot.running {
+  background: #3ddc84;
+  box-shadow: 0 0 6px #3ddc8466;
+}
+
+.status-dot.exited {
+  background: #8892a0;
+}
+
+.session-title {
+  flex: 1;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: #5c6775;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.close-btn:hover {
+  color: #e06c75;
+}
+
+.empty-hint {
+  margin-top: 24px;
+  text-align: center;
+  font-size: 12px;
+  color: #5c6775;
+  line-height: 1.8;
+}
+
+.main {
+  flex: 1;
+  position: relative;
+  background: #11151c;
+  min-width: 0;
+}
+
+.term-container {
+  position: absolute;
+  inset: 0;
+  padding: 8px;
+}
+
+.term-container .xterm {
+  height: 100%;
+}
+
+.placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #3d4756;
+}
+
+.placeholder-logo {
+  font-size: 56px;
+  margin-bottom: 12px;
+}
