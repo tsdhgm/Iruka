@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     io::{Read, Write},
     sync::{
-        atomic::{AtomicU32, Ordering},
+        atomic::Ordering,
         Arc, Mutex,
     },
 };
@@ -30,7 +30,6 @@ struct Session {
 #[derive(Default)]
 pub struct PtyState {
     sessions: Arc<Mutex<HashMap<u32, Session>>>,
-    next_id: AtomicU32,
 }
 
 #[tauri::command]
@@ -69,7 +68,7 @@ pub fn spawn_session(
     let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
     let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
 
-    let id = state.next_id.fetch_add(1, Ordering::Relaxed);
+    let id = crate::NEXT_SESSION_ID.fetch_add(1, Ordering::Relaxed);
     state.sessions.lock().unwrap().insert(
         id,
         Session {

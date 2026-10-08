@@ -260,3 +260,107 @@ body {
   font-size: 56px;
   margin-bottom: 12px;
 }
+
+.status-dot.connecting {
+  background: #e5c07b;
+  box-shadow: 0 0 6px #e5c07b66;
+}
+
+.session-kind {
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 600;
+  color: #7fd1e8;
+  border: 1px solid #263143;
+  border-radius: 3px;
+  padding: 0 3px;
+}
+
+.rdp-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-bottom: 1px solid #1c2430;
+}
+
+.rdp-form input,
+.rdp-form select {
+  background: #151b26;
+  border: 1px solid #263143;
+  border-radius: 6px;
+  color: #d6dde8;
+  padding: 6px 8px;
+  font-size: 12px;
+  outline: none;
+  min-width: 0;
+}
+
+.rdp-form input:focus,
+.rdp-form select:focus {
+  border-color: #3d6c8f;
+}
+
+.rdp-form-row {
+  display: flex;
+  gap: 6px;
+}
+
+.rdp-form-row select {
+  flex: 1;
+}
+
+.rdp-form button {
+  background: #1f5f7a;
+  border: none;
+  border-radius: 6px;
+  color: #e6f3f8;
+  font-size: 12px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.rdp-form button[type="button"] {
+  background: #151b26;
+  color: #9fb2c8;
+}
+
+.rdp-container {
+  position: absolute;
+  inset: 0;
+  background: #000;
+}
+
+/* 等倍表示。はみ出す分はスクロールバーで動かす（Remmina と同じ） */
+.rdp-scroller {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  display: flex;
+}
+
+.rdp-canvas {
+  flex-shrink: 0;
+  margin: auto; /* 表示枠より小さいときは中央に、大きいときは左上から */
+  outline: none;
+  cursor: default; /* リモートのカーソルは描画しないので、ローカルのものを出す */
+}
+
+.rdp-status {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #131926e6;
+  border: 1px solid #263143;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 13px;
+  color: #d6dde8;
+  max-width: 80%;
+}
+
+.rdp-status.error {
+  border-color: #e06c75;
+  color: #f0b5ba;
+}

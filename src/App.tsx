@@ -4,24 +4,78 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import "./App.css";
+import {
+  drawCanvasToCanvas,
+  RDP_BACKENDS,
+  SCANCODES,
+  toRemoteCoords,
+  type RdpBackendKind,
+  type RdpConnectParams,
+  type RdpEvent,
+  type RdpInput,
+} from "./rdp";
 
 type PtyEvent =
   | { type: "output"; data: string }
   | { type: "exit"; code: number | null };
 
-type SessionStatus = "running" | "exited";
+type SessionStatus = "connecting" | "running" | "exited";
 
 interface SessionInfo {
   id: number;
+  kind: "pty" | "rdp";
   title: string;
   status: SessionStatus;
   exitCode: number | null;
+  message: string | null;
 }
 
-interface TermHandle {
-  term: Terminal;
-  fit: FitAddon;
-  container: HTMLDivElement;
+type SessionHandle =
+  | { kind: "pty"; term: Terminal; fit: FitAddon; container: HTMLDivElement }
+  | { kind: "rdp"; canvas: HTMLCanvasElement; container: HTMLDivElement };
+
+/** リモートの 1 ピクセルを物理 1 ピクセルで表示する（OS の表示倍率を打ち消す） */
+function applyPixelSize(canvas: HTMLCanvasElement) {
+  const dpr = window.devicePixelRatio || 1;
+  canvas.style.width = `${canvas.width / dpr}px`;
+  canvas.style.height = `${canvas.height / dpr}px`;
+}
+
+interface RdpForm {
+  host: string;
+  username: string;
+  password: string;
+  backend: RdpBackendKind;
+}
+
+/**
+ * 要求するリモート解像度 = ローカルモニタの物理解像度（mstsc の全画面接続と同じ）。
+ * 全画面表示で等倍ぴったり、ウィンドウ表示でははみ出す分をスクロールで見る。
+ * 画面共有型のサーバー（GNOME Remote Desktop）は自分の画面サイズを通知してくるので、
+ * 実際の大きさはサーバーからの resize イベントに従う。
+ */
+function localDesktopSize(): { width: number; height: number } {
+  const dpr = window.devicePixelRatio || 1;
+  // RDP で要求できる範囲（200〜8192）に収め、幅は偶数にする
+  const clamp = (v: number) => Math.max(200, Math.min(8192, Math.round(v)));
+  return {
+    width: clamp(window.screen.width * dpr) & ~1,
+    height: clamp(window.screen.height * dpr),
+  };
+}
+
+function loadRdpForm(): RdpForm {
+  try {
+    const saved = JSON.parse(localStorage.getItem("iruka.rdpForm") ?? "{}");
+    return {
+      host: saved.host ?? "",
+      username: saved.username ?? "",
+      password: "",
+      backend: saved.backend ?? "auto",
+    };
+  } catch {
+    return { host: "", username: "", password: "", backend: "auto" };
+  }
 }
 
 function b64ToBytes(b64: string): Uint8Array {
@@ -42,6 +96,16 @@ const THUMB_W = 196;
 const THUMB_H = 110;
 const ZOOM_W = 560;
 const ZOOM_H = 330;
+
+function drawThumb(
+  handle: SessionHandle,
+  canvas: HTMLCanvasElement,
+  cssW: number,
+  cssH: number,
+) {
+  if (handle.kind === "pty") drawTermToCanvas(handle.term, canvas, cssW, cssH);
+  else drawCanvasToCanvas(handle.canvas, canvas, cssW, cssH);
+}
 
 function drawTermToCanvas(
   term: Terminal,
@@ -85,7 +149,7 @@ function App() {
   const [showThumbs, setShowThumbs] = useState<boolean>(
     () => localStorage.getItem("iruka.showThumbs") !== "0",
   );
-  const terminalsRef = useRef<Map<number, TermHandle>>(new Map());
+  const handlesRef = useRef<Map<number, SessionHandle>>(new Map());
   const mainRef = useRef<HTMLDivElement>(null);
   const activeIdRef = useRef<number | null>(null);
   activeIdRef.current = activeId;
@@ -95,28 +159,49 @@ function App() {
   const zoomRef = useRef<{ id: number; top: number } | null>(null);
   zoomRef.current = zoom;
   const zoomCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [rdpForm, setRdpForm] = useState<RdpForm | null>(null);
 
   const drawZoom = useCallback(() => {
     const z = zoomRef.current;
     const canvas = zoomCanvasRef.current;
     if (!z || !canvas) return;
-    const handle = terminalsRef.current.get(z.id);
-    if (handle) drawTermToCanvas(handle.term, canvas, ZOOM_W, ZOOM_H);
+    const handle = handlesRef.current.get(z.id);
+    if (handle) drawThumb(handle, canvas, ZOOM_W, ZOOM_H);
   }, []);
 
-  const focusSession = useCallback((id: number) => {
-    for (const [sid, handle] of terminalsRef.current) {
-      handle.container.style.display = sid === id ? "block" : "none";
+  const showSession = useCallback((id: number) => {
+    for (const [sid, handle] of handlesRef.current) {
+      handle.container.style.display = sid === id ? "" : "none";
     }
-    setActiveId(id);
-    const handle = terminalsRef.current.get(id);
+    const handle = handlesRef.current.get(id);
     if (handle) {
       requestAnimationFrame(() => {
-        handle.fit.fit();
-        handle.term.focus();
+        if (handle.kind === "pty") {
+          handle.fit.fit();
+          handle.term.focus();
+        } else {
+          handle.canvas.focus();
+        }
       });
     }
   }, []);
+
+  const focusSession = useCallback(
+    (id: number) => {
+      setActiveId(id);
+      showSession(id);
+    },
+    [showSession],
+  );
+
+  const updateSession = useCallback(
+    (id: number, patch: Partial<SessionInfo>) => {
+      setSessions((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, ...patch } : s)),
+      );
+    },
+    [],
+  );
 
   const openConsole = useCallback(
     async () => {
@@ -161,11 +246,7 @@ function App() {
         if (msg.type === "output") {
           term.write(b64ToBytes(msg.data));
         } else {
-          setSessions((prev) =>
-            prev.map((s) =>
-              s.id === id ? { ...s, status: "exited", exitCode: msg.code } : s,
-            ),
-          );
+          updateSession(id, { status: "exited", exitCode: msg.code });
           term.write(
             `\r\n\x1b[90m[セッション終了 (exit ${msg.code ?? "?"})]\x1b[0m\r\n`,
           );
@@ -179,24 +260,237 @@ function App() {
         invoke("resize_session", { id, cols, rows }).catch(() => {});
       });
 
-      terminalsRef.current.set(id, { term, fit, container });
+      handlesRef.current.set(id, { kind: "pty", term, fit, container });
       dirtyRef.current.add(id);
       setSessions((prev) => [
         ...prev,
-        { id, title, status: "running", exitCode: null },
+        {
+          id,
+          kind: "pty",
+          title,
+          status: "running",
+          exitCode: null,
+          message: null,
+        },
       ]);
       focusSession(id);
     },
-    [focusSession],
+    [focusSession, updateSession],
   );
 
+  const openRdp = useCallback(
+    async (params: RdpConnectParams) => {
+      const main = mainRef.current;
+      if (!main) return;
+
+      const container = document.createElement("div");
+      container.className = "rdp-container";
+      const scroller = document.createElement("div");
+      scroller.className = "rdp-scroller";
+      const canvas = document.createElement("canvas");
+      canvas.className = "rdp-canvas";
+      canvas.tabIndex = 0;
+      canvas.width = params.width;
+      canvas.height = params.height;
+      const status = document.createElement("div");
+      status.className = "rdp-status";
+      status.textContent = `${params.host} に接続中…`;
+      scroller.append(canvas);
+      container.append(scroller, status);
+      applyPixelSize(canvas);
+      main.appendChild(container);
+      const ctx = canvas.getContext("2d")!;
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // 性能計測（調査用）：2 秒ごとに、受信の遅れと描画にかかった時間を Rust のログへ出す
+      const perf = { frames: 0, kb: 0, handleMs: 0, maxLag: 0, maxHandle: 0 };
+
+      // 画面の中身はバイナリで届く（形式は Rust 側 FrameSink のコメント参照）
+      let sid: number | null = null;
+      const onFrame = new Channel<ArrayBuffer>();
+      onFrame.onmessage = (buf) => {
+        const t0 = performance.now();
+        const view = new DataView(buf);
+        const fbWidth = view.getUint32(0, true);
+        const fbHeight = view.getUint32(4, true);
+        const count = view.getUint32(8, true);
+        const sentAt = view.getFloat64(16, true);
+        // サイズ変更の前後で行き違ったデータは捨てる（作り直し後に全体が届く）
+        if (fbWidth !== canvas.width || fbHeight !== canvas.height) return;
+        let offset = 24;
+        for (let i = 0; i < count; i++) {
+          const x = view.getUint32(offset, true);
+          const y = view.getUint32(offset + 4, true);
+          const w = view.getUint32(offset + 8, true);
+          const h = view.getUint32(offset + 12, true);
+          offset += 16;
+          const len = w * h * 4;
+          const img = new ImageData(new Uint8ClampedArray(buf, offset, len), w, h);
+          ctx.putImageData(img, x, y);
+          offset += len;
+        }
+        if (sid !== null) dirtyRef.current.add(sid);
+        const dt = performance.now() - t0;
+        perf.frames++;
+        perf.kb += Math.round(buf.byteLength / 1024);
+        perf.handleMs += dt;
+        perf.maxHandle = Math.max(perf.maxHandle, dt);
+        perf.maxLag = Math.max(perf.maxLag, Date.now() - sentAt);
+      };
+
+      const onEvent = new Channel<RdpEvent>();
+      let id: number;
+      try {
+        id = await invoke<number>("rdp_connect", { params, onEvent, onFrame });
+        sid = id;
+      } catch (e) {
+        container.remove();
+        alert(`RDP 接続を開始できませんでした: ${e}`);
+        return;
+      }
+
+      const perfTimer = setInterval(() => {
+        if (perf.frames === 0) return;
+        invoke("rdp_perf_log", {
+          message: `id=${id} frames=${perf.frames} kb=${perf.kb} handle_ms_total=${perf.handleMs.toFixed(1)} handle_ms_max=${perf.maxHandle.toFixed(1)} lag_ms_max=${perf.maxLag.toFixed(0)}`,
+        }).catch(() => {});
+        Object.assign(perf, { frames: 0, kb: 0, handleMs: 0, maxLag: 0, maxHandle: 0 });
+      }, 2000);
+
+      onEvent.onmessage = (msg) => {
+        if (msg.type === "resize") {
+          canvas.width = msg.width;
+          canvas.height = msg.height;
+          applyPixelSize(canvas);
+          ctx.fillStyle = "#000";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          status.style.display = "none";
+          updateSession(id, { status: "running", message: null });
+          dirtyRef.current.add(id);
+        } else {
+          clearInterval(perfTimer);
+          status.style.display = "";
+          status.textContent = msg.error
+            ? `接続エラー（${msg.backend}）: ${msg.reason}`
+            : `切断されました（${msg.backend}）: ${msg.reason}`;
+          status.classList.toggle("error", msg.error);
+          updateSession(id, { status: "exited", message: msg.reason });
+        }
+      };
+
+      // 入力はフレームごとにまとめて送る（マウス移動は最新の 1 件だけ残す）
+      let queue: RdpInput[] = [];
+      let scheduled = false;
+      const send = (ev: RdpInput) => {
+        const last = queue[queue.length - 1];
+        if (ev.type === "mouseMove" && last?.type === "mouseMove") {
+          queue[queue.length - 1] = ev;
+        } else {
+          queue.push(ev);
+        }
+        if (scheduled) return;
+        scheduled = true;
+        requestAnimationFrame(() => {
+          scheduled = false;
+          const events = queue;
+          queue = [];
+          invoke("rdp_input", { id, events }).catch(() => {});
+        });
+      };
+
+      canvas.addEventListener("pointermove", (e) => {
+        send({ type: "mouseMove", ...toRemoteCoords(canvas, e.clientX, e.clientY) });
+      });
+      canvas.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        canvas.focus();
+        canvas.setPointerCapture(e.pointerId);
+        send({ type: "mouseMove", ...toRemoteCoords(canvas, e.clientX, e.clientY) });
+        send({ type: "mouseButton", button: e.button, down: true });
+      });
+      canvas.addEventListener("pointerup", (e) => {
+        send({ type: "mouseMove", ...toRemoteCoords(canvas, e.clientX, e.clientY) });
+        send({ type: "mouseButton", button: e.button, down: false });
+      });
+      canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+      canvas.addEventListener(
+        "wheel",
+        (e) => {
+          e.preventDefault();
+          if (e.deltaY !== 0) {
+            send({ type: "wheel", vertical: true, units: e.deltaY < 0 ? 120 : -120 });
+          }
+          if (e.deltaX !== 0) {
+            send({ type: "wheel", vertical: false, units: e.deltaX > 0 ? 120 : -120 });
+          }
+        },
+        { passive: false },
+      );
+      const onKey = (down: boolean) => (e: KeyboardEvent) => {
+        const scancode = SCANCODES[e.code];
+        if (scancode === undefined) return;
+        e.preventDefault();
+        send({ type: "key", scancode, down });
+      };
+      canvas.addEventListener("keydown", onKey(true));
+      canvas.addEventListener("keyup", onKey(false));
+      canvas.addEventListener("blur", () => send({ type: "releaseAll" }));
+
+      handlesRef.current.set(id, { kind: "rdp", canvas, container });
+      dirtyRef.current.add(id);
+      setSessions((prev) => [
+        ...prev,
+        {
+          id,
+          kind: "rdp",
+          title: params.host,
+          status: "connecting",
+          exitCode: null,
+          message: null,
+        },
+      ]);
+      focusSession(id);
+    },
+    [focusSession, updateSession],
+  );
+
+  const submitRdpForm = useCallback(() => {
+    if (!rdpForm || !rdpForm.host.trim() || !rdpForm.username.trim()) return;
+    const [hostPart, portPart] = rdpForm.host.trim().split(":");
+    const { width, height } = localDesktopSize();
+    localStorage.setItem(
+      "iruka.rdpForm",
+      JSON.stringify({
+        host: rdpForm.host.trim(),
+        username: rdpForm.username.trim(),
+        backend: rdpForm.backend,
+      }),
+    );
+    openRdp({
+      host: hostPart,
+      port: portPart ? Number(portPart) : null,
+      username: rdpForm.username.trim(),
+      password: rdpForm.password,
+      domain: null,
+      width,
+      height,
+      backend: rdpForm.backend,
+    });
+    setRdpForm(null);
+  }, [rdpForm, openRdp]);
+
   const closeSession = useCallback((id: number) => {
-    invoke("kill_session", { id }).catch(() => {});
-    const handle = terminalsRef.current.get(id);
+    const handle = handlesRef.current.get(id);
     if (handle) {
-      handle.term.dispose();
+      if (handle.kind === "pty") {
+        invoke("kill_session", { id }).catch(() => {});
+        handle.term.dispose();
+      } else {
+        invoke("rdp_close", { id }).catch(() => {});
+      }
       handle.container.remove();
-      terminalsRef.current.delete(id);
+      handlesRef.current.delete(id);
     }
     setSessions((prev) => {
       const next = prev.filter((s) => s.id !== id);
@@ -204,28 +498,21 @@ function App() {
         const fallback = next.length > 0 ? next[next.length - 1].id : null;
         setActiveId(fallback);
         if (fallback !== null) {
-          requestAnimationFrame(() => {
-            const h = terminalsRef.current.get(fallback);
-            if (h) {
-              h.container.style.display = "block";
-              h.fit.fit();
-              h.term.focus();
-            }
-          });
+          showSession(fallback);
         }
       }
       return next;
     });
-  }, []);
+  }, [showSession]);
 
   // 500ms ごとに、出力のあったセッションのサムネールだけ再描画する
   useEffect(() => {
     const iv = setInterval(() => {
       for (const id of dirtyRef.current) {
-        const handle = terminalsRef.current.get(id);
+        const handle = handlesRef.current.get(id);
         const canvas = thumbsRef.current.get(id);
         if (handle && canvas) {
-          drawTermToCanvas(handle.term, canvas, THUMB_W, THUMB_H);
+          drawThumb(handle, canvas, THUMB_W, THUMB_H);
         }
         dirtyRef.current.delete(id);
       }
@@ -242,8 +529,12 @@ function App() {
     const onWindowResize = () => {
       const id = activeIdRef.current;
       if (id === null) return;
-      const handle = terminalsRef.current.get(id);
-      if (handle) handle.fit.fit();
+      const handle = handlesRef.current.get(id);
+      if (handle?.kind === "pty") handle.fit.fit();
+      // モニター間の移動などで表示倍率が変わったら等倍表示を合わせ直す
+      for (const h of handlesRef.current.values()) {
+        if (h.kind === "rdp") applyPixelSize(h.canvas);
+      }
     };
     window.addEventListener("resize", onWindowResize);
     return () => window.removeEventListener("resize", onWindowResize);
@@ -255,7 +546,13 @@ function App() {
         <div className="brand">🐬 Iruka</div>
         <div className="connect-form">
           <button className="new-console-btn" onClick={() => openConsole()}>
-            ＋ 新しいコンソール
+            ＋ コンソール
+          </button>
+          <button
+            className="new-console-btn"
+            onClick={() => setRdpForm((f) => (f ? null : loadRdpForm()))}
+          >
+            ＋ RDP
           </button>
           <button
             className="thumb-toggle"
@@ -273,6 +570,59 @@ function App() {
             {showThumbs ? "☰" : "🖼"}
           </button>
         </div>
+        {rdpForm && (
+          <form
+            className="rdp-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              submitRdpForm();
+            }}
+          >
+            <input
+              placeholder="ホスト（host または host:port）"
+              value={rdpForm.host}
+              autoFocus
+              onChange={(e) => setRdpForm({ ...rdpForm, host: e.target.value })}
+            />
+            <input
+              placeholder={"ユーザー名（DOMAIN\\user 可）"}
+              value={rdpForm.username}
+              onChange={(e) =>
+                setRdpForm({ ...rdpForm, username: e.target.value })
+              }
+            />
+            <input
+              type="password"
+              placeholder="パスワード"
+              value={rdpForm.password}
+              onChange={(e) =>
+                setRdpForm({ ...rdpForm, password: e.target.value })
+              }
+            />
+            <div className="rdp-form-row">
+              <select
+                title="RDP の接続方式"
+                value={rdpForm.backend}
+                onChange={(e) =>
+                  setRdpForm({
+                    ...rdpForm,
+                    backend: e.target.value as RdpBackendKind,
+                  })
+                }
+              >
+                {RDP_BACKENDS.map((b) => (
+                  <option key={b.value} value={b.value}>
+                    {b.label}
+                  </option>
+                ))}
+              </select>
+              <button type="submit">接続</button>
+              <button type="button" onClick={() => setRdpForm(null)}>
+                取消
+              </button>
+            </div>
+          </form>
+        )}
         <div className="session-list">
           {sessions.map((s) => (
             <div
@@ -291,7 +641,12 @@ function App() {
             >
               <div className="session-card-header">
                 <span className={`status-dot ${s.status}`} />
-                <span className="session-title">{s.title}</span>
+                <span className="session-kind">
+                  {s.kind === "rdp" ? "RDP" : ">_"}
+                </span>
+                <span className="session-title" title={s.message ?? undefined}>
+                  {s.title}
+                </span>
                 <button
                   className="close-btn"
                   title="閉じる"
@@ -323,7 +678,7 @@ function App() {
             <div className="empty-hint">
               コンソールがありません。
               <br />
-              「＋ 新しいコンソール」で開きます。
+              「＋ コンソール」「＋ RDP」で開きます。
             </div>
           )}
         </div>
@@ -332,7 +687,7 @@ function App() {
         {sessions.length === 0 && (
           <div className="placeholder">
             <div className="placeholder-logo">🐬</div>
-            <p>Iruka — console fleet viewer</p>
+            <p>Iruka — console &amp; desktop fleet viewer</p>
           </div>
         )}
       </main>
