@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke, Channel } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
@@ -160,6 +161,8 @@ function App() {
   zoomRef.current = zoom;
   const zoomCanvasRef = useRef<HTMLCanvasElement>(null);
   const [rdpForm, setRdpForm] = useState<RdpForm | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [toolbarPinned, setToolbarPinned] = useState(false);
 
   const drawZoom = useCallback(() => {
     const z = zoomRef.current;
@@ -480,7 +483,19 @@ function App() {
     setRdpForm(null);
   }, [rdpForm, openRdp]);
 
+  const toggleFullscreen = useCallback(async (on: boolean) => {
+    try {
+      await getCurrentWindow().setFullscreen(on);
+      setFullscreen(on);
+    } catch (e) {
+      alert(`全画面表示を切り替えられませんでした: ${e}`);
+    }
+    const id = activeIdRef.current;
+    if (id !== null) showSession(id);
+  }, [showSession]);
+
   const closeSession = useCallback((id: number) => {
+    if (activeIdRef.current === id) toggleFullscreen(false);
     const handle = handlesRef.current.get(id);
     if (handle) {
       if (handle.kind === "pty") {
@@ -503,7 +518,7 @@ function App() {
       }
       return next;
     });
-  }, [showSession]);
+  }, [showSession, toggleFullscreen]);
 
   // 500ms ごとに、出力のあったセッションのサムネールだけ再描画する
   useEffect(() => {
@@ -535,13 +550,20 @@ function App() {
       for (const h of handlesRef.current.values()) {
         if (h.kind === "rdp") applyPixelSize(h.canvas);
       }
+      // ウィンドウマネージャー側で全画面が解除された場合にも表示を合わせる
+      getCurrentWindow()
+        .isFullscreen()
+        .then(setFullscreen)
+        .catch(() => {});
     };
     window.addEventListener("resize", onWindowResize);
     return () => window.removeEventListener("resize", onWindowResize);
   }, []);
 
+  const activeSession = sessions.find((s) => s.id === activeId) ?? null;
+
   return (
-    <div className="app">
+    <div className={`app ${fullscreen ? "fullscreen" : ""}`}>
       <aside className="sidebar">
         <div className="brand">🐬 Iruka</div>
         <div className="connect-form">
@@ -683,14 +705,45 @@ function App() {
           )}
         </div>
       </aside>
-      <main className="main" ref={mainRef}>
-        {sessions.length === 0 && (
-          <div className="placeholder">
-            <div className="placeholder-logo">🐬</div>
-            <p>Iruka — console &amp; desktop fleet viewer</p>
+      <div className="main-area">
+        <main className="main" ref={mainRef}>
+          {sessions.length === 0 && (
+            <div className="placeholder">
+              <div className="placeholder-logo">🐬</div>
+              <p>Iruka — console &amp; desktop fleet viewer</p>
+            </div>
+          )}
+        </main>
+        {activeSession?.kind === "rdp" && (
+          // Remmina 風のツールバー：上端中央のつまみにマウスを乗せると降りてくる
+          <div className={`rdp-toolbar ${toolbarPinned ? "pinned" : ""}`}>
+            <div className="rdp-toolbar-body">
+              <span className="rdp-toolbar-title">{activeSession.title}</span>
+              <button
+                className={toolbarPinned ? "on" : ""}
+                title={toolbarPinned ? "ツールバーの固定を解除" : "ツールバーを固定"}
+                onClick={() => setToolbarPinned((v) => !v)}
+              >
+                📌
+              </button>
+              <button
+                title={fullscreen ? "全画面表示を解除" : "全画面表示"}
+                onClick={() => toggleFullscreen(!fullscreen)}
+              >
+                {fullscreen ? "🗗" : "⛶"}
+              </button>
+              <button
+                className="danger"
+                title="切断して閉じる"
+                onClick={() => closeSession(activeSession.id)}
+              >
+                ×
+              </button>
+            </div>
+            <div className="rdp-toolbar-handle" />
           </div>
         )}
-      </main>
+      </div>
       {zoom !== null && (
         <div className="zoom-overlay" style={{ top: zoom.top }}>
           <canvas ref={zoomCanvasRef} className="zoom-canvas" />

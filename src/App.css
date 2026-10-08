@@ -229,11 +229,97 @@ body {
   line-height: 1.8;
 }
 
-.main {
+.main-area {
   flex: 1;
   position: relative;
-  background: #11151c;
   min-width: 0;
+}
+
+.main {
+  position: absolute;
+  inset: 0;
+  background: #11151c;
+}
+
+/* 全画面表示：サイドバーを隠してリモート画面だけにする */
+.app.fullscreen .sidebar {
+  display: none;
+}
+
+/* Remmina 風ツールバー。普段はつまみだけ見えていて、乗せると降りてくる */
+.rdp-toolbar {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: translate(-50%, calc(-100% + 8px));
+  /* 閉じるのは少し待つ。開くのも少し待って、リモートの上部バー操作での誤爆を防ぐ */
+  transition: transform 0.15s ease 0.5s;
+}
+
+.rdp-toolbar:hover,
+.rdp-toolbar.pinned {
+  transform: translate(-50%, 0);
+  transition-delay: 0.2s;
+}
+
+.rdp-toolbar-body {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px 4px 12px;
+  background: #131926f0;
+  border: 1px solid #2f6f8f;
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+}
+
+.rdp-toolbar-title {
+  font-size: 12px;
+  color: #9fb2c8;
+  margin-right: 8px;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rdp-toolbar-body button {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: #d6dde8;
+  font-size: 14px;
+  width: 30px;
+  height: 26px;
+  cursor: pointer;
+}
+
+.rdp-toolbar-body button:hover {
+  background: #1f2a3a;
+  border-color: #2f3d52;
+}
+
+.rdp-toolbar-body button.on {
+  background: #1f5f7a;
+}
+
+.rdp-toolbar-body button.danger:hover {
+  background: #5a2a30;
+  border-color: #e06c75;
+}
+
+/* 閉じているときに見えるつまみ */
+.rdp-toolbar-handle {
+  width: 64px;
+  height: 8px;
+  background: #2f6f8f;
+  border-radius: 0 0 6px 6px;
+  opacity: 0.8;
 }
 
 .term-container {
