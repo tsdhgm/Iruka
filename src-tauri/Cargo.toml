@@ -33,6 +33,7 @@ anyhow = "1"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"], optional = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 tracing = "0.1"
+sysinfo = { version = "0.39.6", default-features = false, features = ["system"] }
 
 [features]
 default = ["freerdp", "ironrdp"]

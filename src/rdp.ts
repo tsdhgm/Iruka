@@ -30,7 +30,21 @@ export interface RdpConnectParams {
   backend: RdpBackendKind;
   audio: boolean;
   microphone: boolean;
+  smallCache: boolean;
 }
+
+/** 接続前のメモリ確認の結果（Rust 側 memory.rs の MemoryCheck） */
+export interface MemoryCheck {
+  availableBytes: number;
+  estimatedBytes: number;
+  scale: number;
+  learned: boolean;
+}
+
+/** 解像度の選択肢。"local" はローカルモニタの物理解像度 */
+export type RdpResolution = "local" | "2560x1440" | "1920x1080";
+
+export const RDP_RESOLUTIONS: RdpResolution[] = ["local", "2560x1440", "1920x1080"];
 
 // KeyboardEvent.code → PC/AT スキャンコード（Set 1）。拡張キーは 0xE0xx。
 // 物理キー位置で送るので、配列（JIS/US）はリモート側の設定に従う。

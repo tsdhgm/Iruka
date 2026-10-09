@@ -23,7 +23,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use tauri::ipc::{Channel, InvokeResponseBody};
 
-use crate::NEXT_SESSION_ID;
+use crate::{memory, NEXT_SESSION_ID};
 
 /// フロントへ画面を送る最小間隔（約 30fps）。
 const FRAME_INTERVAL: Duration = Duration::from_millis(33);
@@ -94,6 +94,9 @@ pub struct RdpConnectParams {
     /// ローカルのマイクをリモートへ送る（FreeRDP のみ）
     #[serde(default)]
     pub microphone: bool,
+    /// RDPGFX のキャッシュを小さく（100MB → 16MB）する（FreeRDP のみ）
+    #[serde(default)]
+    pub small_cache: bool,
 }
 
 impl RdpConnectParams {
@@ -216,6 +219,7 @@ fn merge_rects(mut rects: Vec<Rect>) -> Vec<Rect> {
 /// `画面幅 u32, 画面高さ u32, 矩形数 u32, 予備 u32, 送信時刻 f64（UNIX ミリ秒）`
 /// のあとに、矩形ごとに `x, y, w, h（各 u32）` と RGBA の画素 `w*h*4` バイト。
 pub struct FrameSink {
+    id: u32,
     events: Channel<RdpEvent>,
     dirty: Vec<Rect>,
     last_sent: Instant,
@@ -225,7 +229,7 @@ pub struct FrameSink {
 }
 
 impl FrameSink {
-    fn new(events: Channel<RdpEvent>, frames: Channel<InvokeResponseBody>) -> Self {
+    fn new(id: u32, events: Channel<RdpEvent>, frames: Channel<InvokeResponseBody>) -> Self {
         let busy = Arc::new(AtomicBool::new(false));
         let (tx, rx) = mpsc::channel::<Vec<u8>>();
         let sender_busy = busy.clone();
@@ -244,6 +248,7 @@ impl FrameSink {
             }
         });
         Self {
+            id,
             events,
             dirty: Vec::new(),
             last_sent: Instant::now(),
@@ -255,6 +260,7 @@ impl FrameSink {
     /// 画面サイズが決まった・変わった。フロントは画面を作り直す。
     pub fn resize(&mut self, width: u32, height: u32) -> anyhow::Result<()> {
         self.dirty.clear();
+        memory::set_session_size(self.id, width, height);
         self.events.send(RdpEvent::Resize { width, height })?;
         Ok(())
     }
@@ -357,14 +363,16 @@ pub fn rdp_connect(
     let (tx, rx) = mpsc::channel();
     state.sessions.lock().unwrap().insert(id, tx);
 
+    memory::set_session_size(id, params.width.into(), params.height.into());
     let sessions = state.sessions.clone();
     std::thread::spawn(move || {
-        let mut sink = FrameSink::new(on_event.clone(), on_frame);
+        let mut sink = FrameSink::new(id, on_event.clone(), on_frame);
         let (reason, error) = match backend.run(&params, &rx, &mut sink) {
             Ok(reason) => (reason, false),
             Err(e) => (format!("{e:#}"), true),
         };
         sessions.lock().unwrap().remove(&id);
+        memory::remove_session(id);
         let _ = on_event.send(RdpEvent::Closed {
             reason,
             error,

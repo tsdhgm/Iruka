@@ -468,3 +468,70 @@ body {
   border-color: #e06c75;
   color: #f0b5ba;
 }
+
+/* 接続前の確認ダイアログ */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 8, 12, 0.6);
+}
+
+.modal {
+  width: min(460px, calc(100vw - 32px));
+  background: #131926;
+  border: 1px solid #2f6f8f;
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  padding: 18px 20px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.modal h2 {
+  margin: 0 0 10px;
+  font-size: 15px;
+  color: #e5c07b;
+}
+
+.modal p {
+  margin: 0 0 10px;
+}
+
+.modal-note {
+  color: #9fb2c8;
+  font-size: 12px;
+}
+
+.modal-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.modal-buttons button {
+  background: #1f2a3a;
+  border: 1px solid #2f3d52;
+  border-radius: 6px;
+  color: #d6dde8;
+  font-size: 12px;
+  padding: 7px 14px;
+  cursor: pointer;
+}
+
+.modal-buttons button:hover {
+  background: #26344a;
+}
+
+.modal-buttons button.danger {
+  background: #5a2a30;
+  border-color: #e06c75;
+}
+
+.modal-buttons button.danger:hover {
+  background: #6e3239;
+}

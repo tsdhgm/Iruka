@@ -10,8 +10,11 @@ import {
   RDP_BACKENDS,
   SCANCODES,
   toRemoteCoords,
+  RDP_RESOLUTIONS,
+  type MemoryCheck,
   type RdpBackendKind,
   type RdpConnectParams,
+  type RdpResolution,
   type RdpEvent,
   type RdpInput,
 } from "./rdp";
@@ -49,6 +52,8 @@ interface RdpForm {
   backend: RdpBackendKind;
   audio: boolean;
   microphone: boolean;
+  smallCache: boolean;
+  resolution: RdpResolution;
 }
 
 /**
@@ -67,6 +72,22 @@ function localDesktopSize(): { width: number; height: number } {
   };
 }
 
+function resolutionSize(r: RdpResolution): { width: number; height: number } {
+  if (r === "local") return localDesktopSize();
+  const [width, height] = r.split("x").map(Number);
+  return { width, height };
+}
+
+function resolutionLabel(r: RdpResolution): string {
+  if (r === "local") {
+    const { width, height } = localDesktopSize();
+    return `ローカルと同じ（${width}×${height}）`;
+  }
+  return r.replace("x", "×");
+}
+
+const formatMb = (bytes: number) => `${Math.round(bytes / 1048576).toLocaleString()} MB`;
+
 function loadRdpForm(): RdpForm {
   try {
     const saved = JSON.parse(localStorage.getItem("iruka.rdpForm") ?? "{}");
@@ -77,6 +98,8 @@ function loadRdpForm(): RdpForm {
       backend: saved.backend ?? "auto",
       audio: saved.audio ?? false,
       microphone: saved.microphone ?? false,
+      smallCache: saved.smallCache ?? true,
+      resolution: saved.resolution ?? "local",
     };
   } catch {
     return {
@@ -86,6 +109,8 @@ function loadRdpForm(): RdpForm {
       backend: "auto",
       audio: false,
       microphone: false,
+      smallCache: true,
+      resolution: "local",
     };
   }
 }
@@ -172,6 +197,11 @@ function App() {
   zoomRef.current = zoom;
   const zoomCanvasRef = useRef<HTMLCanvasElement>(null);
   const [rdpForm, setRdpForm] = useState<RdpForm | null>(null);
+  // 空きメモリが足りないときの確認（接続を待たせている設定と確認結果）
+  const [memoryWarning, setMemoryWarning] = useState<{
+    params: RdpConnectParams;
+    check: MemoryCheck;
+  } | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [toolbarPinned, setToolbarPinned] = useState(false);
 
@@ -469,10 +499,10 @@ function App() {
     [focusSession, updateSession],
   );
 
-  const submitRdpForm = useCallback(() => {
+  const submitRdpForm = useCallback(async () => {
     if (!rdpForm || !rdpForm.host.trim() || !rdpForm.username.trim()) return;
     const [hostPart, portPart] = rdpForm.host.trim().split(":");
-    const { width, height } = localDesktopSize();
+    const { width, height } = resolutionSize(rdpForm.resolution);
     localStorage.setItem(
       "iruka.rdpForm",
       JSON.stringify({
@@ -481,9 +511,11 @@ function App() {
         backend: rdpForm.backend,
         audio: rdpForm.audio,
         microphone: rdpForm.microphone,
+        smallCache: rdpForm.smallCache,
+        resolution: rdpForm.resolution,
       }),
     );
-    openRdp({
+    const params: RdpConnectParams = {
       host: hostPart,
       port: portPart ? Number(portPart) : null,
       username: rdpForm.username.trim(),
@@ -494,8 +526,20 @@ function App() {
       backend: rdpForm.backend,
       audio: rdpForm.audio,
       microphone: rdpForm.microphone,
-    });
+      smallCache: rdpForm.smallCache,
+    };
     setRdpForm(null);
+    // 空きメモリが見積もりより少なければ、接続する前に確認する
+    try {
+      const check = await invoke<MemoryCheck>("rdp_memory_check", { width, height });
+      if (check.availableBytes < check.estimatedBytes) {
+        setMemoryWarning({ params, check });
+        return;
+      }
+    } catch {
+      // 確認できなくても接続はできるようにする
+    }
+    openRdp(params);
   }, [rdpForm, openRdp]);
 
   const toggleFullscreen = useCallback(async (on: boolean) => {
@@ -636,6 +680,22 @@ function App() {
                 setRdpForm({ ...rdpForm, password: e.target.value })
               }
             />
+            <select
+              title="リモートの解像度（大きいほどメモリを使う）"
+              value={rdpForm.resolution}
+              onChange={(e) =>
+                setRdpForm({
+                  ...rdpForm,
+                  resolution: e.target.value as RdpResolution,
+                })
+              }
+            >
+              {RDP_RESOLUTIONS.map((r) => (
+                <option key={r} value={r}>
+                  {resolutionLabel(r)}
+                </option>
+              ))}
+            </select>
             <div className="rdp-form-checks" title="FreeRDP で接続したときのみ有効">
               <label>
                 <input
@@ -656,6 +716,16 @@ function App() {
                   }
                 />
                 マイク
+              </label>
+              <label title="RDPGFX のキャッシュを 100MB から 16MB に減らす">
+                <input
+                  type="checkbox"
+                  checked={rdpForm.smallCache}
+                  onChange={(e) =>
+                    setRdpForm({ ...rdpForm, smallCache: e.target.checked })
+                  }
+                />
+                省メモリ
               </label>
             </div>
             <div className="rdp-form-row">
@@ -781,6 +851,38 @@ function App() {
           </div>
         )}
       </div>
+      {memoryWarning && (
+        <div className="modal-backdrop">
+          <div className="modal" role="dialog" aria-modal="true">
+            <h2>メモリが足りない可能性があります</h2>
+            <p>
+              {memoryWarning.params.host}（{memoryWarning.params.width}×
+              {memoryWarning.params.height}）への接続には、約{" "}
+              {formatMb(memoryWarning.check.estimatedBytes)} 必要と見込んでいます。
+              空きメモリは約 {formatMb(memoryWarning.check.availableBytes)} です。
+            </p>
+            <p className="modal-note">
+              {memoryWarning.check.learned
+                ? `見積もりは、これまでの使用量から学習した値（標準の ${memoryWarning.check.scale.toFixed(2)} 倍）に基づきます。`
+                : "まだ使用量を学習していないため、初期値で見積もっています。"}
+              接続すると、動作が遅くなったり不安定になったりすることがあります。
+              解像度を下げると必要量が減ります。
+            </p>
+            <div className="modal-buttons">
+              <button onClick={() => setMemoryWarning(null)}>やめる</button>
+              <button
+                className="danger"
+                onClick={() => {
+                  openRdp(memoryWarning.params);
+                  setMemoryWarning(null);
+                }}
+              >
+                それでも接続する
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {zoom !== null && (
         <div className="zoom-overlay" style={{ top: zoom.top }}>
           <canvas ref={zoomCanvasRef} className="zoom-canvas" />
