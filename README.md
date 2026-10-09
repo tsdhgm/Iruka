@@ -41,6 +41,10 @@ Tauri 2 + React + TypeScript。RDP は FreeRDP 3 を使う（予備として Iro
 
 [KNOWN_ISSUES.md](KNOWN_ISSUES.md) を参照。
 
+## 調査メモ
+
+- [docs/mac-target.md](docs/mac-target.md): Mac を接続先にする方法（VNC バックエンドの追加、または Mac 側に RDP サーバー）と、次に試すこと。
+
 ## 開発
 
 ### 必要なもの（Ubuntu）
