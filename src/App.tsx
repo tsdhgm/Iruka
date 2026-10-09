@@ -132,6 +132,44 @@ const TERM_THEME = {
   selectionBackground: "#2b3a4d",
 };
 
+/** 一覧表示の列数の上限と、タイルの余白・隙間（px） */
+const GRID_MAX_COLS = 6;
+const GRID_PAD = 8;
+const GRID_GAP = 8;
+/** 直近この時間（ms）内に出力があれば「実行中」とみなす（Claude Code などのスピナーは常に出力している） */
+const RUNNING_WINDOW_MS = 2000;
+
+/** 待機時間の表示（例: 45秒 / 3分 / 2時間） */
+function formatIdle(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}秒`;
+  if (s < 3600) return `${Math.floor(s / 60)}分`;
+  return `${Math.floor(s / 3600)}時間`;
+}
+
+/**
+ * コンソールが実行中か待機中かの表示。
+ * ssh の先のコマンドの状態は直接わからないので、出力が続いているかで判定する。
+ * 出力を出さずに動くコマンドは「待機」に見えるが、AI エージェントの監視には十分。
+ */
+function ActivityBadge({
+  session,
+  lastActivity,
+}: {
+  session: SessionInfo;
+  lastActivity: number | undefined;
+}) {
+  if (session.kind !== "pty") return null;
+  if (session.status === "exited") return <span className="badge exited">終了</span>;
+  const idle = Date.now() - (lastActivity ?? 0);
+  if (idle < RUNNING_WINDOW_MS) return <span className="badge running">実行中</span>;
+  return (
+    <span className="badge idle" title="最後の出力からの経過時間">
+      待機 {formatIdle(idle)}
+    </span>
+  );
+}
+
 const THUMB_W = 196;
 const THUMB_H = 110;
 const ZOOM_W = 560;
@@ -200,13 +238,29 @@ function App() {
   zoomRef.current = zoom;
   const zoomCanvasRef = useRef<HTMLCanvasElement>(null);
   const [rdpForm, setRdpForm] = useState<RdpForm | null>(null);
-  // 空きメモリが足りないときの確認（接続を待たせている設定と確認結果）
-  const [memoryWarning, setMemoryWarning] = useState<{
-    params: RdpConnectParams;
-    check: MemoryCheck;
-  } | null>(null);
+  // 接続前の確認（自分自身への接続、空きメモリ不足）。接続を待たせている設定を持つ
+  const [connectWarning, setConnectWarning] = useState<
+    | { kind: "self"; params: RdpConnectParams }
+    | { kind: "memory"; params: RdpConnectParams; check: MemoryCheck }
+    | null
+  >(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [toolbarPinned, setToolbarPinned] = useState(false);
+  // 右ペインの表示：1 セッションを大きく（single）か、全セッションをタイルで（grid）か
+  const [view, setView] = useState<"single" | "grid">("single");
+  const viewRef = useRef<"single" | "grid">("single");
+  viewRef.current = view;
+  const [gridCols, setGridCols] = useState<number>(() => {
+    const n = Number(localStorage.getItem("iruka.gridCols"));
+    return n >= 1 && n <= GRID_MAX_COLS ? n : 3;
+  });
+  const mainAreaRef = useRef<HTMLDivElement>(null);
+  const [mainWidth, setMainWidth] = useState(0);
+  const gridCanvasRef = useRef<Map<number, HTMLCanvasElement>>(new Map());
+  // 最後に出力（コンソール）や画面更新（RDP）があった時刻。実行中か待機中かの判定に使う
+  const lastActivityRef = useRef<Map<number, number>>(new Map());
+  // 待機時間の表示を定期的に更新するためのカウンタ
+  const [, setTick] = useState(0);
 
   const drawZoom = useCallback(() => {
     const z = zoomRef.current;
@@ -217,8 +271,14 @@ function App() {
   }, []);
 
   const showSession = useCallback((id: number) => {
+    const grid = viewRef.current === "grid";
     for (const [sid, handle] of handlesRef.current) {
-      handle.container.style.display = sid === id ? "" : "none";
+      handle.container.style.display = !grid && sid === id ? "" : "none";
+    }
+    if (grid) {
+      // 一覧表示中は RDP を表示していないので、リモートでのコピーをローカルに入れない
+      invoke("rdp_set_active", { id: null }).catch(() => {});
+      return;
     }
     const handle = handlesRef.current.get(id);
     if (handle) {
@@ -293,6 +353,7 @@ function App() {
       onEvent.onmessage = (msg) => {
         dirtyRef.current.add(id);
         if (msg.type === "output") {
+          lastActivityRef.current.set(id, Date.now());
           term.write(b64ToBytes(msg.data));
         } else {
           updateSession(id, { status: "exited", exitCode: msg.code });
@@ -379,7 +440,10 @@ function App() {
           ctx.putImageData(img, x, y);
           offset += len;
         }
-        if (sid !== null) dirtyRef.current.add(sid);
+        if (sid !== null) {
+          dirtyRef.current.add(sid);
+          lastActivityRef.current.set(sid, Date.now());
+        }
         const dt = performance.now() - t0;
         perf.frames++;
         perf.kb += Math.round(buf.byteLength / 1024);
@@ -508,6 +572,41 @@ function App() {
     [focusSession, updateSession],
   );
 
+  /**
+   * 接続前の確認をしてから接続する。確認で止めたときは、ダイアログの「続ける」から
+   * その確認を飛ばして（skip）もう一度呼ぶ。どの確認も、できなくても接続はできるようにする。
+   */
+  const connectWithChecks = useCallback(
+    async (params: RdpConnectParams, skip: { self?: boolean; memory?: boolean }) => {
+      if (!skip.self) {
+        try {
+          if (await invoke<boolean>("rdp_is_self", { host: params.host, port: params.port })) {
+            setConnectWarning({ kind: "self", params });
+            return;
+          }
+        } catch {
+          // 判定できなければ確認なしで進む
+        }
+      }
+      if (!skip.memory) {
+        try {
+          const check = await invoke<MemoryCheck>("rdp_memory_check", {
+            width: params.width,
+            height: params.height,
+          });
+          if (check.availableBytes < check.estimatedBytes) {
+            setConnectWarning({ kind: "memory", params, check });
+            return;
+          }
+        } catch {
+          // 確認できなくても接続はできるようにする
+        }
+      }
+      openRdp(params);
+    },
+    [openRdp],
+  );
+
   const submitRdpForm = useCallback(async () => {
     if (!rdpForm || !rdpForm.host.trim() || !rdpForm.username.trim()) return;
     const [hostPart, portPart] = rdpForm.host.trim().split(":");
@@ -540,18 +639,8 @@ function App() {
       clipboard: rdpForm.clipboard,
     };
     setRdpForm(null);
-    // 空きメモリが見積もりより少なければ、接続する前に確認する
-    try {
-      const check = await invoke<MemoryCheck>("rdp_memory_check", { width, height });
-      if (check.availableBytes < check.estimatedBytes) {
-        setMemoryWarning({ params, check });
-        return;
-      }
-    } catch {
-      // 確認できなくても接続はできるようにする
-    }
-    openRdp(params);
-  }, [rdpForm, openRdp]);
+    connectWithChecks(params, {});
+  }, [rdpForm, connectWithChecks]);
 
   const toggleFullscreen = useCallback(async (on: boolean) => {
     try {
@@ -590,7 +679,7 @@ function App() {
     });
   }, [showSession, toggleFullscreen]);
 
-  // 500ms ごとに、出力のあったセッションのサムネールだけ再描画する
+  // 500ms ごとに、出力のあったセッションのサムネール（サイドバーと一覧のタイル）だけ再描画する
   useEffect(() => {
     const iv = setInterval(() => {
       for (const id of dirtyRef.current) {
@@ -599,12 +688,45 @@ function App() {
         if (handle && canvas) {
           drawThumb(handle, canvas, THUMB_W, THUMB_H);
         }
+        const tile = gridCanvasRef.current.get(id);
+        if (handle && tile) {
+          drawThumb(handle, tile, tile.clientWidth, tile.clientHeight);
+        }
         dirtyRef.current.delete(id);
       }
       drawZoom();
+      setTick((t) => t + 1);
     }, 500);
     return () => clearInterval(iv);
   }, [drawZoom]);
+
+  // 一覧の表示を切り替えたとき：セッションの表示を合わせ、タイルを全部描く
+  useEffect(() => {
+    const id = activeIdRef.current;
+    if (id !== null) showSession(id);
+    if (view === "grid") {
+      for (const sid of handlesRef.current.keys()) dirtyRef.current.add(sid);
+    }
+  }, [view, showSession]);
+
+  // 右ペインの幅（タイルの大きさの計算に使う）
+  useEffect(() => {
+    const el = mainAreaRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      setMainWidth(entry.contentRect.width);
+      // 幅が変わるとタイルの大きさも変わるので描き直す
+      for (const sid of handlesRef.current.keys()) dirtyRef.current.add(sid);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const changeGridCols = useCallback((cols: number) => {
+    setGridCols(cols);
+    localStorage.setItem("iruka.gridCols", String(cols));
+    for (const sid of handlesRef.current.keys()) dirtyRef.current.add(sid);
+  }, []);
 
   useEffect(() => {
     drawZoom();
@@ -642,6 +764,12 @@ function App() {
   }, []);
 
   const activeSession = sessions.find((s) => s.id === activeId) ?? null;
+  // タイルは 16:9。右ペインの幅から列数で割る（余白と隙間を除く）
+  const tileW = Math.max(
+    80,
+    Math.floor((mainWidth - GRID_PAD * 2 - GRID_GAP * (gridCols - 1)) / gridCols),
+  );
+  const tileH = Math.round((tileW * 9) / 16);
 
   return (
     <div className={`app ${fullscreen ? "fullscreen" : ""}`}>
@@ -808,6 +936,7 @@ function App() {
                 <span className="session-title" title={s.message ?? undefined}>
                   {s.title}
                 </span>
+                <ActivityBadge session={s} lastActivity={lastActivityRef.current.get(s.id)} />
                 <button
                   className="close-btn"
                   title="閉じる"
@@ -844,7 +973,7 @@ function App() {
           )}
         </div>
       </aside>
-      <div className="main-area">
+      <div className="main-area" ref={mainAreaRef}>
         <main className="main" ref={mainRef}>
           {sessions.length === 0 && (
             <div className="placeholder">
@@ -853,11 +982,74 @@ function App() {
             </div>
           )}
         </main>
-        {activeSession?.kind === "rdp" && (
+        {view === "grid" && (
+          // 一覧：全セッションを 16:9 のタイルで並べる。縦にはみ出す分はスクロール
+          <div
+            className="grid-view"
+            style={{
+              gridTemplateColumns: `repeat(${gridCols}, ${tileW}px)`,
+              padding: GRID_PAD,
+              gap: GRID_GAP,
+            }}
+          >
+            {sessions.map((s) => (
+              <div
+                key={s.id}
+                className={`grid-tile ${s.id === activeId ? "active" : ""}`}
+                title="クリックで単独表示"
+                onClick={() => {
+                  setView("single");
+                  focusSession(s.id);
+                }}
+              >
+                <div className="grid-tile-header">
+                  <span className={`status-dot ${s.status}`} />
+                  <span className="session-kind">{s.kind === "rdp" ? "RDP" : ">_"}</span>
+                  <span className="session-title">{s.title}</span>
+                  <ActivityBadge session={s} lastActivity={lastActivityRef.current.get(s.id)} />
+                </div>
+                <canvas
+                  style={{ width: tileW, height: tileH }}
+                  ref={(el) => {
+                    if (el) {
+                      gridCanvasRef.current.set(s.id, el);
+                      dirtyRef.current.add(s.id);
+                    } else {
+                      gridCanvasRef.current.delete(s.id);
+                    }
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+        {sessions.length > 0 && (
           // Remmina 風のツールバー：上端中央のつまみにマウスを乗せると降りてくる
-          <div className={`rdp-toolbar ${toolbarPinned ? "pinned" : ""}`}>
-            <div className="rdp-toolbar-body">
-              <span className="rdp-toolbar-title">{activeSession.title}</span>
+          <div className={`view-toolbar ${toolbarPinned ? "pinned" : ""}`}>
+            <div className="view-toolbar-body">
+              <span className="view-toolbar-title">
+                {view === "grid" ? `一覧（${sessions.length}）` : activeSession?.title}
+              </span>
+              <button
+                className={view === "grid" ? "on" : ""}
+                title={view === "grid" ? "単独表示に戻す" : "全セッションを一覧表示"}
+                onClick={() => setView((v) => (v === "grid" ? "single" : "grid"))}
+              >
+                {view === "grid" ? "▣" : "⊞"}
+              </button>
+              {view === "grid" && (
+                <label className="view-toolbar-slider" title={`列数: ${gridCols}`}>
+                  <span>🔍</span>
+                  <input
+                    type="range"
+                    min={1}
+                    max={GRID_MAX_COLS}
+                    value={gridCols}
+                    onChange={(e) => changeGridCols(Number(e.target.value))}
+                  />
+                  <span className="view-toolbar-cols">{gridCols} 列</span>
+                </label>
+              )}
               <button
                 className={toolbarPinned ? "on" : ""}
                 title={toolbarPinned ? "ツールバーの固定を解除" : "ツールバーを固定"}
@@ -871,42 +1063,72 @@ function App() {
               >
                 {fullscreen ? "🗗" : "⛶"}
               </button>
-              <button
-                className="danger"
-                title="切断して閉じる"
-                onClick={() => closeSession(activeSession.id)}
-              >
-                ×
-              </button>
+              {view === "single" && activeSession && (
+                <button
+                  className="danger"
+                  title={activeSession.kind === "rdp" ? "切断して閉じる" : "コンソールを閉じる"}
+                  onClick={() => closeSession(activeSession.id)}
+                >
+                  ×
+                </button>
+              )}
             </div>
-            <div className="rdp-toolbar-handle" />
+            <div className="view-toolbar-handle" />
           </div>
         )}
       </div>
-      {memoryWarning && (
+      {connectWarning?.kind === "self" && (
+        <div className="modal-backdrop">
+          <div className="modal" role="dialog" aria-modal="true">
+            <h2>この PC 自身に接続しようとしています</h2>
+            <p>
+              {connectWarning.params.host} は、Iruka を動かしているこの PC です。
+            </p>
+            <p className="modal-note">
+              自分自身の画面共有につなぐと、リモート画面の中でマウスを動かすたびに本物のカーソルが
+              動かされ、左上へ吸い寄せられてカーソルを見失います。
+              別の PC に接続するつもりなら「やめる」を押して、接続先を確かめてください。
+            </p>
+            <div className="modal-buttons">
+              <button onClick={() => setConnectWarning(null)}>やめる</button>
+              <button
+                className="danger"
+                onClick={() => {
+                  const { params } = connectWarning;
+                  setConnectWarning(null);
+                  connectWithChecks(params, { self: true });
+                }}
+              >
+                それでも接続する
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {connectWarning?.kind === "memory" && (
         <div className="modal-backdrop">
           <div className="modal" role="dialog" aria-modal="true">
             <h2>メモリが足りない可能性があります</h2>
             <p>
-              {memoryWarning.params.host}（{memoryWarning.params.width}×
-              {memoryWarning.params.height}）への接続には、約{" "}
-              {formatMb(memoryWarning.check.estimatedBytes)} 必要と見込んでいます。
-              空きメモリは約 {formatMb(memoryWarning.check.availableBytes)} です。
+              {connectWarning.params.host}（{connectWarning.params.width}×
+              {connectWarning.params.height}）への接続には、約{" "}
+              {formatMb(connectWarning.check.estimatedBytes)} 必要と見込んでいます。
+              空きメモリは約 {formatMb(connectWarning.check.availableBytes)} です。
             </p>
             <p className="modal-note">
-              {memoryWarning.check.learned
-                ? `見積もりは、これまでの使用量から学習した値（標準の ${memoryWarning.check.scale.toFixed(2)} 倍）に基づきます。`
+              {connectWarning.check.learned
+                ? `見積もりは、これまでの使用量から学習した値（標準の ${connectWarning.check.scale.toFixed(2)} 倍）に基づきます。`
                 : "まだ使用量を学習していないため、初期値で見積もっています。"}
               接続すると、動作が遅くなったり不安定になったりすることがあります。
               解像度を下げると必要量が減ります。
             </p>
             <div className="modal-buttons">
-              <button onClick={() => setMemoryWarning(null)}>やめる</button>
+              <button onClick={() => setConnectWarning(null)}>やめる</button>
               <button
                 className="danger"
                 onClick={() => {
-                  openRdp(memoryWarning.params);
-                  setMemoryWarning(null);
+                  openRdp(connectWarning.params);
+                  setConnectWarning(null);
                 }}
               >
                 それでも接続する

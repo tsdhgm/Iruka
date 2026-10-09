@@ -414,6 +414,40 @@ pub fn rdp_perf_log(message: String) {
     tracing::debug!(target: "iruka_perf", "frontend: {message}");
 }
 
+/// 接続先がこの PC 自身か（127.0.0.1、localhost、自分の IP アドレス、自分のホスト名）。
+///
+/// 自分自身の画面共有につなぐと、リモート画面の中でマウスを動かすたびに本物のカーソルが
+/// 動かされて左上へ吸い寄せられる（座標がウィンドウの位置の分だけずれるため）ので、
+/// 接続する前に確認する。
+/// 判定は「そのアドレスにソケットを bind できるか」で行う。bind できるのはローカルのアドレスだけ。
+/// 名前解決で待たされることがあるので、メインスレッド以外で動かす（async）。
+#[tauri::command]
+pub async fn rdp_is_self(host: String, port: Option<u16>) -> bool {
+    is_local_host(&host, port.unwrap_or(3389))
+}
+
+fn is_local_host(host: &str, port: u16) -> bool {
+    use std::net::{ToSocketAddrs, UdpSocket};
+    let Ok(addrs) = (host, port).to_socket_addrs() else {
+        return false;
+    };
+    addrs.into_iter().any(|addr| UdpSocket::bind((addr.ip(), 0)).is_ok())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detects_own_addresses() {
+        assert!(is_local_host("127.0.0.1", 3389));
+        assert!(is_local_host("localhost", 3389));
+        // 文書用に予約されたアドレス（TEST-NET-1）は自分のものではない
+        assert!(!is_local_host("192.0.2.1", 3389));
+        assert!(!is_local_host("", 3389));
+    }
+}
+
 /// 表示中の RDP セッションが変わった（None は RDP 以外を表示中）。
 /// RDP セッションなら、ローカルのクリップボードのテキストをそのセッションに知らせる。
 /// クリップボードの読み取りは待たされることがあるので、メインスレッド以外で動かす（async）。

@@ -247,7 +247,7 @@ body {
 }
 
 /* Remmina 風ツールバー。普段はつまみだけ見えていて、乗せると降りてくる */
-.rdp-toolbar {
+.view-toolbar {
   position: absolute;
   top: 0;
   left: 50%;
@@ -260,13 +260,13 @@ body {
   transition: transform 0.15s ease 0.5s;
 }
 
-.rdp-toolbar:hover,
-.rdp-toolbar.pinned {
+.view-toolbar:hover,
+.view-toolbar.pinned {
   transform: translate(-50%, 0);
   transition-delay: 0.2s;
 }
 
-.rdp-toolbar-body {
+.view-toolbar-body {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -278,7 +278,7 @@ body {
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
 }
 
-.rdp-toolbar-title {
+.view-toolbar-title {
   font-size: 12px;
   color: #9fb2c8;
   margin-right: 8px;
@@ -288,7 +288,7 @@ body {
   white-space: nowrap;
 }
 
-.rdp-toolbar-body button {
+.view-toolbar-body button {
   background: transparent;
   border: 1px solid transparent;
   border-radius: 5px;
@@ -299,22 +299,110 @@ body {
   cursor: pointer;
 }
 
-.rdp-toolbar-body button:hover {
+.view-toolbar-body button:hover {
   background: #1f2a3a;
   border-color: #2f3d52;
 }
 
-.rdp-toolbar-body button.on {
+.view-toolbar-body button.on {
   background: #1f5f7a;
 }
 
-.rdp-toolbar-body button.danger:hover {
+.view-toolbar-body button.danger:hover {
   background: #5a2a30;
   border-color: #e06c75;
 }
 
+.view-toolbar-slider {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 6px;
+  font-size: 12px;
+  color: #9fb2c8;
+}
+
+.view-toolbar-slider input[type="range"] {
+  width: 110px;
+  accent-color: #2f6f8f;
+}
+
+.view-toolbar-cols {
+  min-width: 2.5em;
+}
+
+/* 一覧表示 */
+.grid-view {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  justify-content: center;
+  background: #0b0e13;
+}
+
+.grid-tile {
+  background: #0e1219;
+  border: 1px solid #1c2430;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.grid-tile:hover {
+  border-color: #2f6f8f;
+}
+
+.grid-tile.active {
+  border-color: #3d8fb5;
+}
+
+.grid-tile-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  border-bottom: 1px solid #1c2430;
+}
+
+.grid-tile canvas {
+  display: block;
+  background: #11151c;
+}
+
+/* 実行中 / 待機 / 終了 の表示 */
+.badge {
+  flex-shrink: 0;
+  margin-left: auto;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+.badge.running {
+  background: #1e4d2b;
+  color: #9be3a8;
+}
+
+.badge.idle {
+  background: #1f2a3a;
+  color: #9fb2c8;
+}
+
+.badge.exited {
+  background: #3a2426;
+  color: #e0a0a5;
+}
+
+.session-card-header .badge {
+  margin-left: 0;
+}
+
 /* 閉じているときに見えるつまみ */
-.rdp-toolbar-handle {
+.view-toolbar-handle {
   width: 64px;
   height: 8px;
   background: #2f6f8f;

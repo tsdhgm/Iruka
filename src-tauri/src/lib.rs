@@ -56,6 +56,7 @@ pub fn run() {
             rdp::rdp_close,
             rdp::rdp_perf_log,
             rdp::rdp_set_active,
+            rdp::rdp_is_self,
             memory::rdp_memory_check
         ])
         .run(tauri::generate_context!())
