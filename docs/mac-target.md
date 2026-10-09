@@ -10,7 +10,7 @@ Mac を監視端末として使う（Iruka を Mac で動かす）話は別で�
 | 方法 | Iruka 側の作業 | Mac 側 | 向き不向き |
 |---|---|---|---|
 | 1. macOS 標準の画面共有（VNC）に接続 | VNC バックエンドを追加（中規模） | 設定でオンにするだけ | 追加ソフト不要。長期的にはこちら |
-| 2. Mac に RDP サーバー（Remotr）を入れる | なし（FreeRDP でそのまま） | 有料アプリ（無料版あり） | すぐ試せる。製品が新しく情報が少ない |
+| 2. Mac に RDP サーバーを入れる（macrdp、または Remotr） | なし（FreeRDP でそのまま） | macrdp はオープンソース（MIT / Apache-2.0）、Remotr は有料（無料版あり） | すぐ試せる。まず macrdp |
 
 ## 1. macOS 標準の画面共有（VNC）
 
@@ -35,7 +35,20 @@ Mac 側は「設定 → 共有 → 画面共有」をオンにする。認証方
 - 追加するときは、トレイトと設定の名前を `RdpBackend` / `RdpConnectParams` から汎用の名前に変える。
 - 制限: 音声なし。クリップボードの基本は Latin-1 で、日本語は Extended Clipboard 拡張しだい（macOS の対応は未確認）。VNC は画面の展開を CPU で行うので、Retina の高解像度では重くなる可能性がある。
 
-## 2. Mac に RDP サーバーを入れる（Remotr）
+## 2. Mac に RDP サーバーを入れる
+
+### macrdp（clintcan/macrdp）— まず試す
+
+- github.com/clintcan/macrdp。Rust + IronRDP で書かれた macOS 用のネイティブ RDP サーバー。**MIT または Apache-2.0**。2026-05 開始、最新 v0.9.11（2026-10-02）。
+- **画面の送り方は既定がビットマップ**で、H.264（ハードウェアエンコード）はオプション（`--enable-h264`）。Ubuntu の FreeRDP は H.264 なしでビルドされているので、既定のままでつながる見込み。
+- 認証は NLA / CredSSP で、Mac のアカウント（ユーザー名とパスワード）を使う。mstsc、Microsoft Remote Desktop、**FreeRDP で検証済み**と README に明記。
+- 対応: クリップボード（テキスト、画像、リッチテキスト、ファイル）、音声、マイク（実験的）、Retina（`--hidpi`）、仮想ディスプレイ（ヘッドレス）、キーボード配列の自動検出、Cmd キーのショートカット再現。
+- 制限: 1 セッション / 1 ユーザーのみ、マルチモニターなし。v0 で「LAN か VPN での 1 人利用なら実用」という位置づけ。
+- 既定ポートは **3390**（3389 ではない）。
+- 導入: Mac で `cargo build --release` するか、GitHub Releases の Apple Silicon 用バイナリ（ad-hoc 署名、未公証なので初回は右クリック → 開く）。初回起動時に「画面収録」と「アクセシビリティ」の権限を許可し、Mac のパスワードを入力する。
+- 注意: **同名の別プロジェクト x6nux/macrdp（GPL-3.0）がある。** そちらは H.264（AVC420 / AVC444）だけの記述で、Ubuntu の FreeRDP では画面が出ない可能性がある。混同しないこと。
+
+### Remotr — macrdp がうまくいかないとき
 
 - **Remotr**: 2026 年 3 月に出た macOS 用のネイティブ RDP サーバー。開発者の説明では、MS-RDPBCGR 仕様に基づく実装で、ビットマップと H.264、クリップボード、macOS アカウントでの認証に対応。買い切り 10〜20 ドルで、機能制限つきの無料版がある。macOS 13 以降。
 - Iruka 側は変更なし。FreeRDP バックエンドで接続する。
@@ -48,12 +61,13 @@ Mac 側は「設定 → 共有 → 画面共有」をオンにする。認証方
 
 ## 次のセッションで試すこと
 
-### A. Remotr で、今の Iruka からつなぐ（コード変更なし）
+### A. macrdp で、今の Iruka からつなぐ（コード変更なし）
 
-1. Mac に Remotr の無料版を入れ、RDP サーバーを有効にする。
-2. Iruka の「＋ RDP」で、Mac の IP アドレス、Mac のアカウントのユーザー名とパスワード、方式「自動（FreeRDP 優先）」で接続する。
-3. 確認すること: 画面が出るか、解像度（Retina の扱い）、キー入力とマウス、クリップボード、全画面、メモリ使用量（`iruka_mem` のログ）。
-4. つながらないときは、`npm run tauri dev` の端末に出る FreeRDP のログ（`[ERROR]`、`codec`、`gfx`）を見る。無料版の機能制限で止まる場合もある。
+1. Mac に clintcan/macrdp を入れる（Releases のバイナリか `cargo build --release`）。起動して、画面収録とアクセシビリティの権限を許可し、Mac のパスワードを入力する。LAN から受けるには `--bind 0.0.0.0:3390`。
+2. Iruka の「＋ RDP」で、ホストに `Mac の IP アドレス:3390`（ポートを忘れない）、Mac のアカウントのユーザー名とパスワード、方式「自動（FreeRDP 優先）」で接続する。
+3. 確認すること: 画面が出るか、解像度（Retina。`--hidpi` の有無で変わる）、キー入力とマウス、クリップボード、音声（接続フォームの「音声」をオン）、全画面、メモリ使用量（`iruka_mem` のログ）。
+4. つながらないときは、`npm run tauri dev` の端末に出る FreeRDP のログ（`[ERROR]`、`codec`、`gfx`）と、macrdp 側のログを見る。Iruka は `/gfx` を指定しているので、RDPGFX の扱いで相性が出る可能性がある。
+5. macrdp で足りなければ Remotr の無料版を試す（手順は同じ。ポートは 3389）。
 
 ### B. VNC の下見（コード変更なし）
 
@@ -74,6 +88,8 @@ Mac 側は「設定 → 共有 → 画面共有」をオンにする。認証方
 - [madeye/rv — Native desktop VNC viewer in Rust](https://github.com/madeye/rv)
 - [Tenable: Detecting macOS High Sierra root account（認証タイプ 30 = ARD の解説）](https://www.tenable.com/blog/detecting-macos-high-sierra-root-account-without-authentication)
 - [KDE Bug 286138: Support for ARD authentication](https://bugs.kde.org/show_bug.cgi?id=286138)
+- [clintcan/macrdp — A native RDP server for macOS, written in Rust on top of IronRDP](https://github.com/clintcan/macrdp)
+- [x6nux/macrdp（同名の別プロジェクト、GPL-3.0）](https://github.com/x6nux/macrdp)
 - [Remotr — Native macOS RDP Server（AlternativeTo）](https://alternativeto.net/software/remotr--native-macos-rdp-server/about/)
 - [Show GN: RDP用 macOS ネイティブ リモートサーバー（開発者の投稿）](https://news.hada.io/topic?id=27916)
 - [Product Hunt: Remotr の作者プロフィール](https://www.producthunt.com/@kimbongchul)
