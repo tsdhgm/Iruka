@@ -91,8 +91,16 @@ impl Session {
             // 自己署名証明書を受け入れる（mstsc の「続行」相当）
             "/cert:ignore".to_owned(),
             "-clipboard".to_owned(),
-            "/audio-mode:2".to_owned(), // 音声は再生しない
         ];
+        // 音声の入出力。再生・録音の方式は FreeRDP が OS に合わせて選ぶ（Linux なら PulseAudio）
+        if params.audio {
+            args.push("/sound".to_owned());
+        } else {
+            args.push("/audio-mode:2".to_owned()); // 音声は再生しない
+        }
+        if params.microphone {
+            args.push("/microphone".to_owned());
+        }
         if let Some(domain) = domain {
             args.push(format!("/d:{domain}"));
         }

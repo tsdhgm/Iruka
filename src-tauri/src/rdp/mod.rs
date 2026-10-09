@@ -88,6 +88,12 @@ pub struct RdpConnectParams {
     pub height: u16,
     #[serde(default)]
     pub backend: BackendKind,
+    /// リモートの音声をローカルで鳴らす（FreeRDP のみ）
+    #[serde(default)]
+    pub audio: bool,
+    /// ローカルのマイクをリモートへ送る（FreeRDP のみ）
+    #[serde(default)]
+    pub microphone: bool,
 }
 
 impl RdpConnectParams {

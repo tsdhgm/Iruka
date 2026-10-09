@@ -47,6 +47,8 @@ interface RdpForm {
   username: string;
   password: string;
   backend: RdpBackendKind;
+  audio: boolean;
+  microphone: boolean;
 }
 
 /**
@@ -73,9 +75,18 @@ function loadRdpForm(): RdpForm {
       username: saved.username ?? "",
       password: "",
       backend: saved.backend ?? "auto",
+      audio: saved.audio ?? false,
+      microphone: saved.microphone ?? false,
     };
   } catch {
-    return { host: "", username: "", password: "", backend: "auto" };
+    return {
+      host: "",
+      username: "",
+      password: "",
+      backend: "auto",
+      audio: false,
+      microphone: false,
+    };
   }
 }
 
@@ -468,6 +479,8 @@ function App() {
         host: rdpForm.host.trim(),
         username: rdpForm.username.trim(),
         backend: rdpForm.backend,
+        audio: rdpForm.audio,
+        microphone: rdpForm.microphone,
       }),
     );
     openRdp({
@@ -479,6 +492,8 @@ function App() {
       width,
       height,
       backend: rdpForm.backend,
+      audio: rdpForm.audio,
+      microphone: rdpForm.microphone,
     });
     setRdpForm(null);
   }, [rdpForm, openRdp]);
@@ -621,6 +636,28 @@ function App() {
                 setRdpForm({ ...rdpForm, password: e.target.value })
               }
             />
+            <div className="rdp-form-checks" title="FreeRDP で接続したときのみ有効">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={rdpForm.audio}
+                  onChange={(e) =>
+                    setRdpForm({ ...rdpForm, audio: e.target.checked })
+                  }
+                />
+                音声
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={rdpForm.microphone}
+                  onChange={(e) =>
+                    setRdpForm({ ...rdpForm, microphone: e.target.checked })
+                  }
+                />
+                マイク
+              </label>
+            </div>
             <div className="rdp-form-row">
               <select
                 title="RDP の接続方式"

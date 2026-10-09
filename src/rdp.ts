@@ -28,6 +28,8 @@ export interface RdpConnectParams {
   width: number;
   height: number;
   backend: RdpBackendKind;
+  audio: boolean;
+  microphone: boolean;
 }
 
 // KeyboardEvent.code → PC/AT スキャンコード（Set 1）。拡張キーは 0xE0xx。

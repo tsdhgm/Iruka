@@ -392,6 +392,24 @@ body {
   gap: 6px;
 }
 
+.rdp-form-checks {
+  display: flex;
+  gap: 14px;
+  font-size: 12px;
+  color: #9fb2c8;
+}
+
+.rdp-form-checks label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.rdp-form .rdp-form-checks input {
+  margin: 0;
+}
+
 .rdp-form-row select {
   flex: 1;
 }
