@@ -132,6 +132,56 @@ const TERM_THEME = {
   selectionBackground: "#2b3a4d",
 };
 
+/**
+ * 表示切り替えキー（KeyboardEvent.code）。単独で押して離すと、一覧と単独表示を行き来する。
+ * 既定は右 Alt（右 Ctrl のないキーボードのため）。起動時に 1 回だけ読む。
+ */
+const VIEW_TOGGLE_KEY = localStorage.getItem("iruka.viewToggleKey") || "AltRight";
+const VIEW_TOGGLE_LABEL = VIEW_TOGGLE_KEY === "AltRight" ? "右 Alt" : VIEW_TOGGLE_KEY;
+
+/**
+ * 表示切り替えキーの追跡。
+ * 押した時点では何もせず、「別のキーを押さずに離した」ときだけ切り替える。
+ * 押したまま別のキーを押したら、普通の修飾キーとして扱う（そのとき初めて押下を送る）。
+ * keydown / keyup の戻り値が true なら、呼び出し側はそのイベントを処理しない。
+ */
+function hostKeyTracker(
+  code: string,
+  on: { toggle: () => void; sendDown: () => void; sendUp: () => void },
+) {
+  let pending = false; // 押されたが、まだ送っていない
+  let sent = false; // 別のキーが押されたので、押下を送った
+  return {
+    keydown(e: KeyboardEvent): boolean {
+      if (e.code === code) {
+        if (!e.repeat && !pending && !sent) pending = true;
+        return true;
+      }
+      if (pending) {
+        pending = false;
+        sent = true;
+        on.sendDown();
+      }
+      return false;
+    },
+    keyup(e: KeyboardEvent): boolean {
+      if (e.code !== code) return false;
+      if (pending) {
+        pending = false;
+        on.toggle();
+      } else if (sent) {
+        sent = false;
+        on.sendUp();
+      }
+      return true;
+    },
+    reset() {
+      pending = false;
+      sent = false;
+    },
+  };
+}
+
 /** 一覧表示の列数の上限と、タイルの余白・隙間（px） */
 const GRID_MAX_COLS = 6;
 const GRID_PAD = 8;
@@ -330,6 +380,23 @@ function App() {
       const fit = new FitAddon();
       term.loadAddon(fit);
       term.open(container);
+      // 表示切り替えキー：xterm に渡す前に横取りする（Alt+キーの組み合わせは altKey で判定されるので送らなくてよい）
+      const hostKey = hostKeyTracker(VIEW_TOGGLE_KEY, {
+        toggle: () => toggleViewRef.current(),
+        sendDown: () => {},
+        sendUp: () => {},
+      });
+      term.attachCustomKeyEventHandler((e) => {
+        const handled =
+          e.type === "keydown" ? hostKey.keydown(e) : e.type === "keyup" ? hostKey.keyup(e) : false;
+        if (handled) {
+          e.preventDefault();
+          e.stopPropagation();
+          return false;
+        }
+        return true;
+      });
+      container.addEventListener("focusout", () => hostKey.reset());
       fit.fit();
 
       const onEvent = new Channel<PtyEvent>();
@@ -540,7 +607,23 @@ function App() {
         },
         { passive: false },
       );
+      // 表示切り替えキー：単独なら一覧へ、押したまま別のキーなら普通の修飾キーとしてリモートへ
+      const hostScancode = SCANCODES[VIEW_TOGGLE_KEY];
+      const hostKey = hostKeyTracker(VIEW_TOGGLE_KEY, {
+        toggle: () => toggleViewRef.current(),
+        sendDown: () => {
+          if (hostScancode !== undefined) send({ type: "key", scancode: hostScancode, down: true });
+        },
+        sendUp: () => {
+          if (hostScancode !== undefined) send({ type: "key", scancode: hostScancode, down: false });
+        },
+      });
       const onKey = (down: boolean) => (e: KeyboardEvent) => {
+        if (down ? hostKey.keydown(e) : hostKey.keyup(e)) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
         const scancode = SCANCODES[e.code];
         if (scancode === undefined) return;
         e.preventDefault();
@@ -548,7 +631,10 @@ function App() {
       };
       canvas.addEventListener("keydown", onKey(true));
       canvas.addEventListener("keyup", onKey(false));
-      canvas.addEventListener("blur", () => send({ type: "releaseAll" }));
+      canvas.addEventListener("blur", () => {
+        hostKey.reset();
+        send({ type: "releaseAll" });
+      });
       // 前面に来たら、このセッションとクリップボードを同期する（ローカルの内容を渡す）
       canvas.addEventListener("focus", () => {
         invoke("rdp_set_active", { id }).catch(() => {});
@@ -642,6 +728,13 @@ function App() {
     connectWithChecks(params, {});
   }, [rdpForm, connectWithChecks]);
 
+  /** 一覧と単独表示を行き来する（全画面の状態はそのまま） */
+  const toggleView = useCallback(() => {
+    setView((v) => (v === "grid" ? "single" : "grid"));
+  }, []);
+  const toggleViewRef = useRef(toggleView);
+  toggleViewRef.current = toggleView;
+
   const toggleFullscreen = useCallback(async (on: boolean) => {
     try {
       await getCurrentWindow().setFullscreen(on);
@@ -720,6 +813,35 @@ function App() {
     });
     ro.observe(el);
     return () => ro.disconnect();
+  }, []);
+
+  // 一覧表示中など、セッションにフォーカスがないときの表示切り替えキー
+  // （セッション側で処理したイベントは stopPropagation で止まるので、ここには来ない）
+  useEffect(() => {
+    const hostKey = hostKeyTracker(VIEW_TOGGLE_KEY, {
+      toggle: () => toggleViewRef.current(),
+      sendDown: () => {},
+      sendUp: () => {},
+    });
+    const inField = (t: EventTarget | null) =>
+      t instanceof HTMLElement && ["INPUT", "SELECT", "TEXTAREA"].includes(t.tagName);
+    const onDown = (e: KeyboardEvent) => {
+      if (inField(e.target)) return;
+      if (hostKey.keydown(e)) e.preventDefault();
+    };
+    const onUp = (e: KeyboardEvent) => {
+      if (inField(e.target)) return;
+      if (hostKey.keyup(e)) e.preventDefault();
+    };
+    const onBlur = () => hostKey.reset();
+    window.addEventListener("keydown", onDown);
+    window.addEventListener("keyup", onUp);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onDown);
+      window.removeEventListener("keyup", onUp);
+      window.removeEventListener("blur", onBlur);
+    };
   }, []);
 
   const changeGridCols = useCallback((cols: number) => {
@@ -1032,8 +1154,8 @@ function App() {
               </span>
               <button
                 className={view === "grid" ? "on" : ""}
-                title={view === "grid" ? "単独表示に戻す" : "全セッションを一覧表示"}
-                onClick={() => setView((v) => (v === "grid" ? "single" : "grid"))}
+                title={`${view === "grid" ? "単独表示に戻す" : "全セッションを一覧表示"}（${VIEW_TOGGLE_LABEL}）`}
+                onClick={toggleView}
               >
                 {view === "grid" ? "▣" : "⊞"}
               </button>
