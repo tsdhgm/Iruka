@@ -85,7 +85,9 @@ impl Session {
             format!("/p:{}", params.password),
             format!("/size:{}x{}", params.width, params.height),
             "/bpp:32".to_owned(),
-            // グラフィックスパイプライン（GNOME Remote Desktop に必須）と回線の自動判定
+            // グラフィックスパイプライン（GNOME Remote Desktop に必須）と回線の自動判定。
+            // /gfx を有効にすると FreeRDP が使わない展開用バッファーも確保する
+            // （KNOWN_ISSUES.md 参照。詳細は freerdp_bridge.c の iruka_pre_connect）
             if params.small_cache { "/gfx:small-cache" } else { "/gfx" }.to_owned(),
             "/network:auto".to_owned(),
             // 自己署名証明書を受け入れる（mstsc の「続行」相当）

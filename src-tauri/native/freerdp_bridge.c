@@ -117,7 +117,15 @@ static BOOL iruka_desktop_resize(rdpContext* context)
 static BOOL iruka_pre_connect(freerdp* instance)
 {
 	rdpContext* context = instance->context;
-	/* RDPGFX などのチャネル接続時に gdi へつなぐ（FreeRDP 共通のハンドラを使う） */
+	/* RDPGFX などのチャネル接続時に gdi へつなぐ（FreeRDP 共通のハンドラを使う）
+	 *
+	 * Known Issue（KNOWN_ISSUES.md「FreeRDP が使わない展開用バッファーを確保する」）:
+	 * ここで RDPGFX が gdi につながると、サーバーが画面を初期化するたびに
+	 * FreeRDP の gdi_ResetGraphics（libfreerdp/gdi/gfx.c）が、展開用バッファー一式を
+	 * 画面サイズで 2 組作り直す。RDPGFX 用（使う）と、旧方式の画面更新用の
+	 * context->codecs（RDPGFX 中は使われない）。後者の Planar だけで約 18 バイト/画素
+	 * （1080p で約 35MB、4K で約 150MB）が無駄になる。FreeRDP 側の問題なので回避はしない。
+	 */
 	if (PubSub_SubscribeChannelConnected(context->pubSub,
 	                                     freerdp_client_OnChannelConnectedEventHandler) < 0)
 		return FALSE;
