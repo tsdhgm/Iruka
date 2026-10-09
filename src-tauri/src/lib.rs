@@ -1,5 +1,6 @@
 use std::sync::atomic::AtomicU32;
 
+mod clipboard;
 mod memory;
 mod pty;
 mod rdp;
@@ -54,6 +55,7 @@ pub fn run() {
             rdp::rdp_input,
             rdp::rdp_close,
             rdp::rdp_perf_log,
+            rdp::rdp_set_active,
             memory::rdp_memory_check
         ])
         .run(tauri::generate_context!())

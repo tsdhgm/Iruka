@@ -1,7 +1,61 @@
-# Tauri + React + Typescript
+# Iruka
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+複数の PC を一度に見守るためのビューアー。SSH などのコンソールとリモートデスクトップ（RDP）を、左のサイドバーにライブのサムネイルとして並べ、クリックで右側に大きく表示する。表示していないセッションも接続したまま動き続ける。
 
-## Recommended IDE Setup
+Tauri 2 + React + TypeScript。RDP は FreeRDP 3 を使う（予備として IronRDP も組み込んである）。
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+## 主な機能
+
+### コンソール
+
+- ローカルのシェルを開く（xterm.js で表示）。
+
+### リモートデスクトップ（RDP）
+
+- **接続先**: Windows のリモートデスクトップと、Ubuntu の GNOME Remote Desktop（画面共有）。
+- **表示**: リモートの 1 ピクセルを画面の 1 ピクセルで表示する（等倍）。はみ出す分はスクロールで見る。サムネイルだけ縮小する。
+- **全画面**: 画面上端中央のつまみにマウスを乗せると、ツールバーが降りてくる。そこで全画面への切り替えと解除、切断ができる。
+- **接続フォームの設定**:
+
+  | 項目 | 内容 | 初期値 |
+  |---|---|---|
+  | 解像度 | ローカルと同じ / 2560×1440 / 1920×1080。大きいほどメモリを使う | ローカルと同じ |
+  | 接続方式 | 自動（FreeRDP 優先）/ FreeRDP / IronRDP | 自動 |
+  | 音声 | リモートの音をローカルで鳴らす | オフ |
+  | マイク | ローカルのマイクをリモートへ送る | オフ |
+  | 省メモリ | RDPGFX のキャッシュを 100MB から 16MB に減らす | オン |
+  | クリップボード | テキストのコピー＆ペーストを共有する | オン |
+
+  音声、マイク、省メモリ、クリップボードは FreeRDP で接続したときだけ有効。
+
+- **クリップボード（テキストのみ）**: ローカルとリモートで、双方向にコピー＆ペーストできる。多数のセッションを同時に開くので、同期するのは表示中のセッションだけにしている。
+  - **ローカル → リモート**: リモート画面にフォーカスが入ったときに、ローカルのテキストをそのセッションに渡す。リモート画面のクリック、セッションの切り替え、ほかのアプリから Iruka に戻ったときが該当する。
+  - **リモート → ローカル**: 表示中のセッションでコピーされたテキストだけを、ローカルのクリップボードに入れる。裏のセッションでのコピーや、コンソールを表示している間のコピーは無視する。
+  - Windows の改行（CRLF）と Linux の改行（LF）は自動で変換する。
+
+- **メモリ確認**: 接続する前に空きメモリと必要量の見積もりを比べ、足りなければ確認画面を出す。見積もりは、実際の使用量から学習した値を使う。
+
+## 制限事項と既知の不具合
+
+[KNOWN_ISSUES.md](KNOWN_ISSUES.md) を参照。
+
+## 開発
+
+### 必要なもの（Ubuntu）
+
+- Tauri 2 の前提パッケージ（[Tauri のドキュメント](https://v2.tauri.app/start/prerequisites/)を参照）
+- FreeRDP 3 の開発用パッケージ: `sudo apt install freerdp3-dev`
+- Node.js と Rust
+
+### 起動
+
+```sh
+npm install
+npm run tauri dev
+```
+
+RDP の調査用ログは、環境変数 `IRUKA_LOG` で絞り込める（例: `IRUKA_LOG=iruka_mem=debug`）。
+
+## ライセンス
+
+MIT（[LICENSE](LICENSE)）

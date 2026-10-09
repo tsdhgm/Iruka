@@ -53,6 +53,7 @@ interface RdpForm {
   audio: boolean;
   microphone: boolean;
   smallCache: boolean;
+  clipboard: boolean;
   resolution: RdpResolution;
 }
 
@@ -99,6 +100,7 @@ function loadRdpForm(): RdpForm {
       audio: saved.audio ?? false,
       microphone: saved.microphone ?? false,
       smallCache: saved.smallCache ?? true,
+      clipboard: saved.clipboard ?? true,
       resolution: saved.resolution ?? "local",
     };
   } catch {
@@ -110,6 +112,7 @@ function loadRdpForm(): RdpForm {
       audio: false,
       microphone: false,
       smallCache: true,
+      clipboard: true,
       resolution: "local",
     };
   }
@@ -223,6 +226,8 @@ function App() {
         if (handle.kind === "pty") {
           handle.fit.fit();
           handle.term.focus();
+          // RDP 以外を表示中は、リモートでのコピーをローカルに入れない
+          invoke("rdp_set_active", { id: null }).catch(() => {});
         } else {
           handle.canvas.focus();
         }
@@ -480,6 +485,10 @@ function App() {
       canvas.addEventListener("keydown", onKey(true));
       canvas.addEventListener("keyup", onKey(false));
       canvas.addEventListener("blur", () => send({ type: "releaseAll" }));
+      // 前面に来たら、このセッションとクリップボードを同期する（ローカルの内容を渡す）
+      canvas.addEventListener("focus", () => {
+        invoke("rdp_set_active", { id }).catch(() => {});
+      });
 
       handlesRef.current.set(id, { kind: "rdp", canvas, container });
       dirtyRef.current.add(id);
@@ -512,6 +521,7 @@ function App() {
         audio: rdpForm.audio,
         microphone: rdpForm.microphone,
         smallCache: rdpForm.smallCache,
+        clipboard: rdpForm.clipboard,
         resolution: rdpForm.resolution,
       }),
     );
@@ -527,6 +537,7 @@ function App() {
       audio: rdpForm.audio,
       microphone: rdpForm.microphone,
       smallCache: rdpForm.smallCache,
+      clipboard: rdpForm.clipboard,
     };
     setRdpForm(null);
     // 空きメモリが見積もりより少なければ、接続する前に確認する
@@ -615,8 +626,19 @@ function App() {
         .then(setFullscreen)
         .catch(() => {});
     };
+    // 他のアプリでコピーして戻ってきたときも、表示中の RDP セッションに渡す
+    const onWindowFocus = () => {
+      const id = activeIdRef.current;
+      if (id !== null && handlesRef.current.get(id)?.kind === "rdp") {
+        invoke("rdp_set_active", { id }).catch(() => {});
+      }
+    };
     window.addEventListener("resize", onWindowResize);
-    return () => window.removeEventListener("resize", onWindowResize);
+    window.addEventListener("focus", onWindowFocus);
+    return () => {
+      window.removeEventListener("resize", onWindowResize);
+      window.removeEventListener("focus", onWindowFocus);
+    };
   }, []);
 
   const activeSession = sessions.find((s) => s.id === activeId) ?? null;
@@ -726,6 +748,16 @@ function App() {
                   }
                 />
                 省メモリ
+              </label>
+              <label title="テキストのコピー＆ペーストを共有（表示中のセッションのみ）">
+                <input
+                  type="checkbox"
+                  checked={rdpForm.clipboard}
+                  onChange={(e) =>
+                    setRdpForm({ ...rdpForm, clipboard: e.target.checked })
+                  }
+                />
+                クリップボード
               </label>
             </div>
             <div className="rdp-form-row">

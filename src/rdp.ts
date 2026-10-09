@@ -31,6 +31,7 @@ export interface RdpConnectParams {
   audio: boolean;
   microphone: boolean;
   smallCache: boolean;
+  clipboard: boolean;
 }
 
 /** 接続前のメモリ確認の結果（Rust 側 memory.rs の MemoryCheck） */

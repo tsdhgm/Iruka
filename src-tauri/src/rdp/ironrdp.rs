@@ -101,6 +101,8 @@ fn run_session(params: &RdpConnectParams, rx: &Receiver<Command>, sink: &mut Fra
                         fastpath_events.extend(apply_input(&mut input_db, &mut active_stage, input));
                     }
                 }
+                // クリップボードは未対応
+                Ok(Command::ClipboardLocal(_)) => {}
                 Ok(Command::Close) | Err(TryRecvError::Disconnected) => {
                     if let Ok(outputs) = active_stage.graceful_shutdown() {
                         for out in outputs {

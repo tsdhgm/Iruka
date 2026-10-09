@@ -29,6 +29,9 @@ extern "C" {
     fn iruka_rdp_send_mouse(ctx: *mut RdpContext, flags: u16, x: u16, y: u16);
     fn iruka_rdp_send_extended_mouse(ctx: *mut RdpContext, flags: u16, x: u16, y: u16);
     fn iruka_rdp_send_key(ctx: *mut RdpContext, scancode: u16, down: c_int);
+    fn iruka_rdp_set_local_text(ctx: *mut RdpContext, text: *const c_char);
+    fn iruka_rdp_take_remote_text(ctx: *mut RdpContext) -> *mut c_char;
+    fn iruka_rdp_free_text(text: *mut c_char);
     fn iruka_rdp_last_error(ctx: *mut RdpContext) -> *const c_char;
     fn iruka_rdp_disconnect(ctx: *mut RdpContext);
     fn iruka_rdp_free(ctx: *mut RdpContext);
@@ -92,8 +95,10 @@ impl Session {
             "/network:auto".to_owned(),
             // 自己署名証明書を受け入れる（mstsc の「続行」相当）
             "/cert:ignore".to_owned(),
-            "-clipboard".to_owned(),
         ];
+        if !params.clipboard {
+            args.push("-clipboard".to_owned());
+        }
         // 音声の入出力。再生・録音の方式は FreeRDP が OS に合わせて選ぶ（Linux なら PulseAudio）
         if params.audio {
             args.push("/sound".to_owned());
@@ -163,12 +168,17 @@ impl Session {
             loop {
                 match commands.try_recv() {
                     Ok(Command::Input(inputs)) => inputs.into_iter().for_each(|i| self.send_input(i)),
+                    Ok(Command::ClipboardLocal(text)) => self.set_local_text(text.as_deref()),
                     Ok(Command::Close) | Err(TryRecvError::Disconnected) => return Ok("切断しました".into()),
                     Err(TryRecvError::Empty) => break,
                 }
             }
 
             let status = unsafe { iruka_rdp_poll(self.ctx, POLL_TIMEOUT_MS) };
+
+            if let Some(text) = self.take_remote_text() {
+                sink.clipboard_from_remote(&text);
+            }
 
             if let Some(fb) = self.framebuffer() {
                 if (fb.width, fb.height) != size {
@@ -201,6 +211,23 @@ impl Session {
                 _ => bail!("通信エラー: {}", self.last_error()),
             }
         }
+    }
+
+    fn set_local_text(&self, text: Option<&str>) {
+        // NUL を含むテキストは C に渡せないので、そこまでで切る
+        let text = text.map(|t| CString::new(t.split('\0').next().unwrap_or("")).unwrap());
+        let ptr = text.as_ref().map_or(std::ptr::null(), |t| t.as_ptr());
+        unsafe { iruka_rdp_set_local_text(self.ctx, ptr) };
+    }
+
+    fn take_remote_text(&self) -> Option<String> {
+        let ptr = unsafe { iruka_rdp_take_remote_text(self.ctx) };
+        if ptr.is_null() {
+            return None;
+        }
+        let text = unsafe { CStr::from_ptr(ptr) }.to_string_lossy().into_owned();
+        unsafe { iruka_rdp_free_text(ptr) };
+        Some(text)
     }
 
     fn send_input(&self, input: RdpInput) {

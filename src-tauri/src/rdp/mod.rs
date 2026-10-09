@@ -23,7 +23,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use tauri::ipc::{Channel, InvokeResponseBody};
 
-use crate::{memory, NEXT_SESSION_ID};
+use crate::{clipboard, memory, NEXT_SESSION_ID};
 
 /// フロントへ画面を送る最小間隔（約 30fps）。
 const FRAME_INTERVAL: Duration = Duration::from_millis(33);
@@ -62,6 +62,8 @@ pub enum RdpInput {
 /// セッションのスレッドへ送る指示。
 pub enum Command {
     Input(Vec<RdpInput>),
+    /// ローカルのクリップボードのテキスト（None は空）をリモートに知らせる
+    ClipboardLocal(Option<String>),
     Close,
 }
 
@@ -97,6 +99,13 @@ pub struct RdpConnectParams {
     /// RDPGFX のキャッシュを小さく（100MB → 16MB）する（FreeRDP のみ）
     #[serde(default)]
     pub small_cache: bool,
+    /// クリップボード（テキスト）を共有する（FreeRDP のみ）
+    #[serde(default = "default_true")]
+    pub clipboard: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl RdpConnectParams {
@@ -265,6 +274,11 @@ impl FrameSink {
         Ok(())
     }
 
+    /// リモートでテキストがコピーされた（アクティブなセッションならローカルに入れる）。
+    pub fn clipboard_from_remote(&self, text: &str) {
+        clipboard::from_remote(self.id, text);
+    }
+
     /// 画面のこの範囲が変わった。
     pub fn damage(&mut self, rect: Rect) {
         if rect.width == 0 || rect.height == 0 {
@@ -398,6 +412,20 @@ pub fn rdp_input(state: tauri::State<'_, RdpState>, id: u32, events: Vec<RdpInpu
 #[tauri::command]
 pub fn rdp_perf_log(message: String) {
     tracing::debug!(target: "iruka_perf", "frontend: {message}");
+}
+
+/// 表示中の RDP セッションが変わった（None は RDP 以外を表示中）。
+/// RDP セッションなら、ローカルのクリップボードのテキストをそのセッションに知らせる。
+/// クリップボードの読み取りは待たされることがあるので、メインスレッド以外で動かす（async）。
+#[tauri::command]
+pub async fn rdp_set_active(state: tauri::State<'_, RdpState>, id: Option<u32>) -> Result<(), String> {
+    clipboard::set_active(id);
+    let Some(id) = id else { return Ok(()) };
+    let text = clipboard::local_text();
+    if let Some(tx) = state.sessions.lock().unwrap().get(&id) {
+        let _ = tx.send(Command::ClipboardLocal(text));
+    }
+    Ok(())
 }
 
 #[tauri::command]

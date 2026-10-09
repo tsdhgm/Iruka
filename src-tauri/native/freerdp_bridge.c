@@ -7,6 +7,8 @@
  * 合成してくれるので、Rust 側は変化した矩形とフレームバッファだけを読めばよい。
  *
  * すべての関数は、そのセッションを担当する 1 本のスレッドから呼ぶこと。
+ * ただしクリップボード（cliprdr）の通知は FreeRDP のチャネル用スレッドから来るので、
+ * その受け渡しだけはロックで守る。
  */
 
 #include <stdint.h>
@@ -17,10 +19,14 @@
 #include <freerdp/client.h>
 #include <freerdp/client/cmdline.h>
 #include <freerdp/channels/channels.h>
+#include <freerdp/channels/cliprdr.h>
+#include <freerdp/client/cliprdr.h>
 #include <freerdp/gdi/gdi.h>
 #include <freerdp/gdi/gfx.h>
 #include <freerdp/input.h>
 #include <freerdp/scancode.h>
+#include <winpr/string.h>
+#include <winpr/user.h>
 
 /* ためておく変化範囲の上限。超えたら全体を 1 つの矩形にまとめる */
 #define MAX_DIRTY 128
@@ -37,6 +43,13 @@ typedef struct
 	/* 前回 iruka_rdp_take_dirty() 以降に変化した範囲の一覧 */
 	DirtyRect dirty[MAX_DIRTY];
 	int ndirty;
+
+	/* クリップボード（テキストのみ）。clip_lock で守る */
+	CRITICAL_SECTION clip_lock;
+	CliprdrClientContext* cliprdr;
+	BOOL clip_ready;   /* サーバーの Monitor Ready を受けた */
+	char* local_text;  /* ローカルのテキスト（UTF-8）。サーバーに求められたら渡す */
+	char* remote_text; /* リモートでコピーされたテキスト（UTF-8）。Rust が取りに来るまで持つ */
 } IrukaContext;
 
 /* ためた範囲を、全部を囲む 1 つの矩形にまとめる */
@@ -114,6 +127,171 @@ static BOOL iruka_desktop_resize(rdpContext* context)
 	return TRUE;
 }
 
+/* ---- クリップボード（cliprdr、テキストのみ） ----
+ *
+ * リモート → ローカル: サーバーがコピーを通知（Format List）→ テキストがあれば要求
+ *   → 届いたら remote_text に置く → Rust が iruka_rdp_take_remote_text() で取り出す。
+ * ローカル → リモート: Rust が iruka_rdp_set_local_text() で渡す → サーバーに通知
+ *   → 貼り付け時にサーバーが要求してきたら local_text を返す。
+ */
+
+static IrukaContext* clip_owner(CliprdrClientContext* cliprdr)
+{
+	return (IrukaContext*)cliprdr->custom;
+}
+
+/* 今の local_text に合わせて、こちらにあるデータの種類をサーバーに通知する */
+static UINT clip_send_format_list(IrukaContext* ic)
+{
+	CLIPRDR_FORMAT format = { .formatId = CF_UNICODETEXT, .formatName = NULL };
+	CLIPRDR_FORMAT_LIST list = { .common.msgType = CB_FORMAT_LIST };
+	EnterCriticalSection(&ic->clip_lock);
+	CliprdrClientContext* cliprdr = ic->clip_ready ? ic->cliprdr : NULL;
+	if (ic->local_text && ic->local_text[0])
+	{
+		list.numFormats = 1;
+		list.formats = &format;
+	}
+	LeaveCriticalSection(&ic->clip_lock);
+	if (!cliprdr)
+		return CHANNEL_RC_OK;
+	return cliprdr->ClientFormatList(cliprdr, &list);
+}
+
+static UINT clip_monitor_ready(CliprdrClientContext* cliprdr, const CLIPRDR_MONITOR_READY* ready)
+{
+	WINPR_UNUSED(ready);
+	IrukaContext* ic = clip_owner(cliprdr);
+	CLIPRDR_GENERAL_CAPABILITY_SET general = { .capabilitySetType = CB_CAPSTYPE_GENERAL,
+		                                       .capabilitySetLength = CB_CAPSTYPE_GENERAL_LEN,
+		                                       .version = CB_CAPS_VERSION_2,
+		                                       .generalFlags = CB_USE_LONG_FORMAT_NAMES };
+	CLIPRDR_CAPABILITIES caps = { .cCapabilitiesSets = 1,
+		                          .capabilitySets = (CLIPRDR_CAPABILITY_SET*)&general };
+	UINT rc = cliprdr->ClientCapabilities(cliprdr, &caps);
+	if (rc != CHANNEL_RC_OK)
+		return rc;
+	EnterCriticalSection(&ic->clip_lock);
+	ic->clip_ready = TRUE;
+	LeaveCriticalSection(&ic->clip_lock);
+	return clip_send_format_list(ic);
+}
+
+static UINT clip_server_capabilities(CliprdrClientContext* cliprdr,
+                                     const CLIPRDR_CAPABILITIES* caps)
+{
+	WINPR_UNUSED(cliprdr);
+	WINPR_UNUSED(caps);
+	return CHANNEL_RC_OK;
+}
+
+/* リモートでコピーされた：テキストがあれば中身を要求する */
+static UINT clip_server_format_list(CliprdrClientContext* cliprdr,
+                                    const CLIPRDR_FORMAT_LIST* list)
+{
+	const CLIPRDR_FORMAT_LIST_RESPONSE response = { .common.msgType = CB_FORMAT_LIST_RESPONSE,
+		                                            .common.msgFlags = CB_RESPONSE_OK };
+	UINT rc = cliprdr->ClientFormatListResponse(cliprdr, &response);
+	if (rc != CHANNEL_RC_OK)
+		return rc;
+	for (UINT32 i = 0; i < list->numFormats; i++)
+	{
+		if (list->formats[i].formatId == CF_UNICODETEXT)
+		{
+			const CLIPRDR_FORMAT_DATA_REQUEST request = { .common.msgType = CB_FORMAT_DATA_REQUEST,
+				                                          .requestedFormatId = CF_UNICODETEXT };
+			return cliprdr->ClientFormatDataRequest(cliprdr, &request);
+		}
+	}
+	return CHANNEL_RC_OK;
+}
+
+static UINT clip_server_format_list_response(CliprdrClientContext* cliprdr,
+                                             const CLIPRDR_FORMAT_LIST_RESPONSE* response)
+{
+	WINPR_UNUSED(cliprdr);
+	WINPR_UNUSED(response);
+	return CHANNEL_RC_OK;
+}
+
+/* 要求したテキストが届いた（UTF-16LE、終端の NUL を含むことがある） */
+static UINT clip_server_format_data_response(CliprdrClientContext* cliprdr,
+                                             const CLIPRDR_FORMAT_DATA_RESPONSE* response)
+{
+	IrukaContext* ic = clip_owner(cliprdr);
+	if (response->common.msgFlags != CB_RESPONSE_OK || !response->requestedFormatData)
+		return CHANNEL_RC_OK;
+	const WCHAR* wtext = (const WCHAR*)response->requestedFormatData;
+	size_t wlen = response->common.dataLen / sizeof(WCHAR);
+	while (wlen > 0 && wtext[wlen - 1] == 0)
+		wlen--;
+	char* text = ConvertWCharNToUtf8Alloc(wtext, wlen, NULL);
+	if (!text)
+		return CHANNEL_RC_OK;
+	EnterCriticalSection(&ic->clip_lock);
+	free(ic->remote_text);
+	ic->remote_text = text;
+	LeaveCriticalSection(&ic->clip_lock);
+	return CHANNEL_RC_OK;
+}
+
+/* リモートで貼り付けられた：ローカルのテキストを渡す */
+static UINT clip_server_format_data_request(CliprdrClientContext* cliprdr,
+                                            const CLIPRDR_FORMAT_DATA_REQUEST* request)
+{
+	IrukaContext* ic = clip_owner(cliprdr);
+	CLIPRDR_FORMAT_DATA_RESPONSE response = { .common.msgType = CB_FORMAT_DATA_RESPONSE,
+		                                      .common.msgFlags = CB_RESPONSE_FAIL };
+	WCHAR* wtext = NULL;
+	size_t wlen = 0;
+	if (request->requestedFormatId == CF_UNICODETEXT)
+	{
+		EnterCriticalSection(&ic->clip_lock);
+		if (ic->local_text)
+			wtext = ConvertUtf8ToWCharAlloc(ic->local_text, &wlen);
+		LeaveCriticalSection(&ic->clip_lock);
+	}
+	if (wtext)
+	{
+		/* 終端の NUL も含めて送る */
+		response.common.msgFlags = CB_RESPONSE_OK;
+		response.common.dataLen = (UINT32)((wlen + 1) * sizeof(WCHAR));
+		response.requestedFormatData = (const BYTE*)wtext;
+	}
+	UINT rc = cliprdr->ClientFormatDataResponse(cliprdr, &response);
+	free(wtext);
+	return rc;
+}
+
+static void iruka_on_channel_connected(void* context, const ChannelConnectedEventArgs* e)
+{
+	IrukaContext* ic = (IrukaContext*)context;
+	if (strcmp(e->name, CLIPRDR_SVC_CHANNEL_NAME) != 0)
+		return;
+	CliprdrClientContext* cliprdr = (CliprdrClientContext*)e->pInterface;
+	cliprdr->custom = ic;
+	cliprdr->MonitorReady = clip_monitor_ready;
+	cliprdr->ServerCapabilities = clip_server_capabilities;
+	cliprdr->ServerFormatList = clip_server_format_list;
+	cliprdr->ServerFormatListResponse = clip_server_format_list_response;
+	cliprdr->ServerFormatDataResponse = clip_server_format_data_response;
+	cliprdr->ServerFormatDataRequest = clip_server_format_data_request;
+	EnterCriticalSection(&ic->clip_lock);
+	ic->cliprdr = cliprdr;
+	LeaveCriticalSection(&ic->clip_lock);
+}
+
+static void iruka_on_channel_disconnected(void* context, const ChannelDisconnectedEventArgs* e)
+{
+	IrukaContext* ic = (IrukaContext*)context;
+	if (strcmp(e->name, CLIPRDR_SVC_CHANNEL_NAME) != 0)
+		return;
+	EnterCriticalSection(&ic->clip_lock);
+	ic->cliprdr = NULL;
+	ic->clip_ready = FALSE;
+	LeaveCriticalSection(&ic->clip_lock);
+}
+
 static BOOL iruka_pre_connect(freerdp* instance)
 {
 	rdpContext* context = instance->context;
@@ -131,6 +309,11 @@ static BOOL iruka_pre_connect(freerdp* instance)
 		return FALSE;
 	if (PubSub_SubscribeChannelDisconnected(context->pubSub,
 	                                        freerdp_client_OnChannelDisconnectedEventHandler) < 0)
+		return FALSE;
+	/* クリップボードのチャネルは Iruka 自身がローカルとつなぐ */
+	if (PubSub_SubscribeChannelConnected(context->pubSub, iruka_on_channel_connected) < 0)
+		return FALSE;
+	if (PubSub_SubscribeChannelDisconnected(context->pubSub, iruka_on_channel_disconnected) < 0)
 		return FALSE;
 	return TRUE;
 }
@@ -155,16 +338,29 @@ static void iruka_post_disconnect(freerdp* instance)
 	                                   freerdp_client_OnChannelConnectedEventHandler);
 	PubSub_UnsubscribeChannelDisconnected(instance->context->pubSub,
 	                                      freerdp_client_OnChannelDisconnectedEventHandler);
+	PubSub_UnsubscribeChannelConnected(instance->context->pubSub, iruka_on_channel_connected);
+	PubSub_UnsubscribeChannelDisconnected(instance->context->pubSub, iruka_on_channel_disconnected);
 	gdi_free(instance);
 }
 
 static BOOL iruka_client_new(freerdp* instance, rdpContext* context)
 {
-	WINPR_UNUSED(context);
+	IrukaContext* ic = (IrukaContext*)context;
+	if (!InitializeCriticalSectionAndSpinCount(&ic->clip_lock, 4000))
+		return FALSE;
 	instance->PreConnect = iruka_pre_connect;
 	instance->PostConnect = iruka_post_connect;
 	instance->PostDisconnect = iruka_post_disconnect;
 	return TRUE;
+}
+
+static void iruka_client_free(freerdp* instance, rdpContext* context)
+{
+	WINPR_UNUSED(instance);
+	IrukaContext* ic = (IrukaContext*)context;
+	free(ic->local_text);
+	free(ic->remote_text);
+	DeleteCriticalSection(&ic->clip_lock);
 }
 
 /*
@@ -178,6 +374,7 @@ rdpContext* iruka_rdp_new(int argc, char** argv)
 	entry.Size = sizeof(RDP_CLIENT_ENTRY_POINTS_V1);
 	entry.ContextSize = sizeof(IrukaContext);
 	entry.ClientNew = iruka_client_new;
+	entry.ClientFree = iruka_client_free;
 
 	rdpContext* context = freerdp_client_context_new(&entry);
 	if (!context)
@@ -277,6 +474,33 @@ void iruka_rdp_send_key(rdpContext* context, uint16_t scancode, int down)
 	const BOOL extended = (scancode & 0xFF00) == 0xE000;
 	const DWORD rdp_scancode = MAKE_RDP_SCANCODE(scancode & 0xFF, extended);
 	freerdp_input_send_keyboard_event_ex(context->input, down ? TRUE : FALSE, FALSE, rdp_scancode);
+}
+
+/* ローカルのクリップボードのテキスト（UTF-8、NULL なら空）を設定し、サーバーに通知する */
+void iruka_rdp_set_local_text(rdpContext* context, const char* text)
+{
+	IrukaContext* ic = (IrukaContext*)context;
+	EnterCriticalSection(&ic->clip_lock);
+	free(ic->local_text);
+	ic->local_text = text ? _strdup(text) : NULL;
+	LeaveCriticalSection(&ic->clip_lock);
+	clip_send_format_list(ic);
+}
+
+/* リモートでコピーされたテキストを取り出す（なければ NULL）。iruka_rdp_free_text で解放する */
+char* iruka_rdp_take_remote_text(rdpContext* context)
+{
+	IrukaContext* ic = (IrukaContext*)context;
+	EnterCriticalSection(&ic->clip_lock);
+	char* text = ic->remote_text;
+	ic->remote_text = NULL;
+	LeaveCriticalSection(&ic->clip_lock);
+	return text;
+}
+
+void iruka_rdp_free_text(char* text)
+{
+	free(text);
 }
 
 /* 直近のエラーの説明（英語） */

@@ -34,6 +34,7 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 tracing = "0.1"
 sysinfo = { version = "0.39.6", default-features = false, features = ["system"] }
+arboard = { version = "3.6.1", default-features = false }
 
 [features]
 default = ["freerdp", "ironrdp"]
