@@ -12,7 +12,7 @@ Tauri 2 + React + TypeScript。RDP は FreeRDP 3 を使う（予備として Iro
 
 ### リモートデスクトップ（RDP）
 
-- **接続先**: Windows のリモートデスクトップと、Ubuntu の GNOME Remote Desktop（画面共有）。
+- **接続先**: Windows のリモートデスクトップ、Ubuntu の GNOME Remote Desktop（画面共有）、Mac（[clintcan/macrdp](https://github.com/clintcan/macrdp) を入れたもの。ホストは `IP:3390`）。
 - **表示**: リモートの 1 ピクセルを画面の 1 ピクセルで表示する（等倍）。はみ出す分はスクロールで見る。サムネイルだけ縮小する。
 - **全画面**: 画面上端中央のつまみにマウスを乗せると、ツールバーが降りてくる。そこで全画面への切り替えと解除、切断ができる。
 - **一覧表示**: ツールバーの ⊞ で、全セッションを 16:9 のタイルで並べる。スライダーで 1〜6 列に変えられ、縦にはみ出す分はスクロールする。タイルをクリックすると、そのセッションの単独表示に戻る。コンソールのタイルには「実行中 / 待機 N分 / 終了」が出る（直近 2 秒以内に出力があれば実行中。Claude Code などのスピナーは動作中ずっと出力しているので、これで入力待ちかどうかがわかる）。
@@ -43,7 +43,7 @@ Tauri 2 + React + TypeScript。RDP は FreeRDP 3 を使う（予備として Iro
 
 ## 調査メモ
 
-- [docs/mac-target.md](docs/mac-target.md): Mac を接続先にする方法（VNC バックエンドの追加、または Mac 側に RDP サーバー）と、次に試すこと。
+- [docs/mac-target.md](docs/mac-target.md): Mac を接続先にする方法の調査と、macrdp での接続結果（2026-10-13）。
 
 ## 開発
 
