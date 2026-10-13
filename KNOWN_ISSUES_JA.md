@@ -1,3 +1,5 @@
+*English: [KNOWN_ISSUES.md](KNOWN_ISSUES.md)*
+
 # Known Issues
 
 既知の不具合と制限事項。原因が Iruka の外（FreeRDP や OS）にあるものは、回避せずにここへ記録する。

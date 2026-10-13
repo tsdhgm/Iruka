@@ -1,8 +1,12 @@
+*English: [README.md](README.md)*
+
 # Iruka
 
 複数の PC を一度に見守るためのビューアー。SSH などのコンソールとリモートデスクトップ（RDP）を、左のサイドバーにライブのサムネイルとして並べ、クリックで右側に大きく表示する。表示していないセッションも接続したまま動き続ける。
 
 Tauri 2 + React + TypeScript。RDP は FreeRDP 3 を使う（予備として IronRDP も組み込んである）。
+
+**状態**: 個人用の初期段階のツール（1.0 未満）。クライアントは Ubuntu 26.04、接続先は Windows（Pro）、Ubuntu の GNOME Remote Desktop、macOS（macrdp）で試している。
 
 ## 主な機能
 
@@ -14,36 +18,47 @@ Tauri 2 + React + TypeScript。RDP は FreeRDP 3 を使う（予備として Iro
 
 - **接続先**: Windows のリモートデスクトップ、Ubuntu の GNOME Remote Desktop（画面共有）、Mac（[clintcan/macrdp](https://github.com/clintcan/macrdp) を入れたもの。ホストは `IP:3390`）。
 - **表示**: リモートの 1 ピクセルを画面の 1 ピクセルで表示する（等倍）。はみ出す分はスクロールで見る。サムネイルだけ縮小する。
-- **全画面**: 画面上端中央のつまみにマウスを乗せると、ツールバーが降りてくる。そこで全画面への切り替えと解除、切断ができる。
-- **一覧表示**: ツールバーの ⊞ で、全セッションを 16:9 のタイルで並べる。スライダーで 1〜6 列に変えられ、縦にはみ出す分はスクロールする。タイルをクリックすると、そのセッションの単独表示に戻る。コンソールのタイルには「実行中 / 待機 N分 / 終了」が出る（直近 2 秒以内に出力があれば実行中。Claude Code などのスピナーは動作中ずっと出力しているので、これで入力待ちかどうかがわかる）。
+- **全画面**: 画面上端中央のつまみにマウスを乗せると、ツールバーが降りてくる。「Fullscreen（全画面）」/「Exit fullscreen（全画面解除）」、「Disconnect（切断）」、「Keep toolbar open（ツールバーを出したままにする）」がある。
+- **一覧表示**: ツールバーの「Grid view（一覧表示）」で、全セッションを 16:9 のタイルで並べる（「Single view（単独表示）」で戻る）。「Columns（列数）」のスライダーで 1〜6 列に変えられ、縦にはみ出す分はスクロールする。タイルをクリックすると、そのセッションの単独表示に戻る。コンソールのタイルには「Running（実行中）」「Idle 5m（待機 5 分）」「Exited（終了）」のバッジが出る（直近 2 秒以内に出力があれば Running。Claude Code などのスピナーは動作中ずっと出力しているので、これで入力待ちかどうかがわかる）。
 - **表示切り替えキー**: 右 Alt を単独で押して離すと、一覧と単独表示を行き来する（全画面中も有効）。右 Alt を押したまま別のキーを押せば、普通の Alt としてリモートに送られる。右 Alt 単独はリモートに届かなくなるので、Alt 単独の操作（Windows のメニューバーへのフォーカスなど）は左 Alt で行う。キーは `localStorage` の `iruka.viewToggleKey`（`KeyboardEvent.code`、例: `ControlRight`）で変えられる。設定画面はまだない。
-- **接続フォームの設定**:
+- **接続フォーム**: 「Host（ホスト）」「User（ユーザー名）」「Password（パスワード）」と下の設定項目、「Connect（接続）」/「Cancel（キャンセル）」。
 
   | 項目 | 内容 | 初期値 |
   |---|---|---|
-  | 解像度 | ローカルと同じ / 2560×1440 / 1920×1080。大きいほどメモリを使う | ローカルと同じ |
-  | 接続方式 | 自動（FreeRDP 優先）/ FreeRDP / IronRDP | 自動 |
-  | 音声 | リモートの音をローカルで鳴らす | オフ |
-  | マイク | ローカルのマイクをリモートへ送る | オフ |
-  | 省メモリ | RDPGFX のキャッシュを 100MB から 16MB に減らす | オン |
-  | クリップボード | テキストのコピー＆ペーストを共有する | オン |
+  | Resolution（解像度） | 「Same as local（ローカルと同じ）」/「2560×1440」/「1920×1080」。大きいほどメモリを使う | Same as local |
+  | Backend（接続方式） | 「Auto (FreeRDP first)（自動、FreeRDP 優先）」/「FreeRDP」/「IronRDP」 | Auto (FreeRDP first) |
+  | Audio（音声） | リモートの音をローカルで鳴らす | オフ |
+  | Microphone（マイク） | ローカルのマイクをリモートへ送る | オフ |
+  | Low memory（省メモリ） | RDPGFX のキャッシュを 100MB から 16MB に減らす | オン |
+  | Clipboard（クリップボード） | テキストのコピー＆ペーストを共有する | オン |
 
-  音声、マイク、省メモリ、クリップボードは FreeRDP で接続したときだけ有効。
+  Audio、Microphone、Low memory、Clipboard は FreeRDP で接続したときだけ有効。
 
 - **クリップボード（テキストのみ）**: ローカルとリモートで、双方向にコピー＆ペーストできる。多数のセッションを同時に開くので、同期するのは表示中のセッションだけにしている。
   - **ローカル → リモート**: リモート画面にフォーカスが入ったときに、ローカルのテキストをそのセッションに渡す。リモート画面のクリック、セッションの切り替え、ほかのアプリから Iruka に戻ったときが該当する。
   - **リモート → ローカル**: 表示中のセッションでコピーされたテキストだけを、ローカルのクリップボードに入れる。裏のセッションでのコピーや、コンソールを表示している間のコピーは無視する。
   - Windows の改行（CRLF）と Linux の改行（LF）は自動で変換する。
 
-- **メモリ確認**: 接続する前に空きメモリと必要量の見積もりを比べ、足りなければ確認画面を出す。見積もりは、実際の使用量から学習した値を使う。
+- **メモリ確認**: 接続する前に空きメモリと必要量の見積もりを比べ、足りなければ「Memory may run short（メモリが足りないかもしれない）」の確認画面を出す（「Connect anyway（それでも接続）」/「Cancel」）。見積もりは、実際の使用量から学習した値を使う。接続先がこの PC 自身だったときも、同じ形の「This is the local machine（これはローカルのマシン）」の確認画面が出る。
+- **切断時のメッセージ**: セッションが終わると、理由が接続方式の名前と一緒に出る。例: 「Disconnected (FreeRDP): The server closed the connection（切断 (FreeRDP): サーバーが接続を閉じた）」「Connection error (FreeRDP): Connection failed: …（接続エラー (FreeRDP): 接続に失敗）」。バックエンドの理由は「Disconnected（切断した）」「The server closed the connection（サーバーが接続を閉じた）」「Connection failed: …（接続に失敗）」「Communication error: …（通信エラー）」の 4 つ。
+
+### セキュリティに関する注意
+
+- FreeRDP には `/cert:ignore` を渡しているので、サーバー証明書は検証しない（IronRDP バックエンドも検証しない）。信頼できる LAN の中でだけ使うこと。
+- パスワードは、プロセス内の引数 `/p:` として FreeRDP に渡す。プロセス一覧には出ないが、FreeRDP が警告を出す。設定 API への移行を予定している。
+- 接続フォームの内容は `localStorage`（`iruka.rdpForm`）に保存する。保存するのは Host、User、Backend、Audio、Microphone、Low memory、Clipboard、Resolution。パスワードは**保存しない**（フォームを読み込むたびに空にする）。
 
 ## 制限事項と既知の不具合
 
-[KNOWN_ISSUES.md](KNOWN_ISSUES.md) を参照。
+[KNOWN_ISSUES_JA.md](KNOWN_ISSUES_JA.md) を参照。
 
 ## 調査メモ
 
-- [docs/mac-target.md](docs/mac-target.md): Mac を接続先にする方法の調査と、macrdp での接続結果（2026-10-13）。
+- [docs/mac-target_JA.md](docs/mac-target_JA.md): Mac を接続先にする方法の調査と、macrdp での接続結果（2026-10-13）。
+
+## 開発に参加する人へ
+
+- [docs/code-notes_JA.md](docs/code-notes_JA.md): 設計メモと弱いところ（構成、スレッドと FFI の境界、決めごと）。
 
 ## 開発
 
