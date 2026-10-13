@@ -25,3 +25,6 @@ dist-ssr
 
 # Conversation exports
 /[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-*.md
+
+# Local helper script (per-PC, not shared)
+/next.sh
