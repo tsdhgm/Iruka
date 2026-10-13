@@ -5,23 +5,25 @@ mod memory;
 mod pty;
 mod rdp;
 
-/// コンソールと RDP で共通のセッション ID（フロントでは 1 つの一覧で扱うため）。
+/// Session ID shared by consoles and RDP sessions (the frontend keeps them in a single list).
 pub(crate) static NEXT_SESSION_ID: AtomicU32 = AtomicU32::new(0);
 
-/// glibc の malloc に、大きな確保（画面データなど）を毎回 OS から直接取って、
-/// 解放したらすぐ返すよう指示する。
+/// Tell glibc's malloc to take large allocations (such as screen data) directly from
+/// the OS every time and to hand them back as soon as they are freed.
 ///
-/// 既定では、大きな領域を一度解放すると閾値が最大 32MB まで自動で上がり、
-/// 以後の数 MB〜数十 MB の確保がスレッドごとのヒープ（64MB 単位）に置かれて、
-/// 解放後も返されずに残る。4K の画面データを多数のスレッドで扱うと、
-/// これだけで GB 単位になる。
+/// By default, once a large region is freed the threshold is raised automatically
+/// (up to 32MB); from then on allocations of a few MB to a few tens of MB land in
+/// the per-thread heaps (64MB arenas) and stay there even after being freed. With
+/// 4K screen data handled on many threads, this alone adds up to gigabytes.
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
 fn tune_malloc() {
     const M_MMAP_THRESHOLD: std::ffi::c_int = -3;
     extern "C" {
         fn mallopt(param: std::ffi::c_int, value: std::ffi::c_int) -> std::ffi::c_int;
     }
-    // 明示的に設定すると、閾値の自動調整は止まる
+    // Setting it explicitly disables the automatic threshold adjustment.
+    // SAFETY: mallopt is a plain glibc call taking two integers; it touches no memory
+    // we own and only changes allocator tuning parameters.
     unsafe {
         mallopt(M_MMAP_THRESHOLD, 256 * 1024);
     }
@@ -32,7 +34,7 @@ pub fn run() {
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
     tune_malloc();
 
-    // RDP 接続の調査用ログ（IRUKA_LOG で上書き可）
+    // Diagnostic logging for RDP connections (override with IRUKA_LOG)
     let filter = tracing_subscriber::EnvFilter::try_from_env("IRUKA_LOG").unwrap_or_else(|_| {
         tracing_subscriber::EnvFilter::new("warn,ironrdp_connector=debug,ironrdp_blocking=debug,iruka_lib=debug,iruka_perf=debug,iruka_mem=debug")
     });

@@ -241,12 +241,12 @@ body {
   background: #11151c;
 }
 
-/* 全画面表示：サイドバーを隠してリモート画面だけにする */
+/* Fullscreen: hide the sidebar and show only the remote screen */
 .app.fullscreen .sidebar {
   display: none;
 }
 
-/* Remmina 風ツールバー。普段はつまみだけ見えていて、乗せると降りてくる */
+/* Remmina-style toolbar. Normally only the tab is visible; it drops down on hover */
 .view-toolbar {
   position: absolute;
   top: 0;
@@ -256,7 +256,7 @@ body {
   flex-direction: column;
   align-items: center;
   transform: translate(-50%, calc(-100% + 8px));
-  /* 閉じるのは少し待つ。開くのも少し待って、リモートの上部バー操作での誤爆を防ぐ */
+  /* Delay closing a little. Delay opening a little too, so working in the remote's top bar does not trigger it by accident */
   transition: transform 0.15s ease 0.5s;
 }
 
@@ -331,7 +331,7 @@ body {
   min-width: 2.5em;
 }
 
-/* 一覧表示 */
+/* Grid view */
 .grid-view {
   position: absolute;
   inset: 0;
@@ -372,7 +372,7 @@ body {
   background: #11151c;
 }
 
-/* 実行中 / 待機 / 終了 の表示 */
+/* Running / idle / exited badges */
 .badge {
   flex-shrink: 0;
   margin-left: auto;
@@ -401,7 +401,7 @@ body {
   margin-left: 0;
 }
 
-/* 閉じているときに見えるつまみ */
+/* The tab that stays visible while the toolbar is closed */
 .view-toolbar-handle {
   width: 64px;
   height: 8px;
@@ -524,7 +524,7 @@ body {
   background: #000;
 }
 
-/* 等倍表示。はみ出す分はスクロールバーで動かす（Remmina と同じ） */
+/* 1:1 display. The overflow is reached with the scrollbars (same as Remmina) */
 .rdp-scroller {
   position: absolute;
   inset: 0;
@@ -534,9 +534,9 @@ body {
 
 .rdp-canvas {
   flex-shrink: 0;
-  margin: auto; /* 表示枠より小さいときは中央に、大きいときは左上から */
+  margin: auto; /* centered when smaller than the viewport, anchored top-left when larger */
   outline: none;
-  cursor: default; /* リモートのカーソルは描画しないので、ローカルのものを出す */
+  cursor: default; /* the remote cursor is not drawn, so show the local one */
 }
 
 .rdp-status {
@@ -558,7 +558,7 @@ body {
   color: #f0b5ba;
 }
 
-/* 接続前の確認ダイアログ */
+/* Pre-connect confirmation dialogs */
 .modal-backdrop {
   position: fixed;
   inset: 0;

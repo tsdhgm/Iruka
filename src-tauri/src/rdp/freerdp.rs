@@ -1,7 +1,7 @@
-//! FreeRDP 3 バックエンド（native/freerdp_bridge.c 経由）。
+//! FreeRDP 3 backend (via native/freerdp_bridge.c).
 //!
-//! RDPGFX（Progressive / RemoteFX / H.264）に対応しているので、
-//! Windows に加えて GNOME Remote Desktop の画面共有にもつながる。
+//! Supports RDPGFX (Progressive / RemoteFX / H.264), so besides Windows it can also
+//! connect to GNOME Remote Desktop screen sharing.
 
 use std::{
     ffi::{c_char, c_int, CStr, CString},
@@ -12,7 +12,7 @@ use anyhow::{bail, Context as _};
 
 use super::{Command, FrameSink, FrameView, RdpBackend, RdpConnectParams, RdpInput, Rect, MAX_DIRTY_RECTS};
 
-/// イベント待ちの最大時間。この間隔で入力キューと画面の送信も確認する。
+/// Maximum time to wait for events. The input queue and pending frames are also checked at this interval.
 const POLL_TIMEOUT_MS: u32 = 15;
 
 #[repr(C)]
@@ -42,9 +42,9 @@ const PTR_FLAGS_HWHEEL: u16 = 0x0400;
 const PTR_FLAGS_WHEEL: u16 = 0x0200;
 const PTR_FLAGS_MOVE: u16 = 0x0800;
 const PTR_FLAGS_DOWN: u16 = 0x8000;
-const PTR_FLAGS_BUTTON1: u16 = 0x1000; // 左
-const PTR_FLAGS_BUTTON2: u16 = 0x2000; // 右
-const PTR_FLAGS_BUTTON3: u16 = 0x4000; // 中
+const PTR_FLAGS_BUTTON1: u16 = 0x1000; // left
+const PTR_FLAGS_BUTTON2: u16 = 0x2000; // right
+const PTR_FLAGS_BUTTON3: u16 = 0x4000; // middle
 const PTR_XFLAGS_DOWN: u16 = 0x8000;
 const PTR_XFLAGS_BUTTON1: u16 = 0x0001;
 const PTR_XFLAGS_BUTTON2: u16 = 0x0002;
@@ -68,18 +68,18 @@ impl RdpBackend for FreeRdp {
     }
 }
 
-/// FreeRDP のセッション 1 本。作ったスレッドからだけ使う。
+/// One FreeRDP session. Only used from the thread that created it.
 struct Session {
     ctx: *mut RdpContext,
     connected: std::cell::Cell<bool>,
-    /// 最後に押されたマウス位置（ボタンやホイールのイベントにも座標が要る）
+    /// Last known mouse position (button and wheel events need coordinates too)
     mouse: std::cell::Cell<(u16, u16)>,
 }
 
 impl Session {
     fn new(params: &RdpConnectParams) -> anyhow::Result<Self> {
         let (domain, username) = params.domain_and_user();
-        // FreeRDP のコマンドライン形式で設定する（xfreerdp と同じ既定値になる）
+        // Configure via FreeRDP's command-line syntax (gives the same defaults as xfreerdp)
         let mut args = vec![
             "iruka".to_owned(),
             format!("/v:{}", params.host),
@@ -88,22 +88,22 @@ impl Session {
             format!("/p:{}", params.password),
             format!("/size:{}x{}", params.width, params.height),
             "/bpp:32".to_owned(),
-            // グラフィックスパイプライン（GNOME Remote Desktop に必須）と回線の自動判定。
-            // /gfx を有効にすると FreeRDP が使わない展開用バッファーも確保する
-            // （KNOWN_ISSUES.md 参照。詳細は freerdp_bridge.c の iruka_pre_connect）
+            // Graphics pipeline (required by GNOME Remote Desktop) and automatic network detection.
+            // Enabling /gfx also makes FreeRDP allocate decode buffers it never uses
+            // (see KNOWN_ISSUES.md; details in iruka_pre_connect in freerdp_bridge.c)
             if params.small_cache { "/gfx:small-cache" } else { "/gfx" }.to_owned(),
             "/network:auto".to_owned(),
-            // 自己署名証明書を受け入れる（mstsc の「続行」相当）
+            // Accept self-signed certificates (the equivalent of "Continue" in mstsc)
             "/cert:ignore".to_owned(),
         ];
         if !params.clipboard {
             args.push("-clipboard".to_owned());
         }
-        // 音声の入出力。再生・録音の方式は FreeRDP が OS に合わせて選ぶ（Linux なら PulseAudio）
+        // Audio in/out. FreeRDP picks the playback/capture backend for the OS (PulseAudio on Linux)
         if params.audio {
             args.push("/sound".to_owned());
         } else {
-            args.push("/audio-mode:2".to_owned()); // 音声は再生しない
+            args.push("/audio-mode:2".to_owned()); // do not play audio
         }
         if params.microphone {
             args.push("/microphone".to_owned());
@@ -115,12 +115,15 @@ impl Session {
             .into_iter()
             .map(CString::new)
             .collect::<Result<_, _>>()
-            .context("接続設定に使えない文字が含まれています")?;
+            .context("The connection settings contain characters that cannot be used")?;
         let argv: Vec<*const c_char> = cargs.iter().map(|a| a.as_ptr()).collect();
 
+        // SAFETY: argv points into `cargs`, which outlives the call, and FreeRDP copies the
+        // arguments it keeps. The returned context (or NULL) is owned by this Session and
+        // released exactly once in Drop.
         let ctx = unsafe { iruka_rdp_new(argv.len() as c_int, argv.as_ptr()) };
         if ctx.is_null() {
-            bail!("FreeRDP のセッションを作れませんでした（設定の解析に失敗）");
+            bail!("Could not create the FreeRDP session (failed to parse the settings)");
         }
         Ok(Self {
             ctx,
@@ -130,29 +133,39 @@ impl Session {
     }
 
     fn last_error(&self) -> String {
+        // SAFETY: ctx is the valid context owned by this Session.
         let msg = unsafe { iruka_rdp_last_error(self.ctx) };
         if msg.is_null() {
-            return "不明なエラー".into();
+            return "Unknown error".into();
         }
+        // SAFETY: msg is non-null and points to a static, NUL-terminated string owned by
+        // FreeRDP; it is copied here and never freed by us.
         unsafe { CStr::from_ptr(msg) }.to_string_lossy().into_owned()
     }
 
     fn connect(&self) -> anyhow::Result<()> {
-        // 失敗しても後片付け（切断処理）は必要なので先に立てる
+        // Set before the attempt: the cleanup (disconnect) is needed even if it fails
         self.connected.set(true);
+        // SAFETY: ctx is the valid context owned by this Session, used only on this thread.
         if unsafe { iruka_rdp_connect(self.ctx) } == 0 {
-            bail!("接続に失敗しました: {}", self.last_error());
+            bail!("Connection failed: {}", self.last_error());
         }
         Ok(())
     }
 
     fn framebuffer(&self) -> Option<FrameView<'_>> {
         let (mut width, mut height, mut stride) = (0, 0, 0);
+        // SAFETY: ctx is the valid context owned by this Session; the out-pointers refer to
+        // locals that live for the duration of the call.
         let data = unsafe { iruka_rdp_framebuffer(self.ctx, &mut width, &mut height, &mut stride) };
         if data.is_null() {
             return None;
         }
-        // SAFETY: gdi の primary_buffer は stride * height バイト。次の poll までは変わらない
+        // SAFETY: the gdi primary_buffer is stride * height bytes. It is only reallocated by
+        // gdi_resize, which runs inside iruka_rdp_poll on this same thread because dynamic
+        // channels are synchronous (see iruka_rdp_new in freerdp_bridge.c). The returned
+        // FrameView must therefore only be used until the next iruka_rdp_poll call, and only
+        // from the thread that owns the session (Session is not shared across threads).
         let data = unsafe { std::slice::from_raw_parts(data, stride as usize * height as usize) };
         Some(FrameView {
             data,
@@ -169,11 +182,14 @@ impl Session {
                 match commands.try_recv() {
                     Ok(Command::Input(inputs)) => inputs.into_iter().for_each(|i| self.send_input(i)),
                     Ok(Command::ClipboardLocal(text)) => self.set_local_text(text.as_deref()),
-                    Ok(Command::Close) | Err(TryRecvError::Disconnected) => return Ok("切断しました".into()),
+                    Ok(Command::Close) | Err(TryRecvError::Disconnected) => return Ok("Disconnected".into()),
                     Err(TryRecvError::Empty) => break,
                 }
             }
 
+            // SAFETY: ctx is the valid context owned by this Session. All gdi callbacks
+            // (paint, resize, dirty list) run inside this call on this thread, so no
+            // FrameView from a previous iteration is alive while it runs.
             let status = unsafe { iruka_rdp_poll(self.ctx, POLL_TIMEOUT_MS) };
 
             if let Some(text) = self.take_remote_text() {
@@ -184,7 +200,7 @@ impl Session {
                 if (fb.width, fb.height) != size {
                     size = (fb.width, fb.height);
                     sink.resize(fb.width, fb.height)?;
-                    // 作り直した画面は全体を送る
+                    // The screen was rebuilt; send all of it
                     sink.damage(Rect {
                         x: 0,
                         y: 0,
@@ -193,6 +209,8 @@ impl Session {
                     });
                 }
                 let mut rects = [0u32; MAX_DIRTY_RECTS * 4];
+                // SAFETY: rects holds MAX_DIRTY_RECTS * 4 u32s, so the C side writes at most
+                // MAX_DIRTY_RECTS rectangles (4 u32s each) into it.
                 let n = unsafe { iruka_rdp_take_dirty(self.ctx, rects.as_mut_ptr(), MAX_DIRTY_RECTS as c_int) };
                 for r in rects.chunks_exact(4).take(n.max(0) as usize) {
                     sink.damage(Rect {
@@ -207,25 +225,33 @@ impl Session {
 
             match status {
                 1 => {}
-                0 => return Ok("サーバーが接続を閉じました".into()),
-                _ => bail!("通信エラー: {}", self.last_error()),
+                0 => return Ok("The server closed the connection".into()),
+                _ => bail!("Communication error: {}", self.last_error()),
             }
         }
     }
 
     fn set_local_text(&self, text: Option<&str>) {
-        // NUL を含むテキストは C に渡せないので、そこまでで切る
+        // Text containing NUL cannot be passed to C, so truncate at the first NUL
         let text = text.map(|t| CString::new(t.split('\0').next().unwrap_or("")).unwrap());
         let ptr = text.as_ref().map_or(std::ptr::null(), |t| t.as_ptr());
+        // SAFETY: ptr is NULL or points to the NUL-terminated `text`, which outlives the
+        // call; the C side takes its own copy (_strdup).
         unsafe { iruka_rdp_set_local_text(self.ctx, ptr) };
     }
 
     fn take_remote_text(&self) -> Option<String> {
+        // SAFETY: ctx is the valid context owned by this Session. The C side hands over
+        // ownership of a heap-allocated, NUL-terminated UTF-8 string (or NULL).
         let ptr = unsafe { iruka_rdp_take_remote_text(self.ctx) };
         if ptr.is_null() {
             return None;
         }
+        // SAFETY: ptr is non-null and NUL-terminated (see above) and stays valid until it
+        // is freed below.
         let text = unsafe { CStr::from_ptr(ptr) }.to_string_lossy().into_owned();
+        // SAFETY: ptr came from iruka_rdp_take_remote_text and is freed exactly once here;
+        // `text` is an owned copy.
         unsafe { iruka_rdp_free_text(ptr) };
         Some(text)
     }
@@ -233,6 +259,8 @@ impl Session {
     fn send_input(&self, input: RdpInput) {
         let ctx = self.ctx;
         let (mx, my) = self.mouse.get();
+        // SAFETY: ctx is the valid context owned by this Session, used only on this thread;
+        // the send functions take plain integers.
         unsafe {
             match input {
                 RdpInput::MouseMove { x, y } => {
@@ -256,7 +284,7 @@ impl Session {
                     iruka_rdp_send_mouse(ctx, flags | down, mx, my);
                 }
                 RdpInput::Wheel { vertical, units } => {
-                    // 回転量は 9 ビットの 2 の補数（0x100 が負の符号）
+                    // The rotation amount is a 9-bit two's complement value (0x100 is the sign bit)
                     let rotation = (units.clamp(-255, 255) as u16) & 0x01ff;
                     let kind = if vertical { PTR_FLAGS_WHEEL } else { PTR_FLAGS_HWHEEL };
                     iruka_rdp_send_mouse(ctx, kind | rotation, mx, my);
@@ -267,7 +295,7 @@ impl Session {
                     }
                     iruka_rdp_send_key(ctx, scancode, down.into())
                 }
-                // FreeRDP は押下状態を管理しないので、フォーカスが外れたら修飾キーだけ離す
+                // FreeRDP does not track key state, so on focus loss only the modifier keys are released
                 RdpInput::ReleaseAll => {
                     for sc in [0x2a, 0x36, 0x1d, 0xe01d, 0x38, 0xe038, 0xe05b, 0xe05c] {
                         iruka_rdp_send_key(ctx, sc, 0);
@@ -280,6 +308,8 @@ impl Session {
 
 impl Drop for Session {
     fn drop(&mut self) {
+        // SAFETY: ctx was returned by iruka_rdp_new (non-null) and is freed exactly once
+        // here; disconnect is only called if a connect was attempted (see Session::connect).
         unsafe {
             if self.connected.get() {
                 iruka_rdp_disconnect(self.ctx);

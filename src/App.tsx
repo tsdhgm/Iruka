@@ -1,275 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { invoke, Channel } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Terminal } from "@xterm/xterm";
-import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import "./App.css";
-import {
-  drawCanvasToCanvas,
-  RDP_BACKENDS,
-  SCANCODES,
-  toRemoteCoords,
-  RDP_RESOLUTIONS,
-  type MemoryCheck,
-  type RdpBackendKind,
-  type RdpConnectParams,
-  type RdpResolution,
-  type RdpEvent,
-  type RdpInput,
-} from "./rdp";
-
-type PtyEvent =
-  | { type: "output"; data: string }
-  | { type: "exit"; code: number | null };
-
-type SessionStatus = "connecting" | "running" | "exited";
-
-interface SessionInfo {
-  id: number;
-  kind: "pty" | "rdp";
-  title: string;
-  status: SessionStatus;
-  exitCode: number | null;
-  message: string | null;
-}
-
-type SessionHandle =
-  | { kind: "pty"; term: Terminal; fit: FitAddon; container: HTMLDivElement }
-  | { kind: "rdp"; canvas: HTMLCanvasElement; container: HTMLDivElement };
-
-/** リモートの 1 ピクセルを物理 1 ピクセルで表示する（OS の表示倍率を打ち消す） */
-function applyPixelSize(canvas: HTMLCanvasElement) {
-  const dpr = window.devicePixelRatio || 1;
-  canvas.style.width = `${canvas.width / dpr}px`;
-  canvas.style.height = `${canvas.height / dpr}px`;
-}
-
-interface RdpForm {
-  host: string;
-  username: string;
-  password: string;
-  backend: RdpBackendKind;
-  audio: boolean;
-  microphone: boolean;
-  smallCache: boolean;
-  clipboard: boolean;
-  resolution: RdpResolution;
-}
-
-/**
- * 要求するリモート解像度 = ローカルモニタの物理解像度（mstsc の全画面接続と同じ）。
- * 全画面表示で等倍ぴったり、ウィンドウ表示でははみ出す分をスクロールで見る。
- * 画面共有型のサーバー（GNOME Remote Desktop）は自分の画面サイズを通知してくるので、
- * 実際の大きさはサーバーからの resize イベントに従う。
- */
-function localDesktopSize(): { width: number; height: number } {
-  const dpr = window.devicePixelRatio || 1;
-  // RDP で要求できる範囲（200〜8192）に収め、幅は偶数にする
-  const clamp = (v: number) => Math.max(200, Math.min(8192, Math.round(v)));
-  return {
-    width: clamp(window.screen.width * dpr) & ~1,
-    height: clamp(window.screen.height * dpr),
-  };
-}
-
-function resolutionSize(r: RdpResolution): { width: number; height: number } {
-  if (r === "local") return localDesktopSize();
-  const [width, height] = r.split("x").map(Number);
-  return { width, height };
-}
-
-function resolutionLabel(r: RdpResolution): string {
-  if (r === "local") {
-    const { width, height } = localDesktopSize();
-    return `ローカルと同じ（${width}×${height}）`;
-  }
-  return r.replace("x", "×");
-}
-
-const formatMb = (bytes: number) => `${Math.round(bytes / 1048576).toLocaleString()} MB`;
-
-function loadRdpForm(): RdpForm {
-  try {
-    const saved = JSON.parse(localStorage.getItem("iruka.rdpForm") ?? "{}");
-    return {
-      host: saved.host ?? "",
-      username: saved.username ?? "",
-      password: "",
-      backend: saved.backend ?? "auto",
-      audio: saved.audio ?? false,
-      microphone: saved.microphone ?? false,
-      smallCache: saved.smallCache ?? true,
-      clipboard: saved.clipboard ?? true,
-      resolution: saved.resolution ?? "local",
-    };
-  } catch {
-    return {
-      host: "",
-      username: "",
-      password: "",
-      backend: "auto",
-      audio: false,
-      microphone: false,
-      smallCache: true,
-      clipboard: true,
-      resolution: "local",
-    };
-  }
-}
-
-function b64ToBytes(b64: string): Uint8Array {
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return bytes;
-}
-
-const TERM_THEME = {
-  background: "#11151c",
-  foreground: "#d6dde8",
-  cursor: "#7fd1e8",
-  selectionBackground: "#2b3a4d",
-};
-
-/**
- * 表示切り替えキー（KeyboardEvent.code）。単独で押して離すと、一覧と単独表示を行き来する。
- * 既定は右 Alt（右 Ctrl のないキーボードのため）。起動時に 1 回だけ読む。
- */
-const VIEW_TOGGLE_KEY = localStorage.getItem("iruka.viewToggleKey") || "AltRight";
-const VIEW_TOGGLE_LABEL = VIEW_TOGGLE_KEY === "AltRight" ? "右 Alt" : VIEW_TOGGLE_KEY;
-
-/**
- * 表示切り替えキーの追跡。
- * 押した時点では何もせず、「別のキーを押さずに離した」ときだけ切り替える。
- * 押したまま別のキーを押したら、普通の修飾キーとして扱う（そのとき初めて押下を送る）。
- * keydown / keyup の戻り値が true なら、呼び出し側はそのイベントを処理しない。
- */
-function hostKeyTracker(
-  code: string,
-  on: { toggle: () => void; sendDown: () => void; sendUp: () => void },
-) {
-  let pending = false; // 押されたが、まだ送っていない
-  let sent = false; // 別のキーが押されたので、押下を送った
-  return {
-    keydown(e: KeyboardEvent): boolean {
-      if (e.code === code) {
-        if (!e.repeat && !pending && !sent) pending = true;
-        return true;
-      }
-      if (pending) {
-        pending = false;
-        sent = true;
-        on.sendDown();
-      }
-      return false;
-    },
-    keyup(e: KeyboardEvent): boolean {
-      if (e.code !== code) return false;
-      if (pending) {
-        pending = false;
-        on.toggle();
-      } else if (sent) {
-        sent = false;
-        on.sendUp();
-      }
-      return true;
-    },
-    reset() {
-      pending = false;
-      sent = false;
-    },
-  };
-}
-
-/** 一覧表示の列数の上限と、タイルの余白・隙間（px） */
-const GRID_MAX_COLS = 6;
-const GRID_PAD = 8;
-const GRID_GAP = 8;
-/** 直近この時間（ms）内に出力があれば「実行中」とみなす（Claude Code などのスピナーは常に出力している） */
-const RUNNING_WINDOW_MS = 2000;
-
-/** 待機時間の表示（例: 45秒 / 3分 / 2時間） */
-function formatIdle(ms: number): string {
-  const s = Math.floor(ms / 1000);
-  if (s < 60) return `${s}秒`;
-  if (s < 3600) return `${Math.floor(s / 60)}分`;
-  return `${Math.floor(s / 3600)}時間`;
-}
-
-/**
- * コンソールが実行中か待機中かの表示。
- * ssh の先のコマンドの状態は直接わからないので、出力が続いているかで判定する。
- * 出力を出さずに動くコマンドは「待機」に見えるが、AI エージェントの監視には十分。
- */
-function ActivityBadge({
-  session,
-  lastActivity,
-}: {
-  session: SessionInfo;
-  lastActivity: number | undefined;
-}) {
-  if (session.kind !== "pty") return null;
-  if (session.status === "exited") return <span className="badge exited">終了</span>;
-  const idle = Date.now() - (lastActivity ?? 0);
-  if (idle < RUNNING_WINDOW_MS) return <span className="badge running">実行中</span>;
-  return (
-    <span className="badge idle" title="最後の出力からの経過時間">
-      待機 {formatIdle(idle)}
-    </span>
-  );
-}
+import type { MemoryCheck, RdpConnectParams } from "./rdp";
+import { drawThumb, type SessionCallbacks, type SessionHandle, type SessionInfo } from "./session";
+import { createPtySession } from "./ptySession";
+import { applyPixelSize, createRdpSession } from "./rdpSession";
+import { useWindowViewToggleKey } from "./hostKey";
+import { ActivityBadge } from "./components/ActivityBadge";
+import { ConnectWarningModal, type ConnectWarning } from "./components/ConnectWarning";
+import { GridView, GRID_MAX_COLS, useMainAreaWidth } from "./components/GridView";
+import { RdpForm } from "./components/RdpForm";
+import { ViewToolbar } from "./components/ViewToolbar";
 
 const THUMB_W = 196;
 const THUMB_H = 110;
 const ZOOM_W = 560;
 const ZOOM_H = 330;
-
-function drawThumb(
-  handle: SessionHandle,
-  canvas: HTMLCanvasElement,
-  cssW: number,
-  cssH: number,
-) {
-  if (handle.kind === "pty") drawTermToCanvas(handle.term, canvas, cssW, cssH);
-  else drawCanvasToCanvas(handle.canvas, canvas, cssW, cssH);
-}
-
-function drawTermToCanvas(
-  term: Terminal,
-  canvas: HTMLCanvasElement,
-  cssW: number,
-  cssH: number,
-) {
-  const dpr = window.devicePixelRatio || 1;
-  if (canvas.width !== cssW * dpr || canvas.height !== cssH * dpr) {
-    canvas.width = cssW * dpr;
-    canvas.height = cssH * dpr;
-  }
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.fillStyle = "#11151c";
-  ctx.fillRect(0, 0, cssW, cssH);
-
-  const buf = term.buffer.active;
-  const rows = term.rows;
-  const lineH = cssH / rows;
-  const fontSize = Math.max(2, lineH * 0.85);
-  ctx.font = `${fontSize}px monospace`;
-  ctx.textBaseline = "top";
-
-  ctx.fillStyle = "#20344d";
-  ctx.fillRect(0, buf.cursorY * lineH, cssW, lineH);
-
-  ctx.fillStyle = "#9fb2c8";
-  for (let i = 0; i < rows; i++) {
-    const line = buf.getLine(buf.baseY + i);
-    if (!line) continue;
-    const text = line.translateToString(true);
-    if (text) ctx.fillText(text, 3, i * lineH + (lineH - fontSize) / 2);
-  }
-}
 
 function App() {
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
@@ -287,16 +35,12 @@ function App() {
   const zoomRef = useRef<{ id: number; top: number } | null>(null);
   zoomRef.current = zoom;
   const zoomCanvasRef = useRef<HTMLCanvasElement>(null);
-  const [rdpForm, setRdpForm] = useState<RdpForm | null>(null);
-  // 接続前の確認（自分自身への接続、空きメモリ不足）。接続を待たせている設定を持つ
-  const [connectWarning, setConnectWarning] = useState<
-    | { kind: "self"; params: RdpConnectParams }
-    | { kind: "memory"; params: RdpConnectParams; check: MemoryCheck }
-    | null
-  >(null);
+  const [showRdpForm, setShowRdpForm] = useState(false);
+  // Pre-connect confirmation (connecting to this machine, not enough free memory); holds the pending connection.
+  const [connectWarning, setConnectWarning] = useState<ConnectWarning | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [toolbarPinned, setToolbarPinned] = useState(false);
-  // 右ペインの表示：1 セッションを大きく（single）か、全セッションをタイルで（grid）か
+  // Right pane: one session shown large (single) or all sessions as tiles (grid).
   const [view, setView] = useState<"single" | "grid">("single");
   const viewRef = useRef<"single" | "grid">("single");
   viewRef.current = view;
@@ -305,11 +49,10 @@ function App() {
     return n >= 1 && n <= GRID_MAX_COLS ? n : 3;
   });
   const mainAreaRef = useRef<HTMLDivElement>(null);
-  const [mainWidth, setMainWidth] = useState(0);
   const gridCanvasRef = useRef<Map<number, HTMLCanvasElement>>(new Map());
-  // 最後に出力（コンソール）や画面更新（RDP）があった時刻。実行中か待機中かの判定に使う
+  // When each session last produced output (console) or a screen update (RDP); used for the running/idle badge.
   const lastActivityRef = useRef<Map<number, number>>(new Map());
-  // 待機時間の表示を定期的に更新するためのカウンタ
+  // Counter that periodically re-renders the idle-time display.
   const [, setTick] = useState(0);
 
   const drawZoom = useCallback(() => {
@@ -326,7 +69,7 @@ function App() {
       handle.container.style.display = !grid && sid === id ? "" : "none";
     }
     if (grid) {
-      // 一覧表示中は RDP を表示していないので、リモートでのコピーをローカルに入れない
+      // No RDP session is shown in the grid, so do not bring remote copies into the local clipboard.
       invoke("rdp_set_active", { id: null }).catch(() => {});
       return;
     }
@@ -336,7 +79,7 @@ function App() {
         if (handle.kind === "pty") {
           handle.fit.fit();
           handle.term.focus();
-          // RDP 以外を表示中は、リモートでのコピーをローカルに入れない
+          // While something other than RDP is shown, do not bring remote copies into the local clipboard.
           invoke("rdp_set_active", { id: null }).catch(() => {});
         } else {
           handle.canvas.focus();
@@ -362,82 +105,31 @@ function App() {
     [],
   );
 
+  /** Toggle between the grid and the single-session view (fullscreen state is kept). */
+  const toggleView = useCallback(() => {
+    setView((v) => (v === "grid" ? "single" : "grid"));
+  }, []);
+  const toggleViewRef = useRef(toggleView);
+  toggleViewRef.current = toggleView;
+
+  // What a running session needs from the app (see SessionCallbacks).
+  const sessionCallbacks = useRef<SessionCallbacks>({
+    toggleView: () => toggleViewRef.current(),
+    markDirty: (id) => dirtyRef.current.add(id),
+    markActivity: (id) => lastActivityRef.current.set(id, Date.now()),
+    updateSession: (id, patch) => updateSession(id, patch),
+  }).current;
+
   const openConsole = useCallback(
     async () => {
       const main = mainRef.current;
       if (!main) return;
-
-      const container = document.createElement("div");
-      container.className = "term-container";
-      main.appendChild(container);
-
-      const term = new Terminal({
-        fontFamily: "'JetBrains Mono', 'Noto Sans Mono', monospace",
-        fontSize: 14,
-        theme: TERM_THEME,
-        scrollback: 5000,
-      });
-      const fit = new FitAddon();
-      term.loadAddon(fit);
-      term.open(container);
-      // 表示切り替えキー：xterm に渡す前に横取りする（Alt+キーの組み合わせは altKey で判定されるので送らなくてよい）
-      const hostKey = hostKeyTracker(VIEW_TOGGLE_KEY, {
-        toggle: () => toggleViewRef.current(),
-        sendDown: () => {},
-        sendUp: () => {},
-      });
-      term.attachCustomKeyEventHandler((e) => {
-        const handled =
-          e.type === "keydown" ? hostKey.keydown(e) : e.type === "keyup" ? hostKey.keyup(e) : false;
-        if (handled) {
-          e.preventDefault();
-          e.stopPropagation();
-          return false;
-        }
-        return true;
-      });
-      container.addEventListener("focusout", () => hostKey.reset());
-      fit.fit();
-
-      const onEvent = new Channel<PtyEvent>();
-      let id: number;
-      try {
-        id = await invoke<number>("spawn_session", {
-          program: null,
-          args: [],
-          cols: term.cols,
-          rows: term.rows,
-          onEvent,
-        });
-      } catch (e) {
-        term.dispose();
-        container.remove();
-        alert(`コンソールの起動に失敗しました: ${e}`);
-        return;
-      }
+      const created = await createPtySession(main, sessionCallbacks);
+      if (!created) return;
+      const { id, handle } = created;
       const title = `console ${id + 1}`;
 
-      onEvent.onmessage = (msg) => {
-        dirtyRef.current.add(id);
-        if (msg.type === "output") {
-          lastActivityRef.current.set(id, Date.now());
-          term.write(b64ToBytes(msg.data));
-        } else {
-          updateSession(id, { status: "exited", exitCode: msg.code });
-          term.write(
-            `\r\n\x1b[90m[セッション終了 (exit ${msg.code ?? "?"})]\x1b[0m\r\n`,
-          );
-        }
-      };
-
-      term.onData((data) => {
-        invoke("write_session", { id, data }).catch(() => {});
-      });
-      term.onResize(({ cols, rows }) => {
-        invoke("resize_session", { id, cols, rows }).catch(() => {});
-      });
-
-      handlesRef.current.set(id, { kind: "pty", term, fit, container });
+      handlesRef.current.set(id, handle);
       dirtyRef.current.add(id);
       setSessions((prev) => [
         ...prev,
@@ -452,195 +144,18 @@ function App() {
       ]);
       focusSession(id);
     },
-    [focusSession, updateSession],
+    [focusSession, sessionCallbacks],
   );
 
   const openRdp = useCallback(
     async (params: RdpConnectParams) => {
       const main = mainRef.current;
       if (!main) return;
+      const created = await createRdpSession(main, params, sessionCallbacks);
+      if (!created) return;
+      const { id, handle } = created;
 
-      const container = document.createElement("div");
-      container.className = "rdp-container";
-      const scroller = document.createElement("div");
-      scroller.className = "rdp-scroller";
-      const canvas = document.createElement("canvas");
-      canvas.className = "rdp-canvas";
-      canvas.tabIndex = 0;
-      canvas.width = params.width;
-      canvas.height = params.height;
-      const status = document.createElement("div");
-      status.className = "rdp-status";
-      status.textContent = `${params.host} に接続中…`;
-      scroller.append(canvas);
-      container.append(scroller, status);
-      applyPixelSize(canvas);
-      main.appendChild(container);
-      const ctx = canvas.getContext("2d")!;
-      ctx.fillStyle = "#000";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      // 性能計測（調査用）：2 秒ごとに、受信の遅れと描画にかかった時間を Rust のログへ出す
-      const perf = { frames: 0, kb: 0, handleMs: 0, maxLag: 0, maxHandle: 0 };
-
-      // 画面の中身はバイナリで届く（形式は Rust 側 FrameSink のコメント参照）
-      let sid: number | null = null;
-      const onFrame = new Channel<ArrayBuffer>();
-      onFrame.onmessage = (buf) => {
-        const t0 = performance.now();
-        const view = new DataView(buf);
-        const fbWidth = view.getUint32(0, true);
-        const fbHeight = view.getUint32(4, true);
-        const count = view.getUint32(8, true);
-        const sentAt = view.getFloat64(16, true);
-        // サイズ変更の前後で行き違ったデータは捨てる（作り直し後に全体が届く）
-        if (fbWidth !== canvas.width || fbHeight !== canvas.height) return;
-        let offset = 24;
-        for (let i = 0; i < count; i++) {
-          const x = view.getUint32(offset, true);
-          const y = view.getUint32(offset + 4, true);
-          const w = view.getUint32(offset + 8, true);
-          const h = view.getUint32(offset + 12, true);
-          offset += 16;
-          const len = w * h * 4;
-          const img = new ImageData(new Uint8ClampedArray(buf, offset, len), w, h);
-          ctx.putImageData(img, x, y);
-          offset += len;
-        }
-        if (sid !== null) {
-          dirtyRef.current.add(sid);
-          lastActivityRef.current.set(sid, Date.now());
-        }
-        const dt = performance.now() - t0;
-        perf.frames++;
-        perf.kb += Math.round(buf.byteLength / 1024);
-        perf.handleMs += dt;
-        perf.maxHandle = Math.max(perf.maxHandle, dt);
-        perf.maxLag = Math.max(perf.maxLag, Date.now() - sentAt);
-      };
-
-      const onEvent = new Channel<RdpEvent>();
-      let id: number;
-      try {
-        id = await invoke<number>("rdp_connect", { params, onEvent, onFrame });
-        sid = id;
-      } catch (e) {
-        container.remove();
-        alert(`RDP 接続を開始できませんでした: ${e}`);
-        return;
-      }
-
-      const perfTimer = setInterval(() => {
-        if (perf.frames === 0) return;
-        invoke("rdp_perf_log", {
-          message: `id=${id} frames=${perf.frames} kb=${perf.kb} handle_ms_total=${perf.handleMs.toFixed(1)} handle_ms_max=${perf.maxHandle.toFixed(1)} lag_ms_max=${perf.maxLag.toFixed(0)}`,
-        }).catch(() => {});
-        Object.assign(perf, { frames: 0, kb: 0, handleMs: 0, maxLag: 0, maxHandle: 0 });
-      }, 2000);
-
-      onEvent.onmessage = (msg) => {
-        if (msg.type === "resize") {
-          canvas.width = msg.width;
-          canvas.height = msg.height;
-          applyPixelSize(canvas);
-          ctx.fillStyle = "#000";
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          status.style.display = "none";
-          updateSession(id, { status: "running", message: null });
-          dirtyRef.current.add(id);
-        } else {
-          clearInterval(perfTimer);
-          status.style.display = "";
-          status.textContent = msg.error
-            ? `接続エラー（${msg.backend}）: ${msg.reason}`
-            : `切断されました（${msg.backend}）: ${msg.reason}`;
-          status.classList.toggle("error", msg.error);
-          updateSession(id, { status: "exited", message: msg.reason });
-        }
-      };
-
-      // 入力はフレームごとにまとめて送る（マウス移動は最新の 1 件だけ残す）
-      let queue: RdpInput[] = [];
-      let scheduled = false;
-      const send = (ev: RdpInput) => {
-        const last = queue[queue.length - 1];
-        if (ev.type === "mouseMove" && last?.type === "mouseMove") {
-          queue[queue.length - 1] = ev;
-        } else {
-          queue.push(ev);
-        }
-        if (scheduled) return;
-        scheduled = true;
-        requestAnimationFrame(() => {
-          scheduled = false;
-          const events = queue;
-          queue = [];
-          invoke("rdp_input", { id, events }).catch(() => {});
-        });
-      };
-
-      canvas.addEventListener("pointermove", (e) => {
-        send({ type: "mouseMove", ...toRemoteCoords(canvas, e.clientX, e.clientY) });
-      });
-      canvas.addEventListener("pointerdown", (e) => {
-        e.preventDefault();
-        canvas.focus();
-        canvas.setPointerCapture(e.pointerId);
-        send({ type: "mouseMove", ...toRemoteCoords(canvas, e.clientX, e.clientY) });
-        send({ type: "mouseButton", button: e.button, down: true });
-      });
-      canvas.addEventListener("pointerup", (e) => {
-        send({ type: "mouseMove", ...toRemoteCoords(canvas, e.clientX, e.clientY) });
-        send({ type: "mouseButton", button: e.button, down: false });
-      });
-      canvas.addEventListener("contextmenu", (e) => e.preventDefault());
-      canvas.addEventListener(
-        "wheel",
-        (e) => {
-          e.preventDefault();
-          if (e.deltaY !== 0) {
-            send({ type: "wheel", vertical: true, units: e.deltaY < 0 ? 120 : -120 });
-          }
-          if (e.deltaX !== 0) {
-            send({ type: "wheel", vertical: false, units: e.deltaX > 0 ? 120 : -120 });
-          }
-        },
-        { passive: false },
-      );
-      // 表示切り替えキー：単独なら一覧へ、押したまま別のキーなら普通の修飾キーとしてリモートへ
-      const hostScancode = SCANCODES[VIEW_TOGGLE_KEY];
-      const hostKey = hostKeyTracker(VIEW_TOGGLE_KEY, {
-        toggle: () => toggleViewRef.current(),
-        sendDown: () => {
-          if (hostScancode !== undefined) send({ type: "key", scancode: hostScancode, down: true });
-        },
-        sendUp: () => {
-          if (hostScancode !== undefined) send({ type: "key", scancode: hostScancode, down: false });
-        },
-      });
-      const onKey = (down: boolean) => (e: KeyboardEvent) => {
-        if (down ? hostKey.keydown(e) : hostKey.keyup(e)) {
-          e.preventDefault();
-          e.stopPropagation();
-          return;
-        }
-        const scancode = SCANCODES[e.code];
-        if (scancode === undefined) return;
-        e.preventDefault();
-        send({ type: "key", scancode, down });
-      };
-      canvas.addEventListener("keydown", onKey(true));
-      canvas.addEventListener("keyup", onKey(false));
-      canvas.addEventListener("blur", () => {
-        hostKey.reset();
-        send({ type: "releaseAll" });
-      });
-      // 前面に来たら、このセッションとクリップボードを同期する（ローカルの内容を渡す）
-      canvas.addEventListener("focus", () => {
-        invoke("rdp_set_active", { id }).catch(() => {});
-      });
-
-      handlesRef.current.set(id, { kind: "rdp", canvas, container });
+      handlesRef.current.set(id, handle);
       dirtyRef.current.add(id);
       setSessions((prev) => [
         ...prev,
@@ -655,12 +170,13 @@ function App() {
       ]);
       focusSession(id);
     },
-    [focusSession, updateSession],
+    [focusSession, sessionCallbacks],
   );
 
   /**
-   * 接続前の確認をしてから接続する。確認で止めたときは、ダイアログの「続ける」から
-   * その確認を飛ばして（skip）もう一度呼ぶ。どの確認も、できなくても接続はできるようにする。
+   * Run the pre-connect checks, then connect. When a check stops the connection, the
+   * dialog's "Connect anyway" calls this again with that check skipped. Every check is
+   * best-effort: if it cannot be performed, the connection still goes ahead.
    */
   const connectWithChecks = useCallback(
     async (params: RdpConnectParams, skip: { self?: boolean; memory?: boolean }) => {
@@ -671,7 +187,7 @@ function App() {
             return;
           }
         } catch {
-          // 判定できなければ確認なしで進む
+          // If it cannot be determined, continue without the confirmation.
         }
       }
       if (!skip.memory) {
@@ -685,7 +201,7 @@ function App() {
             return;
           }
         } catch {
-          // 確認できなくても接続はできるようにする
+          // Still allow connecting when the check cannot be performed.
         }
       }
       openRdp(params);
@@ -693,54 +209,34 @@ function App() {
     [openRdp],
   );
 
-  const submitRdpForm = useCallback(async () => {
-    if (!rdpForm || !rdpForm.host.trim() || !rdpForm.username.trim()) return;
-    const [hostPart, portPart] = rdpForm.host.trim().split(":");
-    const { width, height } = resolutionSize(rdpForm.resolution);
-    localStorage.setItem(
-      "iruka.rdpForm",
-      JSON.stringify({
-        host: rdpForm.host.trim(),
-        username: rdpForm.username.trim(),
-        backend: rdpForm.backend,
-        audio: rdpForm.audio,
-        microphone: rdpForm.microphone,
-        smallCache: rdpForm.smallCache,
-        clipboard: rdpForm.clipboard,
-        resolution: rdpForm.resolution,
-      }),
-    );
-    const params: RdpConnectParams = {
-      host: hostPart,
-      port: portPart ? Number(portPart) : null,
-      username: rdpForm.username.trim(),
-      password: rdpForm.password,
-      domain: null,
-      width,
-      height,
-      backend: rdpForm.backend,
-      audio: rdpForm.audio,
-      microphone: rdpForm.microphone,
-      smallCache: rdpForm.smallCache,
-      clipboard: rdpForm.clipboard,
-    };
-    setRdpForm(null);
-    connectWithChecks(params, {});
-  }, [rdpForm, connectWithChecks]);
+  const submitRdpForm = useCallback(
+    (params: RdpConnectParams) => {
+      setShowRdpForm(false);
+      connectWithChecks(params, {});
+    },
+    [connectWithChecks],
+  );
 
-  /** 一覧と単独表示を行き来する（全画面の状態はそのまま） */
-  const toggleView = useCallback(() => {
-    setView((v) => (v === "grid" ? "single" : "grid"));
-  }, []);
-  const toggleViewRef = useRef(toggleView);
-  toggleViewRef.current = toggleView;
+  const proceedDespiteWarning = useCallback(
+    (warning: ConnectWarning) => {
+      if (warning.kind === "self") {
+        const { params } = warning;
+        setConnectWarning(null);
+        connectWithChecks(params, { self: true });
+      } else {
+        openRdp(warning.params);
+        setConnectWarning(null);
+      }
+    },
+    [connectWithChecks, openRdp],
+  );
 
   const toggleFullscreen = useCallback(async (on: boolean) => {
     try {
       await getCurrentWindow().setFullscreen(on);
       setFullscreen(on);
     } catch (e) {
-      alert(`全画面表示を切り替えられませんでした: ${e}`);
+      alert(`Could not toggle fullscreen: ${e}`);
     }
     const id = activeIdRef.current;
     if (id !== null) showSession(id);
@@ -772,7 +268,7 @@ function App() {
     });
   }, [showSession, toggleFullscreen]);
 
-  // 500ms ごとに、出力のあったセッションのサムネール（サイドバーと一覧のタイル）だけ再描画する
+  // Every 500ms, redraw the thumbnails (sidebar and grid tiles) of sessions that had output.
   useEffect(() => {
     const iv = setInterval(() => {
       for (const id of dirtyRef.current) {
@@ -793,7 +289,7 @@ function App() {
     return () => clearInterval(iv);
   }, [drawZoom]);
 
-  // 一覧の表示を切り替えたとき：セッションの表示を合わせ、タイルを全部描く
+  // When the grid view is toggled: update which session is shown and draw every tile.
   useEffect(() => {
     const id = activeIdRef.current;
     if (id !== null) showSession(id);
@@ -802,47 +298,14 @@ function App() {
     }
   }, [view, showSession]);
 
-  // 右ペインの幅（タイルの大きさの計算に使う）
-  useEffect(() => {
-    const el = mainAreaRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(([entry]) => {
-      setMainWidth(entry.contentRect.width);
-      // 幅が変わるとタイルの大きさも変わるので描き直す
-      for (const sid of handlesRef.current.keys()) dirtyRef.current.add(sid);
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
+  // Width of the right pane (used to compute the tile size).
+  const markAllDirty = useCallback(() => {
+    for (const sid of handlesRef.current.keys()) dirtyRef.current.add(sid);
   }, []);
+  const mainWidth = useMainAreaWidth(mainAreaRef, markAllDirty);
 
-  // 一覧表示中など、セッションにフォーカスがないときの表示切り替えキー
-  // （セッション側で処理したイベントは stopPropagation で止まるので、ここには来ない）
-  useEffect(() => {
-    const hostKey = hostKeyTracker(VIEW_TOGGLE_KEY, {
-      toggle: () => toggleViewRef.current(),
-      sendDown: () => {},
-      sendUp: () => {},
-    });
-    const inField = (t: EventTarget | null) =>
-      t instanceof HTMLElement && ["INPUT", "SELECT", "TEXTAREA"].includes(t.tagName);
-    const onDown = (e: KeyboardEvent) => {
-      if (inField(e.target)) return;
-      if (hostKey.keydown(e)) e.preventDefault();
-    };
-    const onUp = (e: KeyboardEvent) => {
-      if (inField(e.target)) return;
-      if (hostKey.keyup(e)) e.preventDefault();
-    };
-    const onBlur = () => hostKey.reset();
-    window.addEventListener("keydown", onDown);
-    window.addEventListener("keyup", onUp);
-    window.addEventListener("blur", onBlur);
-    return () => {
-      window.removeEventListener("keydown", onDown);
-      window.removeEventListener("keyup", onUp);
-      window.removeEventListener("blur", onBlur);
-    };
-  }, []);
+  // View-toggle key while no session has focus (e.g. in the grid view).
+  useWindowViewToggleKey(toggleViewRef);
 
   const changeGridCols = useCallback((cols: number) => {
     setGridCols(cols);
@@ -860,17 +323,17 @@ function App() {
       if (id === null) return;
       const handle = handlesRef.current.get(id);
       if (handle?.kind === "pty") handle.fit.fit();
-      // モニター間の移動などで表示倍率が変わったら等倍表示を合わせ直す
+      // If the display scale changed (e.g. the window moved to another monitor), re-apply the 1:1 size.
       for (const h of handlesRef.current.values()) {
         if (h.kind === "rdp") applyPixelSize(h.canvas);
       }
-      // ウィンドウマネージャー側で全画面が解除された場合にも表示を合わせる
+      // Also follow along when the window manager left fullscreen on its own.
       getCurrentWindow()
         .isFullscreen()
         .then(setFullscreen)
         .catch(() => {});
     };
-    // 他のアプリでコピーして戻ってきたときも、表示中の RDP セッションに渡す
+    // After copying in another app and coming back, hand the clipboard to the RDP session being shown.
     const onWindowFocus = () => {
       const id = activeIdRef.current;
       if (id !== null && handlesRef.current.get(id)?.kind === "rdp") {
@@ -886,12 +349,6 @@ function App() {
   }, []);
 
   const activeSession = sessions.find((s) => s.id === activeId) ?? null;
-  // タイルは 16:9。右ペインの幅から列数で割る（余白と隙間を除く）
-  const tileW = Math.max(
-    80,
-    Math.floor((mainWidth - GRID_PAD * 2 - GRID_GAP * (gridCols - 1)) / gridCols),
-  );
-  const tileH = Math.round((tileW * 9) / 16);
 
   return (
     <div className={`app ${fullscreen ? "fullscreen" : ""}`}>
@@ -899,18 +356,18 @@ function App() {
         <div className="brand">🐬 Iruka</div>
         <div className="connect-form">
           <button className="new-console-btn" onClick={() => openConsole()}>
-            ＋ コンソール
+            + Console
           </button>
           <button
             className="new-console-btn"
-            onClick={() => setRdpForm((f) => (f ? null : loadRdpForm()))}
+            onClick={() => setShowRdpForm((f) => !f)}
           >
-            ＋ RDP
+            + RDP
           </button>
           <button
             className="thumb-toggle"
             title={
-              showThumbs ? "名前のみ表示に切り替え" : "サムネール表示に切り替え"
+              showThumbs ? "Show names only" : "Show thumbnails"
             }
             onClick={() =>
               setShowThumbs((v) => {
@@ -923,116 +380,8 @@ function App() {
             {showThumbs ? "☰" : "🖼"}
           </button>
         </div>
-        {rdpForm && (
-          <form
-            className="rdp-form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              submitRdpForm();
-            }}
-          >
-            <input
-              placeholder="ホスト（host または host:port）"
-              value={rdpForm.host}
-              autoFocus
-              onChange={(e) => setRdpForm({ ...rdpForm, host: e.target.value })}
-            />
-            <input
-              placeholder={"ユーザー名（DOMAIN\\user 可）"}
-              value={rdpForm.username}
-              onChange={(e) =>
-                setRdpForm({ ...rdpForm, username: e.target.value })
-              }
-            />
-            <input
-              type="password"
-              placeholder="パスワード"
-              value={rdpForm.password}
-              onChange={(e) =>
-                setRdpForm({ ...rdpForm, password: e.target.value })
-              }
-            />
-            <select
-              title="リモートの解像度（大きいほどメモリを使う）"
-              value={rdpForm.resolution}
-              onChange={(e) =>
-                setRdpForm({
-                  ...rdpForm,
-                  resolution: e.target.value as RdpResolution,
-                })
-              }
-            >
-              {RDP_RESOLUTIONS.map((r) => (
-                <option key={r} value={r}>
-                  {resolutionLabel(r)}
-                </option>
-              ))}
-            </select>
-            <div className="rdp-form-checks" title="FreeRDP で接続したときのみ有効">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={rdpForm.audio}
-                  onChange={(e) =>
-                    setRdpForm({ ...rdpForm, audio: e.target.checked })
-                  }
-                />
-                音声
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={rdpForm.microphone}
-                  onChange={(e) =>
-                    setRdpForm({ ...rdpForm, microphone: e.target.checked })
-                  }
-                />
-                マイク
-              </label>
-              <label title="RDPGFX のキャッシュを 100MB から 16MB に減らす">
-                <input
-                  type="checkbox"
-                  checked={rdpForm.smallCache}
-                  onChange={(e) =>
-                    setRdpForm({ ...rdpForm, smallCache: e.target.checked })
-                  }
-                />
-                省メモリ
-              </label>
-              <label title="テキストのコピー＆ペーストを共有（表示中のセッションのみ）">
-                <input
-                  type="checkbox"
-                  checked={rdpForm.clipboard}
-                  onChange={(e) =>
-                    setRdpForm({ ...rdpForm, clipboard: e.target.checked })
-                  }
-                />
-                クリップボード
-              </label>
-            </div>
-            <div className="rdp-form-row">
-              <select
-                title="RDP の接続方式"
-                value={rdpForm.backend}
-                onChange={(e) =>
-                  setRdpForm({
-                    ...rdpForm,
-                    backend: e.target.value as RdpBackendKind,
-                  })
-                }
-              >
-                {RDP_BACKENDS.map((b) => (
-                  <option key={b.value} value={b.value}>
-                    {b.label}
-                  </option>
-                ))}
-              </select>
-              <button type="submit">接続</button>
-              <button type="button" onClick={() => setRdpForm(null)}>
-                取消
-              </button>
-            </div>
-          </form>
+        {showRdpForm && (
+          <RdpForm onConnect={submitRdpForm} onCancel={() => setShowRdpForm(false)} />
         )}
         <div className="session-list">
           {sessions.map((s) => (
@@ -1061,7 +410,7 @@ function App() {
                 <ActivityBadge session={s} lastActivity={lastActivityRef.current.get(s.id)} />
                 <button
                   className="close-btn"
-                  title="閉じる"
+                  title="Close"
                   onClick={(e) => {
                     e.stopPropagation();
                     setZoom(null);
@@ -1088,9 +437,9 @@ function App() {
           ))}
           {sessions.length === 0 && (
             <div className="empty-hint">
-              コンソールがありません。
+              No sessions yet.
               <br />
-              「＋ コンソール」「＋ RDP」で開きます。
+              Open one with "+ Console" or "+ RDP".
             </div>
           )}
         </div>
@@ -1105,159 +454,42 @@ function App() {
           )}
         </main>
         {view === "grid" && (
-          // 一覧：全セッションを 16:9 のタイルで並べる。縦にはみ出す分はスクロール
-          <div
-            className="grid-view"
-            style={{
-              gridTemplateColumns: `repeat(${gridCols}, ${tileW}px)`,
-              padding: GRID_PAD,
-              gap: GRID_GAP,
+          <GridView
+            sessions={sessions}
+            activeId={activeId}
+            gridCols={gridCols}
+            mainWidth={mainWidth}
+            gridCanvasRef={gridCanvasRef}
+            dirtyRef={dirtyRef}
+            lastActivityRef={lastActivityRef}
+            onSelect={(id) => {
+              setView("single");
+              focusSession(id);
             }}
-          >
-            {sessions.map((s) => (
-              <div
-                key={s.id}
-                className={`grid-tile ${s.id === activeId ? "active" : ""}`}
-                title="クリックで単独表示"
-                onClick={() => {
-                  setView("single");
-                  focusSession(s.id);
-                }}
-              >
-                <div className="grid-tile-header">
-                  <span className={`status-dot ${s.status}`} />
-                  <span className="session-kind">{s.kind === "rdp" ? "RDP" : ">_"}</span>
-                  <span className="session-title">{s.title}</span>
-                  <ActivityBadge session={s} lastActivity={lastActivityRef.current.get(s.id)} />
-                </div>
-                <canvas
-                  style={{ width: tileW, height: tileH }}
-                  ref={(el) => {
-                    if (el) {
-                      gridCanvasRef.current.set(s.id, el);
-                      dirtyRef.current.add(s.id);
-                    } else {
-                      gridCanvasRef.current.delete(s.id);
-                    }
-                  }}
-                />
-              </div>
-            ))}
-          </div>
+          />
         )}
         {sessions.length > 0 && (
-          // Remmina 風のツールバー：上端中央のつまみにマウスを乗せると降りてくる
-          <div className={`view-toolbar ${toolbarPinned ? "pinned" : ""}`}>
-            <div className="view-toolbar-body">
-              <span className="view-toolbar-title">
-                {view === "grid" ? `一覧（${sessions.length}）` : activeSession?.title}
-              </span>
-              <button
-                className={view === "grid" ? "on" : ""}
-                title={`${view === "grid" ? "単独表示に戻す" : "全セッションを一覧表示"}（${VIEW_TOGGLE_LABEL}）`}
-                onClick={toggleView}
-              >
-                {view === "grid" ? "▣" : "⊞"}
-              </button>
-              {view === "grid" && (
-                <label className="view-toolbar-slider" title={`列数: ${gridCols}`}>
-                  <span>🔍</span>
-                  <input
-                    type="range"
-                    min={1}
-                    max={GRID_MAX_COLS}
-                    value={gridCols}
-                    onChange={(e) => changeGridCols(Number(e.target.value))}
-                  />
-                  <span className="view-toolbar-cols">{gridCols} 列</span>
-                </label>
-              )}
-              <button
-                className={toolbarPinned ? "on" : ""}
-                title={toolbarPinned ? "ツールバーの固定を解除" : "ツールバーを固定"}
-                onClick={() => setToolbarPinned((v) => !v)}
-              >
-                📌
-              </button>
-              <button
-                title={fullscreen ? "全画面表示を解除" : "全画面表示"}
-                onClick={() => toggleFullscreen(!fullscreen)}
-              >
-                {fullscreen ? "🗗" : "⛶"}
-              </button>
-              {view === "single" && activeSession && (
-                <button
-                  className="danger"
-                  title={activeSession.kind === "rdp" ? "切断して閉じる" : "コンソールを閉じる"}
-                  onClick={() => closeSession(activeSession.id)}
-                >
-                  ×
-                </button>
-              )}
-            </div>
-            <div className="view-toolbar-handle" />
-          </div>
+          <ViewToolbar
+            view={view}
+            sessionCount={sessions.length}
+            activeSession={activeSession}
+            gridCols={gridCols}
+            pinned={toolbarPinned}
+            fullscreen={fullscreen}
+            onToggleView={toggleView}
+            onChangeGridCols={changeGridCols}
+            onTogglePinned={() => setToolbarPinned((v) => !v)}
+            onToggleFullscreen={toggleFullscreen}
+            onClose={closeSession}
+          />
         )}
       </div>
-      {connectWarning?.kind === "self" && (
-        <div className="modal-backdrop">
-          <div className="modal" role="dialog" aria-modal="true">
-            <h2>この PC 自身に接続しようとしています</h2>
-            <p>
-              {connectWarning.params.host} は、Iruka を動かしているこの PC です。
-            </p>
-            <p className="modal-note">
-              自分自身の画面共有につなぐと、リモート画面の中でマウスを動かすたびに本物のカーソルが
-              動かされ、左上へ吸い寄せられてカーソルを見失います。
-              別の PC に接続するつもりなら「やめる」を押して、接続先を確かめてください。
-            </p>
-            <div className="modal-buttons">
-              <button onClick={() => setConnectWarning(null)}>やめる</button>
-              <button
-                className="danger"
-                onClick={() => {
-                  const { params } = connectWarning;
-                  setConnectWarning(null);
-                  connectWithChecks(params, { self: true });
-                }}
-              >
-                それでも接続する
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {connectWarning?.kind === "memory" && (
-        <div className="modal-backdrop">
-          <div className="modal" role="dialog" aria-modal="true">
-            <h2>メモリが足りない可能性があります</h2>
-            <p>
-              {connectWarning.params.host}（{connectWarning.params.width}×
-              {connectWarning.params.height}）への接続には、約{" "}
-              {formatMb(connectWarning.check.estimatedBytes)} 必要と見込んでいます。
-              空きメモリは約 {formatMb(connectWarning.check.availableBytes)} です。
-            </p>
-            <p className="modal-note">
-              {connectWarning.check.learned
-                ? `見積もりは、これまでの使用量から学習した値（標準の ${connectWarning.check.scale.toFixed(2)} 倍）に基づきます。`
-                : "まだ使用量を学習していないため、初期値で見積もっています。"}
-              接続すると、動作が遅くなったり不安定になったりすることがあります。
-              解像度を下げると必要量が減ります。
-            </p>
-            <div className="modal-buttons">
-              <button onClick={() => setConnectWarning(null)}>やめる</button>
-              <button
-                className="danger"
-                onClick={() => {
-                  openRdp(connectWarning.params);
-                  setConnectWarning(null);
-                }}
-              >
-                それでも接続する
-              </button>
-            </div>
-          </div>
-        </div>
+      {connectWarning && (
+        <ConnectWarningModal
+          warning={connectWarning}
+          onCancel={() => setConnectWarning(null)}
+          onProceed={proceedDespiteWarning}
+        />
       )}
       {zoom !== null && (
         <div className="zoom-overlay" style={{ top: zoom.top }}>

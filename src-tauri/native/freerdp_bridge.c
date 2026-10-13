@@ -1,14 +1,14 @@
 /*
- * Iruka ⇔ FreeRDP 3 の薄い橋渡し。
+ * Thin bridge between Iruka and FreeRDP 3.
  *
- * FreeRDP 公式の画面なしサンプル（client/Sample/tf_freerdp.c）と同じ構成で、
- * GUI ツールキットを使わずに gdi（ソフトウェア描画）のフレームバッファを使う。
- * RDPGFX（Progressive / RemoteFX / H.264）の画面も gdi が primary_buffer に
- * 合成してくれるので、Rust 側は変化した矩形とフレームバッファだけを読めばよい。
+ * Structured like FreeRDP's official headless sample (client/Sample/tf_freerdp.c):
+ * no GUI toolkit, just the gdi (software rendering) framebuffer. RDPGFX output
+ * (Progressive / RemoteFX / H.264) is composed into primary_buffer by gdi as well,
+ * so the Rust side only has to read the changed rectangles and the framebuffer.
  *
- * すべての関数は、そのセッションを担当する 1 本のスレッドから呼ぶこと。
- * ただしクリップボード（cliprdr）の通知は FreeRDP のチャネル用スレッドから来るので、
- * その受け渡しだけはロックで守る。
+ * All functions must be called from the single thread that owns the session.
+ * The one exception is clipboard (cliprdr) notifications, which arrive on FreeRDP's
+ * channel thread; that hand-off alone is protected by a lock.
  */
 
 #include <stdint.h>
@@ -28,7 +28,7 @@
 #include <winpr/string.h>
 #include <winpr/user.h>
 
-/* ためておく変化範囲の上限。超えたら全体を 1 つの矩形にまとめる */
+/* Maximum number of pending dirty rectangles. Beyond this they are collapsed into one rectangle */
 #define MAX_DIRTY 128
 
 typedef struct
@@ -40,19 +40,19 @@ typedef struct
 {
 	rdpClientContext common;
 
-	/* 前回 iruka_rdp_take_dirty() 以降に変化した範囲の一覧 */
+	/* Regions changed since the last iruka_rdp_take_dirty() */
 	DirtyRect dirty[MAX_DIRTY];
 	int ndirty;
 
-	/* クリップボード（テキストのみ）。clip_lock で守る */
+	/* Clipboard (text only). Protected by clip_lock */
 	CRITICAL_SECTION clip_lock;
 	CliprdrClientContext* cliprdr;
-	BOOL clip_ready;   /* サーバーの Monitor Ready を受けた */
-	char* local_text;  /* ローカルのテキスト（UTF-8）。サーバーに求められたら渡す */
-	char* remote_text; /* リモートでコピーされたテキスト（UTF-8）。Rust が取りに来るまで持つ */
+	BOOL clip_ready;   /* Monitor Ready has been received from the server */
+	char* local_text;  /* Local text (UTF-8). Handed to the server when it asks for it */
+	char* remote_text; /* Text copied on the remote side (UTF-8). Held until Rust picks it up */
 } IrukaContext;
 
-/* ためた範囲を、全部を囲む 1 つの矩形にまとめる */
+/* Collapse the pending regions into one rectangle that covers them all */
 static void collapse_dirty(IrukaContext* ic)
 {
 	if (ic->ndirty <= 1)
@@ -92,9 +92,10 @@ static BOOL iruka_begin_paint(rdpContext* context)
 }
 
 /*
- * 1 フレーム分の合成が終わったときに呼ばれる。変化した範囲を記録する。
- * hwnd->invalid は全部を囲む 1 つの矩形なので、離れた 2 か所が変わると巨大になる。
- * 個々の範囲の一覧（cinvalid）を使い、読んだら件数を 0 に戻す（xfreerdp と同じ）。
+ * Called when one frame has been composed. Records the changed regions.
+ * hwnd->invalid is a single rectangle covering everything, so two distant changes
+ * make it huge. Use the list of individual regions (cinvalid) instead, and reset the
+ * count to 0 once read (as xfreerdp does).
  */
 static BOOL iruka_end_paint(rdpContext* context)
 {
@@ -115,7 +116,7 @@ static BOOL iruka_end_paint(rdpContext* context)
 	return TRUE;
 }
 
-/* サーバーが画面サイズを変えた（再アクティベーション、RDPGFX の ResetGraphics） */
+/* The server changed the screen size (reactivation, or RDPGFX ResetGraphics) */
 static BOOL iruka_desktop_resize(rdpContext* context)
 {
 	rdpSettings* settings = context->settings;
@@ -127,12 +128,12 @@ static BOOL iruka_desktop_resize(rdpContext* context)
 	return TRUE;
 }
 
-/* ---- クリップボード（cliprdr、テキストのみ） ----
+/* ---- Clipboard (cliprdr, text only) ----
  *
- * リモート → ローカル: サーバーがコピーを通知（Format List）→ テキストがあれば要求
- *   → 届いたら remote_text に置く → Rust が iruka_rdp_take_remote_text() で取り出す。
- * ローカル → リモート: Rust が iruka_rdp_set_local_text() で渡す → サーバーに通知
- *   → 貼り付け時にサーバーが要求してきたら local_text を返す。
+ * Remote -> local: the server announces a copy (Format List) -> request it if there is text
+ *   -> when it arrives, store it in remote_text -> Rust picks it up with iruka_rdp_take_remote_text().
+ * Local -> remote: Rust hands text over with iruka_rdp_set_local_text() -> announce it to the server
+ *   -> when the server asks for it on paste, return local_text.
  */
 
 static IrukaContext* clip_owner(CliprdrClientContext* cliprdr)
@@ -140,7 +141,7 @@ static IrukaContext* clip_owner(CliprdrClientContext* cliprdr)
 	return (IrukaContext*)cliprdr->custom;
 }
 
-/* 今の local_text に合わせて、こちらにあるデータの種類をサーバーに通知する */
+/* Announce to the server which formats we have, according to the current local_text */
 static UINT clip_send_format_list(IrukaContext* ic)
 {
 	CLIPRDR_FORMAT format = { .formatId = CF_UNICODETEXT, .formatName = NULL };
@@ -185,7 +186,7 @@ static UINT clip_server_capabilities(CliprdrClientContext* cliprdr,
 	return CHANNEL_RC_OK;
 }
 
-/* リモートでコピーされた：テキストがあれば中身を要求する */
+/* Something was copied on the remote side: request the contents if there is text */
 static UINT clip_server_format_list(CliprdrClientContext* cliprdr,
                                     const CLIPRDR_FORMAT_LIST* list)
 {
@@ -214,7 +215,7 @@ static UINT clip_server_format_list_response(CliprdrClientContext* cliprdr,
 	return CHANNEL_RC_OK;
 }
 
-/* 要求したテキストが届いた（UTF-16LE、終端の NUL を含むことがある） */
+/* The requested text arrived (UTF-16LE, may include a terminating NUL) */
 static UINT clip_server_format_data_response(CliprdrClientContext* cliprdr,
                                              const CLIPRDR_FORMAT_DATA_RESPONSE* response)
 {
@@ -235,7 +236,7 @@ static UINT clip_server_format_data_response(CliprdrClientContext* cliprdr,
 	return CHANNEL_RC_OK;
 }
 
-/* リモートで貼り付けられた：ローカルのテキストを渡す */
+/* Paste on the remote side: hand over the local text */
 static UINT clip_server_format_data_request(CliprdrClientContext* cliprdr,
                                             const CLIPRDR_FORMAT_DATA_REQUEST* request)
 {
@@ -253,7 +254,7 @@ static UINT clip_server_format_data_request(CliprdrClientContext* cliprdr,
 	}
 	if (wtext)
 	{
-		/* 終端の NUL も含めて送る */
+		/* Send the terminating NUL as well */
 		response.common.msgFlags = CB_RESPONSE_OK;
 		response.common.dataLen = (UINT32)((wlen + 1) * sizeof(WCHAR));
 		response.requestedFormatData = (const BYTE*)wtext;
@@ -295,14 +296,15 @@ static void iruka_on_channel_disconnected(void* context, const ChannelDisconnect
 static BOOL iruka_pre_connect(freerdp* instance)
 {
 	rdpContext* context = instance->context;
-	/* RDPGFX などのチャネル接続時に gdi へつなぐ（FreeRDP 共通のハンドラを使う）
+	/* Hook channels such as RDPGFX up to gdi when they connect (using FreeRDP's common handlers)
 	 *
-	 * Known Issue（KNOWN_ISSUES.md「FreeRDP が使わない展開用バッファーを確保する」）:
-	 * ここで RDPGFX が gdi につながると、サーバーが画面を初期化するたびに
-	 * FreeRDP の gdi_ResetGraphics（libfreerdp/gdi/gfx.c）が、展開用バッファー一式を
-	 * 画面サイズで 2 組作り直す。RDPGFX 用（使う）と、旧方式の画面更新用の
-	 * context->codecs（RDPGFX 中は使われない）。後者の Planar だけで約 18 バイト/画素
-	 * （1080p で約 35MB、4K で約 150MB）が無駄になる。FreeRDP 側の問題なので回避はしない。
+	 * Known Issue (KNOWN_ISSUES.md, "FreeRDP allocates decode buffers it never uses"):
+	 * once RDPGFX is hooked up to gdi here, every time the server resets the graphics
+	 * FreeRDP's gdi_ResetGraphics (libfreerdp/gdi/gfx.c) recreates two full sets of
+	 * decode buffers at desktop size: one for RDPGFX (used) and one in context->codecs
+	 * for legacy screen updates (unused while RDPGFX is active). The Planar codec of the
+	 * latter alone wastes about 18 bytes per pixel (about 35MB at 1080p, about 150MB at 4K).
+	 * This is a FreeRDP-side problem, so no workaround is attempted here.
 	 */
 	if (PubSub_SubscribeChannelConnected(context->pubSub,
 	                                     freerdp_client_OnChannelConnectedEventHandler) < 0)
@@ -310,7 +312,7 @@ static BOOL iruka_pre_connect(freerdp* instance)
 	if (PubSub_SubscribeChannelDisconnected(context->pubSub,
 	                                        freerdp_client_OnChannelDisconnectedEventHandler) < 0)
 		return FALSE;
-	/* クリップボードのチャネルは Iruka 自身がローカルとつなぐ */
+	/* The clipboard channel is wired to the local clipboard by Iruka itself */
 	if (PubSub_SubscribeChannelConnected(context->pubSub, iruka_on_channel_connected) < 0)
 		return FALSE;
 	if (PubSub_SubscribeChannelDisconnected(context->pubSub, iruka_on_channel_disconnected) < 0)
@@ -320,7 +322,7 @@ static BOOL iruka_pre_connect(freerdp* instance)
 
 static BOOL iruka_post_connect(freerdp* instance)
 {
-	/* バイト順 R,G,B,X（Rust / Canvas の RGBA と同じ並び） */
+	/* Byte order R,G,B,X (same layout as RGBA on the Rust / Canvas side) */
 	if (!gdi_init(instance, PIXEL_FORMAT_RGBX32))
 		return FALSE;
 	rdpUpdate* update = instance->context->update;
@@ -364,8 +366,8 @@ static void iruka_client_free(freerdp* instance, rdpContext* context)
 }
 
 /*
- * セッションを作る。設定は FreeRDP のコマンドライン形式（/v: /u: /gfx など）で渡す。
- * xfreerdp / sdl-freerdp と同じ既定値になるので、互換性の面で安心できる。
+ * Create a session. Settings are passed in FreeRDP's command-line syntax (/v: /u: /gfx etc.).
+ * This gives the same defaults as xfreerdp / sdl-freerdp, which is reassuring for compatibility.
  */
 rdpContext* iruka_rdp_new(int argc, char** argv)
 {
@@ -385,15 +387,15 @@ rdpContext* iruka_rdp_new(int argc, char** argv)
 		return NULL;
 	}
 	/*
-	 * 動的チャネル（RDPGFX など）を、イベント処理（iruka_rdp_poll）と同じスレッドで処理する。
+	 * Process dynamic channels (RDPGFX etc.) on the same thread as event processing (iruka_rdp_poll).
 	 *
-	 * 既定では drdynvc が自分のスレッドを持ち、RDPGFX の描画（gdi_OutputUpdate → EndPaint）と
-	 * サーバーの画面リセット（gdi_ResetGraphics → DesktopResize → gdi_resize）がそのスレッドで
-	 * 走る。gdi_resize は primary_buffer を解放して作り直すので、Rust 側が別スレッドで
-	 * primary_buffer をコピーしている最中（4K のフルフレームで 150ms 前後）に起きると、
-	 * 解放済みのメモリを読んで落ちる（2026-10-13、2 本目の 4K セッション接続直後に
-	 * libc の memcpy で segfault）。dirty の一覧も同じ理由で競合する。
-	 * 同期にすれば、gdi に触るのはすべて iruka_rdp_poll を呼ぶスレッドだけになる。
+	 * By default drdynvc has its own thread, and both RDPGFX painting (gdi_OutputUpdate -> EndPaint)
+	 * and the server's graphics reset (gdi_ResetGraphics -> DesktopResize -> gdi_resize) run on it.
+	 * gdi_resize frees and reallocates primary_buffer, so if it happens while the Rust side is
+	 * copying primary_buffer on another thread (around 150ms for a full 4K frame), freed memory
+	 * gets read and the process crashes (2026-10-13: segfault in libc's memcpy right after the
+	 * second 4K session connected). The dirty list races for the same reason.
+	 * With synchronous channels, the only thread that touches gdi is the one calling iruka_rdp_poll.
 	 */
 	if (!freerdp_settings_set_bool(context->settings, FreeRDP_SynchronousDynamicChannels, TRUE))
 	{
@@ -403,7 +405,7 @@ rdpContext* iruka_rdp_new(int argc, char** argv)
 	return context;
 }
 
-/* 接続と認証（数秒かかることがある） */
+/* Connect and authenticate (may take a few seconds) */
 int iruka_rdp_connect(rdpContext* context)
 {
 	if (freerdp_client_start(context) != 0)
@@ -411,7 +413,7 @@ int iruka_rdp_connect(rdpContext* context)
 	return freerdp_connect(context->instance) ? 1 : 0;
 }
 
-/* イベントを最大 timeout_ms 待って処理する。1: 継続, 0: 切断された, -1: エラー */
+/* Wait up to timeout_ms for events and process them. 1: keep going, 0: disconnected, -1: error */
 int iruka_rdp_poll(rdpContext* context, uint32_t timeout_ms)
 {
 	HANDLE handles[MAXIMUM_WAIT_OBJECTS] = { 0 };
@@ -429,7 +431,7 @@ int iruka_rdp_poll(rdpContext* context, uint32_t timeout_ms)
 	return freerdp_shall_disconnect_context(context) ? 0 : 1;
 }
 
-/* フレームバッファ（RGBX、1 行 stride バイト）。接続前は NULL */
+/* The framebuffer (RGBX, stride bytes per row). NULL before connecting */
 const uint8_t* iruka_rdp_framebuffer(rdpContext* context, uint32_t* width, uint32_t* height,
                                      uint32_t* stride)
 {
@@ -443,8 +445,8 @@ const uint8_t* iruka_rdp_framebuffer(rdpContext* context, uint32_t* width, uint3
 }
 
 /*
- * 前回以降に変化した範囲を取り出す（画面内に切り詰める）。
- * out には x, y, w, h の順で最大 max 個書き込み、個数を返す。
+ * Take the regions changed since the last call (clipped to the screen).
+ * Writes up to max entries of x, y, w, h into out and returns the count.
  */
 int iruka_rdp_take_dirty(rdpContext* context, uint32_t* out, int max)
 {
@@ -484,7 +486,7 @@ void iruka_rdp_send_extended_mouse(rdpContext* context, uint16_t flags, uint16_t
 	freerdp_input_send_extended_mouse_event(context->input, flags, x, y);
 }
 
-/* scancode は PC/AT Set 1。拡張キーは 0xE0xx */
+/* scancode is PC/AT Set 1; extended keys are 0xE0xx */
 void iruka_rdp_send_key(rdpContext* context, uint16_t scancode, int down)
 {
 	const BOOL extended = (scancode & 0xFF00) == 0xE000;
@@ -492,7 +494,7 @@ void iruka_rdp_send_key(rdpContext* context, uint16_t scancode, int down)
 	freerdp_input_send_keyboard_event_ex(context->input, down ? TRUE : FALSE, FALSE, rdp_scancode);
 }
 
-/* ローカルのクリップボードのテキスト（UTF-8、NULL なら空）を設定し、サーバーに通知する */
+/* Set the local clipboard text (UTF-8, NULL means empty) and announce it to the server */
 void iruka_rdp_set_local_text(rdpContext* context, const char* text)
 {
 	IrukaContext* ic = (IrukaContext*)context;
@@ -503,7 +505,7 @@ void iruka_rdp_set_local_text(rdpContext* context, const char* text)
 	clip_send_format_list(ic);
 }
 
-/* リモートでコピーされたテキストを取り出す（なければ NULL）。iruka_rdp_free_text で解放する */
+/* Take the text copied on the remote side (NULL if none). Release it with iruka_rdp_free_text */
 char* iruka_rdp_take_remote_text(rdpContext* context)
 {
 	IrukaContext* ic = (IrukaContext*)context;
@@ -519,7 +521,7 @@ void iruka_rdp_free_text(char* text)
 	free(text);
 }
 
-/* 直近のエラーの説明（英語） */
+/* Description of the most recent error (in English) */
 const char* iruka_rdp_last_error(rdpContext* context)
 {
 	return freerdp_get_last_error_string(freerdp_get_last_error(context));

@@ -1,9 +1,9 @@
-//! RDP セッションの共通部分。
+//! Common parts of RDP sessions.
 //!
-//! フロントとのやりとり（Tauri コマンドとイベント）、セッションの管理、
-//! 画面の差分をまとめてフロントへ送る処理はここに集め、接続そのものは
-//! バックエンド（FreeRDP / IronRDP）に任せる。バックエンドは
-//! [`RdpBackend`] トレイトを実装すれば差し替えられる。
+//! Communication with the frontend (Tauri commands and events), session management,
+//! and batching screen changes for the frontend live here; the connection itself is
+//! left to a backend (FreeRDP / IronRDP). A backend can be swapped in by implementing
+//! the [`RdpBackend`] trait.
 
 #[cfg(feature = "freerdp")]
 mod freerdp;
@@ -25,16 +25,16 @@ use tauri::ipc::{Channel, InvokeResponseBody};
 
 use crate::{clipboard, memory, NEXT_SESSION_ID};
 
-/// フロントへ画面を送る最小間隔（約 30fps）。
+/// Minimum interval between frames sent to the frontend (about 30fps).
 const FRAME_INTERVAL: Duration = Duration::from_millis(33);
-/// ためておく変化範囲の上限。超えたら全体を 1 つの矩形にまとめる。
+/// Maximum number of pending dirty rectangles. Beyond this they are collapsed into a single rectangle.
 pub const MAX_DIRTY_RECTS: usize = 128;
 
-/// バックエンドから画面側へのイベント（画面の中身は別の Channel でバイナリで送る）。
+/// Events from the backend to the frontend (pixel data goes over a separate Channel as binary).
 #[derive(Clone, Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum RdpEvent {
-    /// 接続完了、またはサーバー側で画面サイズが変わった。
+    /// Connected, or the server changed the screen size.
     #[serde(rename_all = "camelCase")]
     Resize { width: u32, height: u32 },
     #[serde(rename_all = "camelCase")]
@@ -45,24 +45,24 @@ pub enum RdpEvent {
     },
 }
 
-/// 画面側からの入力。座標はリモート画面のピクセル。
+/// Input from the frontend. Coordinates are pixels on the remote screen.
 #[derive(Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum RdpInput {
     MouseMove { x: u16, y: u16 },
-    /// button は MouseEvent.button の値（0=左, 1=中, 2=右, 3/4=戻る/進む）
+    /// button is the MouseEvent.button value (0=left, 1=middle, 2=right, 3/4=back/forward)
     MouseButton { button: u8, down: bool },
-    /// units は 1 ノッチ = 120、正が上（または右）
+    /// units: one notch = 120, positive is up (or right)
     Wheel { vertical: bool, units: i16 },
-    /// scancode は PC/AT Set 1。拡張キーは 0xE0xx
+    /// scancode is PC/AT Set 1; extended keys are 0xE0xx
     Key { scancode: u16, down: bool },
     ReleaseAll,
 }
 
-/// セッションのスレッドへ送る指示。
+/// Instructions sent to the session thread.
 pub enum Command {
     Input(Vec<RdpInput>),
-    /// ローカルのクリップボードのテキスト（None は空）をリモートに知らせる
+    /// Announce the local clipboard text (None means empty) to the remote side
     ClipboardLocal(Option<String>),
     Close,
 }
@@ -70,7 +70,7 @@ pub enum Command {
 #[derive(Clone, Copy, Default, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum BackendKind {
-    /// 使えるものを自動で選ぶ（FreeRDP を優先）
+    /// Pick whatever is available (FreeRDP preferred)
     #[default]
     Auto,
     Freerdp,
@@ -85,21 +85,21 @@ pub struct RdpConnectParams {
     pub username: String,
     pub password: String,
     pub domain: Option<String>,
-    /// 要求する画面サイズ（画面共有型のサーバーでは無視されることがある）
+    /// Requested screen size (screen-sharing servers may ignore it)
     pub width: u16,
     pub height: u16,
     #[serde(default)]
     pub backend: BackendKind,
-    /// リモートの音声をローカルで鳴らす（FreeRDP のみ）
+    /// Play remote audio locally (FreeRDP only)
     #[serde(default)]
     pub audio: bool,
-    /// ローカルのマイクをリモートへ送る（FreeRDP のみ）
+    /// Send the local microphone to the remote side (FreeRDP only)
     #[serde(default)]
     pub microphone: bool,
-    /// RDPGFX のキャッシュを小さく（100MB → 16MB）する（FreeRDP のみ）
+    /// Use a small RDPGFX cache (100MB -> 16MB) (FreeRDP only)
     #[serde(default)]
     pub small_cache: bool,
-    /// クリップボード（テキスト）を共有する（FreeRDP のみ）
+    /// Share the clipboard (text) (FreeRDP only)
     #[serde(default = "default_true")]
     pub clipboard: bool,
 }
@@ -113,7 +113,7 @@ impl RdpConnectParams {
         self.port.unwrap_or(3389)
     }
 
-    /// "DOMAIN\user" 形式も受け付けて (domain, user) に分ける
+    /// Also accepts the "DOMAIN\user" form and splits it into (domain, user)
     pub fn domain_and_user(&self) -> (Option<String>, String) {
         match (&self.domain, self.username.split_once('\\')) {
             (Some(d), _) if !d.is_empty() => (Some(d.clone()), self.username.clone()),
@@ -123,13 +123,13 @@ impl RdpConnectParams {
     }
 }
 
-/// RDP の接続方式。1 セッション = 1 スレッドで [`run`](RdpBackend::run) が呼ばれる。
+/// An RDP connection method. [`run`](RdpBackend::run) is called on one thread per session.
 pub trait RdpBackend: Sync {
     fn name(&self) -> &'static str;
 
-    /// 接続して、切断されるまで画面の受信と入力の送信を続ける。
-    /// `commands` は定期的に確認し、`Close` を受けたら切断して戻ること。
-    /// 正常に終わったときは切断理由を返す。
+    /// Connect, then keep receiving the screen and sending input until disconnected.
+    /// `commands` must be checked periodically; on `Close`, disconnect and return.
+    /// On a normal end, returns the reason for the disconnect.
     fn run(
         &self,
         params: &RdpConnectParams,
@@ -147,11 +147,11 @@ fn select_backend(kind: BackendKind) -> Result<&'static dyn RdpBackend, String> 
         #[cfg(feature = "ironrdp")]
         BackendKind::Ironrdp => Ok(&ironrdp::IronRdp),
         #[allow(unreachable_patterns)]
-        _ => Err("この RDP バックエンドは組み込まれていません".into()),
+        _ => Err("This RDP backend is not built in".into()),
     }
 }
 
-/// フレームバッファの読み取り用ビュー。1 ピクセル 4 バイトで R, G, B, (未使用) の順。
+/// Read-only view of a framebuffer. 4 bytes per pixel, in the order R, G, B, (unused).
 pub struct FrameView<'a> {
     pub data: &'a [u8],
     pub width: u32,
@@ -159,7 +159,7 @@ pub struct FrameView<'a> {
     pub stride: usize,
 }
 
-/// 変化した範囲（右下は含まない）。
+/// A changed region (bottom-right edge exclusive).
 #[derive(Clone, Copy)]
 pub struct Rect {
     pub x: u32,
@@ -177,7 +177,7 @@ impl Rect {
         self.y + self.height
     }
 
-    /// 重なるか接していれば true
+    /// true if the rectangles overlap or touch
     fn touches(&self, o: &Rect) -> bool {
         self.x <= o.right() && o.x <= self.right() && self.y <= o.bottom() && o.y <= self.bottom()
     }
@@ -194,7 +194,7 @@ impl Rect {
     }
 }
 
-/// 重なる・接する矩形どうしをまとめる（離れた矩形は別々のまま）
+/// Merge rectangles that overlap or touch (separate rectangles stay separate)
 fn merge_rects(mut rects: Vec<Rect>) -> Vec<Rect> {
     let mut merged = true;
     while merged {
@@ -217,22 +217,22 @@ fn merge_rects(mut rects: Vec<Rect>) -> Vec<Rect> {
     rects
 }
 
-/// バックエンドから画面側への受け口。
+/// Where the backend delivers screen updates.
 ///
-/// 変化した範囲をためておき、一定間隔でまとめてフロントへ送る。
-/// 送信（WebView への受け渡し）は別スレッドで行うので、セッションのスレッドは
-/// 待たされない（入力の送信が遅れない）。送信が追いつかない間は範囲をため続け、
-/// 次の送信でまとめて最新の画面を送る。
+/// Changed regions are accumulated and sent to the frontend in batches at a fixed
+/// interval. The send (hand-off to the WebView) happens on a separate thread, so the
+/// session thread never waits (input is not delayed). While the sender cannot keep up,
+/// regions keep accumulating and the next send delivers the latest screen in one batch.
 ///
-/// 送信データ（リトルエンディアン）:
-/// `画面幅 u32, 画面高さ u32, 矩形数 u32, 予備 u32, 送信時刻 f64（UNIX ミリ秒）`
-/// のあとに、矩形ごとに `x, y, w, h（各 u32）` と RGBA の画素 `w*h*4` バイト。
+/// Wire format (little-endian):
+/// `screen width u32, screen height u32, rect count u32, reserved u32, send time f64 (UNIX milliseconds)`
+/// followed, per rectangle, by `x, y, w, h (u32 each)` and `w*h*4` bytes of RGBA pixels.
 pub struct FrameSink {
     id: u32,
     events: Channel<RdpEvent>,
     dirty: Vec<Rect>,
     last_sent: Instant,
-    /// 送信スレッドが前のデータを送っている最中
+    /// The sender thread is still delivering the previous batch
     busy: Arc<AtomicBool>,
     frames: Sender<Vec<u8>>,
 }
@@ -266,7 +266,7 @@ impl FrameSink {
         }
     }
 
-    /// 画面サイズが決まった・変わった。フロントは画面を作り直す。
+    /// The screen size was determined or changed. The frontend rebuilds its canvas.
     pub fn resize(&mut self, width: u32, height: u32) -> anyhow::Result<()> {
         self.dirty.clear();
         memory::set_session_size(self.id, width, height);
@@ -274,12 +274,12 @@ impl FrameSink {
         Ok(())
     }
 
-    /// リモートでテキストがコピーされた（アクティブなセッションならローカルに入れる）。
+    /// Text was copied on the remote side (put on the local clipboard if this session is active).
     pub fn clipboard_from_remote(&self, text: &str) {
         clipboard::from_remote(self.id, text);
     }
 
-    /// 画面のこの範囲が変わった。
+    /// This region of the screen changed.
     pub fn damage(&mut self, rect: Rect) {
         if rect.width == 0 || rect.height == 0 {
             return;
@@ -293,8 +293,8 @@ impl FrameSink {
         self.dirty.push(rect);
     }
 
-    /// たまった変化を送る。`force` でなければ前回から一定時間たったときだけ送る。
-    /// バックエンドはイベント処理のたびに（何もなくても定期的に）呼ぶこと。
+    /// Send the accumulated changes. Unless `force`, only sends once enough time has passed since the last send.
+    /// Backends must call this after every round of event processing (periodically even when idle).
     pub fn flush(&mut self, fb: &FrameView, force: bool) -> anyhow::Result<()> {
         if self.dirty.is_empty()
             || self.busy.load(Ordering::Acquire)
@@ -306,7 +306,7 @@ impl FrameSink {
         let rects: Vec<Rect> = merge_rects(std::mem::take(&mut self.dirty))
             .into_iter()
             .filter_map(|r| {
-                // 画面外にはみ出した分を切り詰める
+                // Clip the part that extends beyond the screen
                 let right = r.right().min(fb.width);
                 let bottom = r.bottom().min(fb.height);
                 (right > r.x && bottom > r.y).then(|| Rect {
@@ -339,7 +339,7 @@ impl FrameSink {
                 let offset = row as usize * fb.stride + r.x as usize * 4;
                 msg.extend_from_slice(&fb.data[offset..offset + r.width as usize * 4]);
             }
-            // アルファは常に不透明として扱う
+            // Alpha is always treated as opaque
             for a in msg[start..].iter_mut().skip(3).step_by(4) {
                 *a = 0xff;
             }
@@ -408,19 +408,19 @@ pub fn rdp_input(state: tauri::State<'_, RdpState>, id: u32, events: Vec<RdpInpu
     tx.send(Command::Input(events)).map_err(|e| e.to_string())
 }
 
-/// フロント側の性能計測結果をログに出す（調査用）
+/// Log performance measurements from the frontend (for diagnostics)
 #[tauri::command]
 pub fn rdp_perf_log(message: String) {
     tracing::debug!(target: "iruka_perf", "frontend: {message}");
 }
 
-/// 接続先がこの PC 自身か（127.0.0.1、localhost、自分の IP アドレス、自分のホスト名）。
+/// Whether the target is this PC itself (127.0.0.1, localhost, one of our own IP addresses, our own hostname).
 ///
-/// 自分自身の画面共有につなぐと、リモート画面の中でマウスを動かすたびに本物のカーソルが
-/// 動かされて左上へ吸い寄せられる（座標がウィンドウの位置の分だけずれるため）ので、
-/// 接続する前に確認する。
-/// 判定は「そのアドレスにソケットを bind できるか」で行う。bind できるのはローカルのアドレスだけ。
-/// 名前解決で待たされることがあるので、メインスレッド以外で動かす（async）。
+/// Connecting to our own screen share makes every mouse move inside the remote view move the
+/// real cursor, which gets dragged towards the top-left (the coordinates are off by the window
+/// position), so this is checked before connecting.
+/// The test is "can a socket be bound to that address"; only local addresses can be bound.
+/// Name resolution can block, so this runs off the main thread (async).
 #[tauri::command]
 pub async fn rdp_is_self(host: String, port: Option<u16>) -> bool {
     is_local_host(&host, port.unwrap_or(3389))
@@ -442,15 +442,15 @@ mod tests {
     fn detects_own_addresses() {
         assert!(is_local_host("127.0.0.1", 3389));
         assert!(is_local_host("localhost", 3389));
-        // 文書用に予約されたアドレス（TEST-NET-1）は自分のものではない
+        // An address reserved for documentation (TEST-NET-1) is not ours
         assert!(!is_local_host("192.0.2.1", 3389));
         assert!(!is_local_host("", 3389));
     }
 }
 
-/// 表示中の RDP セッションが変わった（None は RDP 以外を表示中）。
-/// RDP セッションなら、ローカルのクリップボードのテキストをそのセッションに知らせる。
-/// クリップボードの読み取りは待たされることがあるので、メインスレッド以外で動かす（async）。
+/// The displayed RDP session changed (None means something other than RDP is shown).
+/// For an RDP session, announce the local clipboard text to that session.
+/// Reading the clipboard can block, so this runs off the main thread (async).
 #[tauri::command]
 pub async fn rdp_set_active(state: tauri::State<'_, RdpState>, id: Option<u32>) -> Result<(), String> {
     clipboard::set_active(id);

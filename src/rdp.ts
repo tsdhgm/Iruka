@@ -1,4 +1,4 @@
-// RDP セッションのフロント側ヘルパー（Rust 側 rdp.rs と対になる）
+// Front-end helpers for RDP sessions (the counterpart of rdp.rs on the Rust side).
 
 export type RdpEvent =
   | { type: "resize"; width: number; height: number }
@@ -14,7 +14,7 @@ export type RdpInput =
 export type RdpBackendKind = "auto" | "freerdp" | "ironrdp";
 
 export const RDP_BACKENDS: { value: RdpBackendKind; label: string }[] = [
-  { value: "auto", label: "自動（FreeRDP 優先）" },
+  { value: "auto", label: "Auto (FreeRDP first)" },
   { value: "freerdp", label: "FreeRDP" },
   { value: "ironrdp", label: "IronRDP" },
 ];
@@ -34,7 +34,7 @@ export interface RdpConnectParams {
   clipboard: boolean;
 }
 
-/** 接続前のメモリ確認の結果（Rust 側 memory.rs の MemoryCheck） */
+/** Result of the pre-connect memory check (MemoryCheck in memory.rs on the Rust side). */
 export interface MemoryCheck {
   availableBytes: number;
   estimatedBytes: number;
@@ -42,13 +42,13 @@ export interface MemoryCheck {
   learned: boolean;
 }
 
-/** 解像度の選択肢。"local" はローカルモニタの物理解像度 */
+/** Resolution choices. "local" is the physical resolution of the local monitor. */
 export type RdpResolution = "local" | "2560x1440" | "1920x1080";
 
 export const RDP_RESOLUTIONS: RdpResolution[] = ["local", "2560x1440", "1920x1080"];
 
-// KeyboardEvent.code → PC/AT スキャンコード（Set 1）。拡張キーは 0xE0xx。
-// 物理キー位置で送るので、配列（JIS/US）はリモート側の設定に従う。
+// KeyboardEvent.code → PC/AT scancode (Set 1). Extended keys are 0xE0xx.
+// Physical key positions are sent, so the layout (JIS/US) follows the remote side's setting.
 export const SCANCODES: Record<string, number> = {
   Escape: 0x01,
   Digit1: 0x02,
@@ -90,7 +90,7 @@ export const SCANCODES: Record<string, number> = {
   KeyL: 0x26,
   Semicolon: 0x27,
   Quote: 0x28,
-  Backquote: 0x29, // JIS では 半角/全角
+  Backquote: 0x29, // Hankaku/Zenkaku on JIS keyboards
   ShiftLeft: 0x2a,
   Backslash: 0x2b,
   KeyZ: 0x2c,
@@ -136,11 +136,11 @@ export const SCANCODES: Record<string, number> = {
   IntlBackslash: 0x56,
   F11: 0x57,
   F12: 0x58,
-  KanaMode: 0x70, // カタカナ/ひらがな
-  IntlRo: 0x73, // ＼ ろ
-  Convert: 0x79, // 変換
-  NonConvert: 0x7b, // 無変換
-  IntlYen: 0x7d, // ￥
+  KanaMode: 0x70, // Katakana/Hiragana
+  IntlRo: 0x73, // Backslash / Ro (JIS)
+  Convert: 0x79, // Henkan (convert)
+  NonConvert: 0x7b, // Muhenkan (non-convert)
+  IntlYen: 0x7d, // Yen (JIS)
   NumpadEnter: 0xe01c,
   ControlRight: 0xe01d,
   NumpadDivide: 0xe035,
@@ -161,7 +161,7 @@ export const SCANCODES: Record<string, number> = {
   ContextMenu: 0xe05d,
 };
 
-/** 表示中の canvas 上のクライアント座標を、リモート画面のピクセル座標に変換する */
+/** Convert client coordinates on the displayed canvas to pixel coordinates on the remote screen. */
 export function toRemoteCoords(
   canvas: HTMLCanvasElement,
   clientX: number,
@@ -176,7 +176,7 @@ export function toRemoteCoords(
   };
 }
 
-/** canvas の内容を、縦横比を保ってサムネール用 canvas に描く */
+/** Draw the contents of a canvas onto a thumbnail canvas, keeping the aspect ratio. */
 export function drawCanvasToCanvas(
   src: HTMLCanvasElement,
   dst: HTMLCanvasElement,

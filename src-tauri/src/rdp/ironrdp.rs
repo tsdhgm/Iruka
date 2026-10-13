@@ -1,7 +1,7 @@
-//! IronRDP バックエンド（IronRDP のブロッキング API を使用）。
+//! IronRDP backend (using IronRDP's blocking API).
 //!
-//! 1 セッションにつき 1 スレッドで、サーバーからの画面更新の受信とデコード、
-//! フロントからの入力の送信を交互に行う。
+//! One thread per session alternates between receiving and decoding screen updates
+//! from the server and sending input from the frontend.
 
 use std::{
     io::Write as _,
@@ -38,11 +38,11 @@ use super::{Command, FrameSink, FrameView, RdpBackend, RdpConnectParams, RdpInpu
 
 type TlsStream = rustls::StreamOwned<rustls::ClientConnection, TcpStream>;
 
-/// 受信待ちのタイムアウト。この間隔で入力キューも確認する。
+/// Receive timeout. The input queue is also checked at this interval.
 const READ_TIMEOUT: Duration = Duration::from_millis(15);
 
-/// IronRDP（Rust 製）によるバックエンド。RDPGFX には未対応なので、
-/// GNOME Remote Desktop にはつながらない（Windows 向け）。
+/// Backend based on IronRDP (written in Rust). It does not support RDPGFX,
+/// so it cannot connect to GNOME Remote Desktop (intended for Windows).
 pub struct IronRdp;
 
 impl RdpBackend for IronRdp {
@@ -63,7 +63,7 @@ impl RdpBackend for IronRdp {
 fn run_session(params: &RdpConnectParams, rx: &Receiver<Command>, sink: &mut FrameSink) -> anyhow::Result<String> {
     use anyhow::Context as _;
 
-    let (connection_result, mut framed) = connect(params, params.port()).context("接続に失敗しました")?;
+    let (connection_result, mut framed) = connect(params, params.port()).context("Connection failed")?;
 
     framed
         .get_inner()
@@ -92,7 +92,7 @@ fn run_session(params: &RdpConnectParams, rx: &Receiver<Command>, sink: &mut Fra
     let mut input_db = Database::new();
 
     loop {
-        // フロントからの入力を処理する
+        // Handle input from the frontend
         let mut fastpath_events: Vec<FastPathInputEvent> = Vec::new();
         loop {
             match rx.try_recv() {
@@ -101,7 +101,7 @@ fn run_session(params: &RdpConnectParams, rx: &Receiver<Command>, sink: &mut Fra
                         fastpath_events.extend(apply_input(&mut input_db, &mut active_stage, input));
                     }
                 }
-                // クリップボードは未対応
+                // Clipboard is not supported
                 Ok(Command::ClipboardLocal(_)) => {}
                 Ok(Command::Close) | Err(TryRecvError::Disconnected) => {
                     if let Ok(outputs) = active_stage.graceful_shutdown() {
@@ -111,7 +111,7 @@ fn run_session(params: &RdpConnectParams, rx: &Receiver<Command>, sink: &mut Fra
                             }
                         }
                     }
-                    return Ok("切断しました".into());
+                    return Ok("Disconnected".into());
                 }
                 Err(TryRecvError::Empty) => break,
             }
@@ -127,7 +127,7 @@ fn run_session(params: &RdpConnectParams, rx: &Receiver<Command>, sink: &mut Fra
             }
         }
 
-        // サーバーからの PDU を処理する
+        // Handle PDUs from the server
         match framed.read_pdu() {
             Ok((action, payload)) => {
                 let outputs = active_stage.process(&mut image, action, &payload)?;
@@ -140,7 +140,7 @@ fn run_session(params: &RdpConnectParams, rx: &Receiver<Command>, sink: &mut Fra
                             return Ok(reason.description());
                         }
                         ActiveStageOutput::DeactivateAll => {
-                            // Deactivation-Reactivation Sequence（ログオン直後や解像度変更時に来る）
+                            // Deactivation-Reactivation Sequence (arrives right after logon or on a resolution change)
                             let mut activation = activation_factory.create();
                             let mut buf = WriteBuf::new();
                             let (desktop_size, share_id, enable_server_pointer, pointer_software_rendering) = loop {
@@ -177,9 +177,9 @@ fn run_session(params: &RdpConnectParams, rx: &Receiver<Command>, sink: &mut Fra
             }
             Err(e) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {}
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
-                return Ok("サーバーが接続を閉じました".into());
+                return Ok("The server closed the connection".into());
             }
-            Err(e) => return Err(anyhow::Error::new(e).context("受信エラー")),
+            Err(e) => return Err(anyhow::Error::new(e).context("Receive error")),
         }
 
         sink.flush(&view(&image), false)?;
@@ -197,7 +197,7 @@ fn apply_input(
             Operation::MouseMove(MousePosition { x, y })
         }
         RdpInput::MouseButton { button, down } => {
-            // MouseEvent.button → IronRDP の web ボタン番号
+            // MouseEvent.button -> IronRDP's web button number
             let Some(button) = ironrdp_input::MouseButton::from_web_button(button) else {
                 return Vec::new();
             };
@@ -295,7 +295,7 @@ fn connect(params: &RdpConnectParams, port: u16) -> anyhow::Result<(ConnectionRe
         client_name: "iruka".to_owned(),
         client_dir: "C:\\Windows\\System32\\mstscax.dll".to_owned(),
         platform: MajorPlatformType::UNIX,
-        // カーソルはローカルのものを表示する（FreeRDP バックエンドと同じ）
+        // Show the local cursor (same as the FreeRDP backend)
         enable_server_pointer: false,
         pointer_software_rendering: true,
         request_data: None,
@@ -314,16 +314,16 @@ fn connect(params: &RdpConnectParams, port: u16) -> anyhow::Result<(ConnectionRe
 
     let addr = (params.host.as_str(), port)
         .to_socket_addrs()
-        .context("ホスト名を解決できません")?
+        .context("Could not resolve the host name")?
         .next()
-        .context("ホストのアドレスが見つかりません")?;
-    let tcp = TcpStream::connect_timeout(&addr, Duration::from_secs(10)).context("TCP 接続")?;
+        .context("No address found for the host")?;
+    let tcp = TcpStream::connect_timeout(&addr, Duration::from_secs(10)).context("TCP connection")?;
     tcp.set_read_timeout(Some(Duration::from_secs(30)))?;
     let client_addr = tcp.local_addr()?;
 
     let mut framed = Framed::new(tcp);
     let mut connector = ClientConnector::new(config, client_addr);
-    let should_upgrade = ironrdp_blocking::connect_begin(&mut framed, &mut connector).context("接続開始")?;
+    let should_upgrade = ironrdp_blocking::connect_begin(&mut framed, &mut connector).context("Connection start")?;
 
     let tcp = framed.into_inner_no_leftover();
     let (tls, server_public_key) = tls_upgrade(tcp, &params.host).context("TLS")?;
@@ -332,13 +332,13 @@ fn connect(params: &RdpConnectParams, port: u16) -> anyhow::Result<(ConnectionRe
 
     let _ = upgraded;
     perform_credssp(&mut connector, &mut framed, params.host.clone().into(), server_public_key)
-        .context("認証（ユーザー名・パスワードを確認してください）")?;
-    let connection_result = finish_connection(connector, &mut framed).context("セッション開始")?;
+        .context("Authentication (check the user name and password)")?;
+    let connection_result = finish_connection(connector, &mut framed).context("Session start")?;
 
     Ok((connection_result, framed))
 }
 
-/// ironrdp_blocking::connect_finalize の CredSSP 部分と同じ処理（Kerberos なし）。
+/// Same as the CredSSP part of ironrdp_blocking::connect_finalize (without Kerberos).
 fn perform_credssp(
     connector: &mut ClientConnector,
     framed: &mut Framed<TlsStream>,
@@ -394,11 +394,11 @@ fn perform_credssp(
     Ok(())
 }
 
-/// CredSSP 以降の接続シーケンス。
+/// The connection sequence after CredSSP.
 ///
-/// IronRDP は接続時の帯域測定（Bandwidth Measure Stop）に応答しないが、
-/// gnome-remote-desktop（FreeRDP ベース）は結果が返るまで次へ進まないため、
-/// ConnectTimeAutoDetection の間だけ PDU を覗いてこちらで応答する。
+/// IronRDP does not answer the connect-time bandwidth measurement (Bandwidth Measure Stop),
+/// but gnome-remote-desktop (FreeRDP-based) will not proceed until it gets the result,
+/// so during ConnectTimeAutoDetection we peek at the PDUs and answer it ourselves.
 fn finish_connection(mut connector: ClientConnector, framed: &mut Framed<TlsStream>) -> anyhow::Result<ConnectionResult> {
     let mut buf = WriteBuf::new();
     let mut bw: Option<(Instant, u32)> = None;
@@ -481,7 +481,7 @@ fn answer_bandwidth_measure(
     Ok(())
 }
 
-/// Kerberos（KDC への通信）は使わず NTLM のみで認証するためのダミー。
+/// Dummy network client so that authentication uses NTLM only, without Kerberos (no KDC traffic).
 struct NoNetworkClient;
 
 impl NetworkClient for NoNetworkClient {
@@ -497,13 +497,13 @@ fn tls_upgrade(tcp: TcpStream, host: &str) -> anyhow::Result<(TlsStream, Vec<u8>
     use anyhow::Context as _;
     use x509_cert::der::Decode as _;
 
-    // RDP サーバーは自己署名証明書が普通なので検証しない（mstsc の「続行」相当）
+    // RDP servers usually have self-signed certificates, so skip verification (the equivalent of "Continue" in mstsc)
     let mut config = rustls::ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
         .with_safe_default_protocol_versions()?
         .dangerous()
         .with_custom_certificate_verifier(Arc::new(danger::NoCertificateVerification))
         .with_no_client_auth();
-    // CredSSP は TLS セッション再開に対応していない
+    // CredSSP does not work with TLS session resumption
     config.resumption = rustls::client::Resumption::disabled();
 
     let server_name = ServerName::try_from(host.to_owned())?;
@@ -515,14 +515,14 @@ fn tls_upgrade(tcp: TcpStream, host: &str) -> anyhow::Result<(TlsStream, Vec<u8>
         .conn
         .peer_certificates()
         .and_then(|certs| certs.first())
-        .context("サーバー証明書がありません")?;
+        .context("No server certificate")?;
     let cert = x509_cert::Certificate::from_der(cert)?;
     let public_key = cert
         .tbs_certificate
         .subject_public_key_info
         .subject_public_key
         .as_bytes()
-        .context("公開鍵を取り出せません")?
+        .context("Could not extract the public key")?
         .to_owned();
 
     Ok((tls, public_key))

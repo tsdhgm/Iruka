@@ -5,19 +5,19 @@ fn main() {
     tauri_build::build()
 }
 
-/// FreeRDP 3 との橋渡し（native/freerdp_bridge.c）をビルドしてリンクする。
+/// Build and link the FreeRDP 3 bridge (native/freerdp_bridge.c).
 #[cfg(feature = "freerdp")]
 fn build_freerdp_bridge() {
     println!("cargo:rerun-if-changed=native/freerdp_bridge.c");
     let lib = pkg_config::Config::new()
         .atleast_version("3.0")
         .probe("freerdp-client3")
-        .expect("FreeRDP 3 が見つかりません（Ubuntu なら: sudo apt install freerdp3-dev）");
+        .expect("FreeRDP 3 not found (on Ubuntu: sudo apt install freerdp3-dev)");
     let mut build = cc::Build::new();
     build
         .file("native/freerdp_bridge.c")
         .warnings(true)
-        // FreeRDP / WinPR のヘッダ自身が出す非推奨警告は抑える
+        // Silence deprecation warnings coming from the FreeRDP / WinPR headers themselves
         .flag_if_supported("-Wno-deprecated-declarations");
     for path in &lib.include_paths {
         build.include(path);

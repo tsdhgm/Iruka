@@ -1,15 +1,16 @@
-//! RDP セッションに必要なメモリ量の見積もり。
+//! Estimates how much memory an RDP session needs.
 //!
-//! 1 セッションの必要量を「固定分 + 1 ピクセルあたりの量 × 画素数」とみなす。
-//! 固定分と 1 ピクセルあたりの量の比は実測（1080p と 4K）で決めておき、
-//! 実際の使い方に合わせるのは全体の倍率だけにする。こうすると、
-//! どの解像度の接続から学んでも、ほかの解像度に当てはめられる。
+//! The requirement of one session is modeled as "fixed part + per-pixel amount x pixel count".
+//! The ratio between the fixed part and the per-pixel amount was fixed from measurements
+//! (1080p and 4K); only an overall scale factor is fitted to actual usage. That way,
+//! whatever resolution the model learns from, the result carries over to other resolutions.
 //!
-//! 数秒ごとに Iruka 全体（本体 + WebView などの子プロセス）のメモリ使用量と、
-//! 開いている RDP セッションの数と画素数の合計を記録し、
-//! 「(使用量 − RDP なしのときの使用量) ÷ 標準の式での必要量」= 倍率を学習する。
-//! 見積もりには観測値の上位 5% を使う（画面が大きく変わったときの山も含めるため）。
-//! 学習した値はファイルに保存し、次回の起動でも使う。
+//! Every few seconds the memory usage of Iruka as a whole (main process + child processes
+//! such as the WebView) is recorded together with the number of open RDP sessions and
+//! their total pixel count, and the scale factor
+//! "(usage - usage with no RDP sessions) / requirement from the standard formula" is learned.
+//! The estimate uses the 95th percentile of the observations (so that spikes from large
+//! screen changes are included). The learned value is saved to a file and reused on the next launch.
 
 use std::{
     collections::HashMap,
@@ -22,26 +23,26 @@ use serde::{Deserialize, Serialize};
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 use tauri::Manager;
 
-/// 記録する間隔
+/// Sampling interval
 const SAMPLE_INTERVAL: Duration = Duration::from_secs(3);
-/// 起動直後のこの時間は基準値に使わない（WebView の読み込み中で使用量が低く出る）
+/// Samples this soon after launch are not used for the baseline (usage reads low while the WebView is still loading)
 const WARMUP: Duration = Duration::from_secs(15);
-/// 保存しておく観測値の数（3 秒ごとで約 1 時間分）
+/// Number of observations to keep (about one hour at one every 3 seconds)
 const MAX_SAMPLES: usize = 1200;
-/// 1 セッションの固定分（2026-10 の実測：FreeRDP、省メモリ、Iruka 全体で計測）
+/// Fixed part per session (measured 2026-10: FreeRDP, low-memory mode, Iruka as a whole)
 const BASE_SESSION_BYTES: f64 = 150.0 * 1_048_576.0;
-/// 1 ピクセルあたりの量（同上。1080p で約 290MB、4K で約 700MB）
+/// Per-pixel amount (same measurement; about 290MB at 1080p, about 700MB at 4K)
 const BASE_BYTES_PER_PIXEL: f64 = 66.0;
-/// 見積もりに使う観測値の位置（上位 5%）
+/// Percentile of the observations used for the estimate (top 5%)
 const PERCENTILE: f64 = 0.95;
-/// 学習した値を使い始めるのに必要な観測数
+/// Number of observations required before the learned value is used
 const MIN_SAMPLES: usize = 20;
-/// 見積もりに足すゆとり
+/// Safety margin applied to the estimate
 const SAFETY_FACTOR: f64 = 1.2;
-/// 保存する間隔
+/// Save interval
 const SAVE_INTERVAL: Duration = Duration::from_secs(60);
 
-/// 開いている RDP セッションの画面サイズ（接続中は要求したサイズ、接続後は実際のサイズ）
+/// Screen sizes of the open RDP sessions (the requested size while connecting, the actual size once connected)
 static SESSION_SIZES: LazyLock<Mutex<HashMap<u32, (u32, u32)>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
@@ -55,17 +56,17 @@ pub fn remove_session(id: u32) {
     SESSION_SIZES.lock().unwrap().remove(&id);
 }
 
-/// 標準の式での必要量（倍率 1 のとき）
+/// Requirement from the standard formula (with a scale factor of 1)
 fn base_estimate(sessions: u64, pixels: u64) -> f64 {
     BASE_SESSION_BYTES * sessions as f64 + BASE_BYTES_PER_PIXEL * pixels as f64
 }
 
 #[derive(Default, Serialize, Deserialize)]
 struct Model {
-    /// 倍率の観測値（古いものから順）
+    /// Observed scale factors (oldest first)
     #[serde(default)]
     scales: Vec<f64>,
-    /// この起動で RDP セッションがないときに観測した、いちばん小さい使用量
+    /// Lowest usage observed during this run while no RDP session was open
     #[serde(skip)]
     baseline: Option<u64>,
 }
@@ -85,7 +86,7 @@ impl Model {
         sorted[idx]
     }
 
-    /// 解像度 width × height の接続 1 本に必要と見込む量（ゆとり込み）
+    /// Expected requirement of one connection at width x height (including the safety margin)
     fn estimate(&self, width: u32, height: u32) -> u64 {
         (base_estimate(1, width as u64 * height as u64) * self.scale() * SAFETY_FACTOR) as u64
     }
@@ -107,11 +108,11 @@ impl Model {
     }
 }
 
-/// Iruka 本体と、その子孫プロセス（WebView など）のメモリ使用量の合計
+/// Total memory usage of the Iruka process and its descendants (WebView etc.)
 fn process_tree_memory(sys: &System, root: Pid) -> u64 {
     let mut children: HashMap<Pid, Vec<Pid>> = HashMap::new();
     for (pid, p) in sys.processes() {
-        // Linux ではスレッドもプロセスとして見えるので除く（数えると重複する）
+        // On Linux threads show up as processes too; skip them (they would be counted twice)
         if p.thread_kind().is_some() {
             continue;
         }
@@ -149,7 +150,7 @@ fn save(path: &PathBuf, model: &Model) {
     }
 }
 
-/// 学習用の記録を始める（起動時に 1 回呼ぶ）
+/// Start recording samples for learning (call once at startup)
 pub fn start(app: &tauri::AppHandle) {
     let path = model_path(app);
     if let Some(saved) = path.as_ref().and_then(load) {
@@ -199,17 +200,17 @@ pub fn start(app: &tauri::AppHandle) {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MemoryCheck {
-    /// OS が「今すぐ使える」とするメモリ量
+    /// Memory the OS reports as available right now
     available_bytes: u64,
-    /// この接続に必要と見込む量（ゆとり込み）
+    /// Expected requirement of this connection (including the safety margin)
     estimated_bytes: u64,
-    /// 標準の式に掛けている倍率（学習前は 1）
+    /// Scale factor applied to the standard formula (1 before learning)
     scale: f64,
-    /// 学習した値を使ったか（false なら初期値）
+    /// Whether the learned value was used (false means the initial value)
     learned: bool,
 }
 
-/// 新しい RDP 接続（width × height）に必要なメモリの見積もりと、空きメモリ
+/// Estimated memory for a new RDP connection (width x height), and the available memory
 #[tauri::command]
 pub fn rdp_memory_check(width: u32, height: u32) -> MemoryCheck {
     let mut sys = System::new();
@@ -217,7 +218,7 @@ pub fn rdp_memory_check(width: u32, height: u32) -> MemoryCheck {
     let model = MODEL.lock().unwrap();
     #[cfg_attr(not(debug_assertions), allow(unused_mut))]
     let mut available_bytes = sys.available_memory();
-    // 開発中の確認用：IRUKA_FAKE_AVAILABLE_MB で空きメモリを小さく見せる
+    // For testing during development: IRUKA_FAKE_AVAILABLE_MB makes the available memory look smaller
     #[cfg(debug_assertions)]
     if let Some(mb) = std::env::var("IRUKA_FAKE_AVAILABLE_MB").ok().and_then(|v| v.parse::<u64>().ok()) {
         available_bytes = mb * 1_048_576;
@@ -239,19 +240,19 @@ mod tests {
     #[test]
     fn learns_scale_from_observations() {
         let mut m = Model::default();
-        // 起動直後の低い値は基準にしない
+        // Low values right after launch are not used as the baseline
         m.record(400 * MB, 0, 0, false);
         m.record(500 * MB, 0, 0, true);
         assert_eq!(m.baseline, Some(500 * MB));
         assert!(!m.learned());
-        // 標準の式どおりの 2 倍を使い続けたら、倍率は 2 になる
+        // Keep using exactly twice the standard formula; the scale factor becomes 2
         for _ in 0..MIN_SAMPLES {
             let used = 500 * MB + (2.0 * base_estimate(1, 1920 * 1080)) as u64;
             m.record(used, 1, 1920 * 1080, true);
         }
         assert!(m.learned());
         assert!((m.scale() - 2.0).abs() < 1e-6);
-        // 4K の見積もり = 2 倍 ×（固定分 + 画素分）× ゆとり
+        // 4K estimate = 2 x (fixed part + pixel part) x safety margin
         let expect = 2.0 * base_estimate(1, 3840 * 2160) * SAFETY_FACTOR;
         assert!((m.estimate(3840, 2160) as f64 - expect).abs() < 1.0);
     }
