@@ -6,7 +6,7 @@ A viewer for keeping an eye on many PCs at once. Consoles (SSH and the like) and
 
 Tauri 2 + React + TypeScript. RDP uses FreeRDP 3 (IronRDP is built in as a fallback).
 
-**Status**: an early, personal-use tool (pre-1.0). Tested with Ubuntu 26.04 as the client, against Windows (Pro), Ubuntu GNOME Remote Desktop and macOS (macrdp) targets.
+**Status**: an early, personal-use tool (pre-1.0). Tested with Ubuntu 26.04 LTS as the client, against Windows 11 Pro, Ubuntu GNOME Remote Desktop and macOS on Apple Silicon (macrdp) targets.
 
 ## Features
 
@@ -59,6 +59,7 @@ See [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
 ## For contributors
 
 - [docs/code-notes.md](docs/code-notes.md): design notes and known weak spots (architecture, threading and the FFI boundary, conventions).
+- [TODO.md](TODO.md): open tasks and things still to verify.
 
 ## Development
 

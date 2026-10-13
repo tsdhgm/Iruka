@@ -6,7 +6,7 @@
 
 Tauri 2 + React + TypeScript。RDP は FreeRDP 3 を使う（予備として IronRDP も組み込んである）。
 
-**状態**: 個人用の初期段階のツール（1.0 未満）。クライアントは Ubuntu 26.04、接続先は Windows（Pro）、Ubuntu の GNOME Remote Desktop、macOS（macrdp）で試している。
+**状態**: 個人用の初期段階のツール（1.0 未満）。クライアントは Ubuntu 26.04 LTS、接続先は Windows 11 Pro、Ubuntu の GNOME Remote Desktop、Apple Silicon の macOS（macrdp）で試している。
 
 ## 主な機能
 
@@ -59,6 +59,7 @@ Tauri 2 + React + TypeScript。RDP は FreeRDP 3 を使う（予備として Iro
 ## 開発に参加する人へ
 
 - [docs/code-notes_JA.md](docs/code-notes_JA.md): 設計メモと弱いところ（構成、スレッドと FFI の境界、決めごと）。
+- [TODO_JA.md](TODO_JA.md): 残っている課題と、これから確認すること。
 
 ## 開発
 
