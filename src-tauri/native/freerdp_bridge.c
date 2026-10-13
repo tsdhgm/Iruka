@@ -384,6 +384,22 @@ rdpContext* iruka_rdp_new(int argc, char** argv)
 		freerdp_client_context_free(context);
 		return NULL;
 	}
+	/*
+	 * 動的チャネル（RDPGFX など）を、イベント処理（iruka_rdp_poll）と同じスレッドで処理する。
+	 *
+	 * 既定では drdynvc が自分のスレッドを持ち、RDPGFX の描画（gdi_OutputUpdate → EndPaint）と
+	 * サーバーの画面リセット（gdi_ResetGraphics → DesktopResize → gdi_resize）がそのスレッドで
+	 * 走る。gdi_resize は primary_buffer を解放して作り直すので、Rust 側が別スレッドで
+	 * primary_buffer をコピーしている最中（4K のフルフレームで 150ms 前後）に起きると、
+	 * 解放済みのメモリを読んで落ちる（2026-10-13、2 本目の 4K セッション接続直後に
+	 * libc の memcpy で segfault）。dirty の一覧も同じ理由で競合する。
+	 * 同期にすれば、gdi に触るのはすべて iruka_rdp_poll を呼ぶスレッドだけになる。
+	 */
+	if (!freerdp_settings_set_bool(context->settings, FreeRDP_SynchronousDynamicChannels, TRUE))
+	{
+		freerdp_client_context_free(context);
+		return NULL;
+	}
 	return context;
 }
 
