@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1f3b5c"/>
+      <stop offset="1" stop-color="#0b1a2b"/>
+    </linearGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8fd3ff"/>
+      <stop offset="1" stop-color="#2d8fd0"/>
+    </linearGradient>
+  </defs>
+  <rect x="48" y="48" width="928" height="928" rx="200" fill="#14304f"/>
+  <!-- stylised dolphin, leaping from lower-left to upper-right -->
+  <g transform="translate(512 540) rotate(-28)">
+    <path fill="#5fbcf2" d="
+      M -300 40
+      C -240 -90 -90 -140 60 -120
+      C 180 -105 280 -60 330 -10
+      L 395 -60 L 372 20 L 410 95 L 320 55
+      C 240 110 120 150 -10 140
+      C -140 130 -250 105 -300 40 Z"/>
+    <!-- dorsal fin -->
+    <path fill="#5fbcf2" d="M -40 -118 C -10 -200 60 -230 110 -215 C 70 -185 55 -150 60 -118 Z"/>
+    <!-- pectoral fin -->
+    <path fill="#2378b5" d="M -60 90 C -40 150 10 190 70 190 C 50 150 40 120 50 100 Z"/>
+    <!-- eye -->
+    <circle cx="-215" cy="-20" r="16" fill="#0b1a2b"/>
+  </g>
+  <!-- splash dots -->
+  <circle cx="300" cy="760" r="26" fill="#8fd3ff" opacity="0.8"/>
+  <circle cx="370" cy="820" r="16" fill="#8fd3ff" opacity="0.6"/>
+  <circle cx="250" cy="830" r="12" fill="#8fd3ff" opacity="0.5"/>
+</svg>

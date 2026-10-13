@@ -10,6 +10,7 @@ body,
 }
 
 body {
+  color-scheme: dark; /* native widgets (select popups, scrollbars) follow the dark theme */
   font-family: "Inter", "Noto Sans JP", system-ui, sans-serif;
   background: #0b0e13;
   color: #d6dde8;
@@ -473,6 +474,22 @@ body {
 .rdp-form input:focus,
 .rdp-form select:focus {
   border-color: #3d6c8f;
+}
+
+/* WebKitGTK draws a native <select> and ignores our text colour, which leaves the
+   chosen value nearly invisible on the dark background. Draw it ourselves instead. */
+.rdp-form select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 26px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23d6dde8' stroke-width='1.5'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+}
+
+.rdp-form select option {
+  background: #151b26;
+  color: #d6dde8;
 }
 
 .rdp-form-row {

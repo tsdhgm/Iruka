@@ -76,6 +76,12 @@ npm install
 npm run tauri dev
 ```
 
+On a Linux desktop the dev build shows a generic dock icon until it is registered once (packaged builds do not need this):
+
+```sh
+scripts/install-dev-desktop.sh
+```
+
 The RDP diagnostic logs can be filtered with the `IRUKA_LOG` environment variable (e.g. `IRUKA_LOG=iruka_mem=debug`).
 
 ## License

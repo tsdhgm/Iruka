@@ -76,6 +76,12 @@ npm install
 npm run tauri dev
 ```
 
+Linux のデスクトップでは、開発ビルドのドックのアイコンが汎用のものになる。一度だけ次を実行すると Iruka のアイコンになる（パッケージ版では不要）:
+
+```sh
+scripts/install-dev-desktop.sh
+```
+
 RDP の調査用ログは、環境変数 `IRUKA_LOG` で絞り込める（例: `IRUKA_LOG=iruka_mem=debug`）。
 
 ## ライセンス
