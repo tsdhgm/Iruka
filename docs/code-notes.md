@@ -71,6 +71,10 @@ The frame message is little-endian binary:
 
 The frontend (`src/rdpSession.ts`) reads it with a `DataView`, drops a message whose framebuffer size does not match the canvas (a frame that crossed a resize), and paints each rect with `putImageData`. Thumbnails are redrawn from the session canvas (`drawCanvasToCanvas` in `src/rdp.ts`).
 
+### The canvas is the only frontend copy of the screen
+
+The WebView keeps the remote screen only in the session's `<canvas>`; the backend sends changed rectangles, never a full frame on its own. While a session is hidden (grid view, another session on top) the canvas is `display: none`, and WebKitGTK may drop the contents of a large hidden canvas. When it is shown again it is black, and it stays black until the remote happens to repaint every pixel (seen 2026-10-15 with 4K sessions after toggling the grid view with the right Alt key; a second client connecting to the same GNOME Remote Desktop target made the server resend the whole screen, which "fixed" it). Therefore `showSession` calls the `rdp_refresh` command whenever an RDP session is brought to the front: the backend marks the whole framebuffer dirty and sends one full frame from its own copy (FreeRDP's gdi buffer or IronRDP's `DecodedImage`), without involving the server.
+
 ### Input
 
 The frontend converts `KeyboardEvent.code` to PC/AT Set 1 scancodes with the `SCANCODES` table in `src/rdp.ts` (extended keys are `0xE0xx`), so the layout is decided by the remote. Mouse coordinates are mapped to remote pixels by `toRemoteCoords`. Events are batched into `rdp_input` calls as `RdpInput` values (`MouseMove`, `MouseButton`, `Wheel`, `Key`, `ReleaseAll`); `ReleaseAll` is sent on blur to release modifier keys, since FreeRDP does not track key state.

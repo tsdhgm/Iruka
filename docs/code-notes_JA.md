@@ -71,6 +71,10 @@ pub trait RdpBackend: Sync {
 
 フロント（`src/rdpSession.ts`）は `DataView` で読み、フレームバッファのサイズが canvas と合わないメッセージ（サイズ変更をまたいだもの）は捨て、各矩形を `putImageData` で描く。サムネイルはセッションの canvas から描き直す（`src/rdp.ts` の `drawCanvasToCanvas`）。
 
+### 画面の複製はフロントでは canvas だけ
+
+WebView はリモートの画面をセッションの `<canvas>` にしか持っていない。バックエンドは変化した矩形だけを送り、自分からフルフレームを送ることはない。セッションが隠れている間（一覧表示中や、別のセッションが前面のとき）canvas は `display: none` で、WebKitGTK は大きな非表示の canvas の中身を捨てることがある。再表示すると黒く、リモートがたまたま全画素を描き直すまで黒いままになる（2026-10-15、4K のセッションで右 Alt の一覧切り替えの後に発生。同じ GNOME Remote Desktop に別のクライアントがつながるとサーバーが画面全体を送り直すので、それで「直った」ように見えた）。そのため `showSession` は、RDP セッションを前面に出すたびに `rdp_refresh` コマンドを呼ぶ。バックエンドは画面全体を dirty にして、自分の複製（FreeRDP の gdi バッファー、または IronRDP の `DecodedImage`）からフルフレームを 1 回送る。サーバーは関与しない。
+
 ### 入力
 
 フロントは `KeyboardEvent.code` を `src/rdp.ts` の `SCANCODES` 表で PC/AT Set 1 のスキャンコードに変換する（拡張キーは `0xE0xx`）。配列はリモート側が決める。マウス座標は `toRemoteCoords` でリモートのピクセルに写す。イベントは `RdpInput`（`MouseMove`, `MouseButton`, `Wheel`, `Key`, `ReleaseAll`）としてまとめて `rdp_input` で送る。FreeRDP はキーの押下状態を管理しないので、フォーカスが外れたら `ReleaseAll` で修飾キーを離す。

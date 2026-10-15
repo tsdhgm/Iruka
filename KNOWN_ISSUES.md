@@ -30,13 +30,6 @@ Known bugs and limitations. Problems whose cause lies outside Iruka (FreeRDP or 
 - **Cause**: not investigated. Iruka sends Alt as the RDP scancode (left Alt = 0x38); whether the Mac maps it to Option or Command depends on macrdp's translation. Iruka uses the right Alt for the grid-view toggle, so test with the left Alt rather than a lone right Alt (see "View toggle key" in the README).
 - **If it is to be fixed**: check macrdp's key translation settings (Cmd-key shortcut emulation). No change on Iruka's side is expected.
 
-## GNOME Remote Desktop goes black while another client is connected
-
-- **Status**: limitation of the target (2026-10-15)
-- **Symptom**: with Iruka connected to an Ubuntu GNOME Remote Desktop target, connecting a second client (for example Remmina) to the same machine turns Iruka's view of it black. The session is not disconnected and no error is shown. Once the second client disconnects, the picture comes back the next time the screen is repainted (switching sessions or the view triggers a full repaint).
-- **Cause**: GNOME Remote Desktop's screen-sharing mode serves one client at a time; the earlier client stops receiving real frames. Windows behaves differently and disconnects the earlier session, which Iruka reports as "Disconnected (FreeRDP): …".
-- **Workaround**: keep one client per GNOME Remote Desktop target. Power or screen-blanking settings on the target may add similar black periods; not investigated.
-
 ## Clipboard is text only
 
 - **Status**: limitation (2026-10-09)
