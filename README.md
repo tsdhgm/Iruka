@@ -58,6 +58,7 @@ See [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
 
 ## Research notes
 
+- [docs/windows-client.md](docs/windows-client.md): running Iruka on Windows (prerequisites, FreeRDP via vcpkg; not tried yet).
 - [docs/mac-target.md](docs/mac-target.md): how to use a Mac as a target, and the results of connecting through macrdp (2026-10-13).
 
 ## For contributors

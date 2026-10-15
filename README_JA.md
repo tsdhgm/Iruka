@@ -58,6 +58,7 @@ Tauri 2 + React + TypeScript。RDP は FreeRDP 3 を使う（予備として Iro
 
 ## 調査メモ
 
+- [docs/windows-client_JA.md](docs/windows-client_JA.md): Windows で Iruka を動かす（前提、vcpkg での FreeRDP。未着手）。
 - [docs/mac-target_JA.md](docs/mac-target_JA.md): Mac を接続先にする方法の調査と、macrdp での接続結果（2026-10-13）。
 
 ## 開発に参加する人へ

@@ -39,7 +39,7 @@ A quick check on 2026-10-13 found no problems. Still to be checked more carefull
 - [ ] Pass the password to FreeRDP through the settings API instead of the in-process `/p:` argument (kept for now while debugging; FreeRDP prints a warning).
 - [ ] Make the `iruka_perf` / `iruka_mem` debug logging opt-in (today the default filter in `src-tauri/src/lib.rs` enables it).
 - [ ] Decide what to do about `/cert:ignore` (certificate verification is skipped; LAN use only).
-- [ ] Windows build of the client (FreeRDP 3 has to be built or fetched for Windows).
+- [ ] Windows build of the client (FreeRDP 3 has to be built or fetched for Windows). Plan and notes: docs/windows-client.md.
 - [ ] Automated UI tests; Rust unit tests exist only for small helpers.
 - [ ] Store passwords of saved connections in the OS keyring, the way Remmina's "secret" plugin does: Secret Service (GNOME Keyring / KWallet) on Linux, Credential Manager on Windows, Keychain on macOS. Plan: the Rust `keyring` crate behind two Tauri commands (get/set by profile id); the frontend profile store keeps holding no password. Until then passwords are typed on every connection.
 
