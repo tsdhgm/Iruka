@@ -34,6 +34,14 @@ export interface RdpConnectParams {
   clipboard: boolean;
 }
 
+/**
+ * What the UI asks for when connecting: the Rust-side params plus a display title
+ * (the saved connection's name). The title is stripped before `rdp_connect`.
+ */
+export interface RdpConnectRequest extends RdpConnectParams {
+  title?: string;
+}
+
 /** Result of the pre-connect memory check (MemoryCheck in memory.rs on the Rust side). */
 export interface MemoryCheck {
   availableBytes: number;

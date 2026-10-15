@@ -3,15 +3,26 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import "@xterm/xterm/css/xterm.css";
 import "./App.css";
-import type { MemoryCheck, RdpConnectParams } from "./rdp";
+import type { MemoryCheck, RdpConnectParams, RdpConnectRequest } from "./rdp";
 import { drawThumb, type SessionCallbacks, type SessionHandle, type SessionInfo } from "./session";
 import { createPtySession } from "./ptySession";
 import { applyPixelSize, createRdpSession } from "./rdpSession";
 import { useWindowViewToggleKey } from "./hostKey";
+import {
+  buildSshCommand,
+  loadProfiles,
+  removeProfile,
+  upsertProfile,
+  type Profile,
+  type RdpProfile,
+  type SshProfile,
+  type SshTarget,
+} from "./profiles";
 import { ActivityBadge } from "./components/ActivityBadge";
 import { ConnectWarningModal, type ConnectWarning } from "./components/ConnectWarning";
 import { GridView, GRID_MAX_COLS, useMainAreaWidth } from "./components/GridView";
 import { RdpForm } from "./components/RdpForm";
+import { SshForm } from "./components/SshForm";
 import { ViewToolbar } from "./components/ViewToolbar";
 
 const THUMB_W = 196;
@@ -35,7 +46,13 @@ function App() {
   const zoomRef = useRef<{ id: number; top: number } | null>(null);
   zoomRef.current = zoom;
   const zoomCanvasRef = useRef<HTMLCanvasElement>(null);
-  const [showRdpForm, setShowRdpForm] = useState(false);
+  // The connect form in the sidebar; only one is open at a time. `initial` is the saved
+  // connection being edited or connected to.
+  const [form, setForm] = useState<
+    { kind: "rdp"; initial?: RdpProfile } | { kind: "ssh"; initial?: SshProfile } | null
+  >(null);
+  // Saved connections (see profiles.ts); never hold a password.
+  const [profiles, setProfiles] = useState<Profile[]>(loadProfiles);
   // Pre-connect confirmation (connecting to this machine, not enough free memory); holds the pending connection.
   const [connectWarning, setConnectWarning] = useState<ConnectWarning | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
@@ -122,14 +139,18 @@ function App() {
     updateSession: (id, patch) => updateSession(id, patch),
   }).current;
 
-  const openConsole = useCallback(
-    async () => {
+  /**
+   * Open a local shell as a new session. `initialInput` is typed into the shell right
+   * away, the same way keystrokes are; the PTY buffers it until the shell reads it.
+   */
+  const openShell = useCallback(
+    async (title?: string, initialInput?: string) => {
       const main = mainRef.current;
       if (!main) return;
       const created = await createPtySession(main, sessionCallbacks);
       if (!created) return;
       const { id, handle } = created;
-      const title = `console ${id + 1}`;
+      if (initialInput) invoke("write_session", { id, data: initialInput }).catch(() => {});
 
       handlesRef.current.set(id, handle);
       dirtyRef.current.add(id);
@@ -138,7 +159,7 @@ function App() {
         {
           id,
           kind: "pty",
-          title,
+          title: title ?? `console ${id + 1}`,
           status: "running",
           exitCode: null,
           message: null,
@@ -149,10 +170,28 @@ function App() {
     [focusSession, sessionCallbacks],
   );
 
+  const openConsole = useCallback(() => openShell(), [openShell]);
+
+  /**
+   * Open a console and type `ssh [-p PORT] [USER@]HOST` into it. Host-key and password
+   * prompts are then answered by the user in the terminal. Values that are not plain
+   * tokens are ignored (the forms refuse them before getting here).
+   */
+  const openSsh = useCallback(
+    (target: SshTarget) => {
+      const command = buildSshCommand(target);
+      if (!command) return;
+      return openShell(target.name || `ssh ${target.host}`, `${command}\r`);
+    },
+    [openShell],
+  );
+
   const openRdp = useCallback(
-    async (params: RdpConnectParams) => {
+    async (request: RdpConnectRequest) => {
       const main = mainRef.current;
       if (!main) return;
+      // The title is for the session list only; `rdp_connect` gets exactly RdpConnectParams.
+      const { title, ...params } = request;
       const created = await createRdpSession(main, params, sessionCallbacks);
       if (!created) return;
       const { id, handle } = created;
@@ -164,7 +203,7 @@ function App() {
         {
           id,
           kind: "rdp",
-          title: params.host,
+          title: title ?? params.host,
           status: "connecting",
           exitCode: null,
           message: null,
@@ -181,7 +220,7 @@ function App() {
    * best-effort: if it cannot be performed, the connection still goes ahead.
    */
   const connectWithChecks = useCallback(
-    async (params: RdpConnectParams, skip: { self?: boolean; memory?: boolean }) => {
+    async (params: RdpConnectRequest, skip: { self?: boolean; memory?: boolean }) => {
       if (!skip.self) {
         try {
           if (await invoke<boolean>("rdp_is_self", { host: params.host, port: params.port })) {
@@ -211,12 +250,44 @@ function App() {
     [openRdp],
   );
 
+  const saveProfile = useCallback((profile: Profile) => {
+    setProfiles(upsertProfile(profile));
+  }, []);
+
+  const deleteProfile = useCallback((id: string) => {
+    setProfiles(removeProfile(id));
+  }, []);
+
   const submitRdpForm = useCallback(
-    (params: RdpConnectParams) => {
-      setShowRdpForm(false);
-      connectWithChecks(params, {});
+    (params: RdpConnectParams, profile: RdpProfile | null) => {
+      setForm(null);
+      if (profile) saveProfile(profile);
+      connectWithChecks({ ...params, title: profile?.name }, {});
     },
-    [connectWithChecks],
+    [connectWithChecks, saveProfile],
+  );
+
+  const submitSshForm = useCallback(
+    (target: SshTarget, profile: SshProfile | null) => {
+      setForm(null);
+      if (profile) saveProfile(profile);
+      openSsh(target);
+    },
+    [openSsh, saveProfile],
+  );
+
+  /** Edit a saved connection, or (when `connect`) connect to it. */
+  const openProfile = useCallback(
+    (profile: Profile, connect: boolean) => {
+      if (profile.kind === "ssh" && connect) {
+        setForm(null);
+        openSsh(profile);
+      } else {
+        // An RDP connection always goes through the form: the password is typed there.
+        setForm(profile.kind === "rdp" ? { kind: "rdp", initial: profile } : { kind: "ssh", initial: profile });
+      }
+    },
+    [openSsh],
   );
 
   const proceedDespiteWarning = useCallback(
@@ -362,7 +433,7 @@ function App() {
           </button>
           <button
             className="new-console-btn"
-            onClick={() => setShowRdpForm((f) => !f)}
+            onClick={() => setForm((f) => (f?.kind === "rdp" ? null : { kind: "rdp" }))}
           >
             + RDP
           </button>
@@ -381,11 +452,76 @@ function App() {
           >
             {showThumbs ? "☰" : "🖼"}
           </button>
+          <button
+            className="new-console-btn new-ssh-btn"
+            onClick={() => setForm((f) => (f?.kind === "ssh" ? null : { kind: "ssh" }))}
+          >
+            + SSH
+          </button>
         </div>
-        {showRdpForm && (
-          <RdpForm onConnect={submitRdpForm} onCancel={() => setShowRdpForm(false)} />
+        {form?.kind === "rdp" && (
+          <RdpForm
+            key={form.initial?.id ?? "new"}
+            initial={form.initial}
+            onConnect={submitRdpForm}
+            onSave={(p) => {
+              saveProfile(p);
+              setForm(null);
+            }}
+            onCancel={() => setForm(null)}
+          />
+        )}
+        {form?.kind === "ssh" && (
+          <SshForm
+            key={form.initial?.id ?? "new"}
+            initial={form.initial}
+            onConnect={submitSshForm}
+            onSave={(p) => {
+              saveProfile(p);
+              setForm(null);
+            }}
+            onCancel={() => setForm(null)}
+          />
         )}
         <div className="session-list">
+          {profiles.length > 0 && (
+            <div className="profile-section">
+              <div className="section-label">Saved</div>
+              {profiles.map((p) => (
+                <div
+                  key={p.id}
+                  className="profile-card"
+                  title={p.username ? `${p.username}@${p.host}` : p.host}
+                  onClick={() => openProfile(p, true)}
+                >
+                  <span className="session-kind">{p.kind === "rdp" ? "RDP" : "SSH"}</span>
+                  <span className="profile-title">{p.name}</span>
+                  <button
+                    className="profile-btn"
+                    title="Edit"
+                    tabIndex={-1}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openProfile(p, false);
+                    }}
+                  >
+                    ✎
+                  </button>
+                  <button
+                    className="profile-btn delete"
+                    title="Delete"
+                    tabIndex={-1}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteProfile(p.id);
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           {sessions.map((s) => (
             <div
               key={s.id}
@@ -441,7 +577,7 @@ function App() {
             <div className="empty-hint">
               No sessions yet.
               <br />
-              Open one with "+ Console" or "+ RDP".
+              Open one with "+ Console", "+ SSH" or "+ RDP".
             </div>
           )}
         </div>

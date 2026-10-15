@@ -184,7 +184,13 @@ impl Session {
                     Ok(Command::Input(inputs)) => inputs.into_iter().for_each(|i| self.send_input(i)),
                     Ok(Command::ClipboardLocal(text)) => self.set_local_text(text.as_deref()),
                     Ok(Command::Refresh) => refresh = true,
-                    Ok(Command::Close) | Err(TryRecvError::Disconnected) => return Ok("Disconnected".into()),
+                    Ok(Command::Close) | Err(TryRecvError::Disconnected) => {
+                        // Let go of any modifier before the connection drops: the server keeps the
+                        // state of our virtual keyboard, and a Ctrl left pressed here would stick to
+                        // every later client of that machine (GNOME merges all keyboards' modifiers).
+                        self.send_input(RdpInput::ReleaseAll);
+                        return Ok("Disconnected".into());
+                    }
                     Err(TryRecvError::Empty) => break,
                 }
             }
@@ -303,9 +309,8 @@ impl Session {
                     iruka_rdp_send_mouse(ctx, kind | rotation, mx, my);
                 }
                 RdpInput::Key { scancode, down } => {
-                    if down {
-                        tracing::debug!(target: "iruka_perf", scancode, "key sent to FreeRDP");
-                    }
+                    // Both edges are logged so a stuck modifier can be traced to a missing release.
+                    tracing::debug!(target: "iruka_perf", scancode, down, "key sent to FreeRDP");
                     iruka_rdp_send_key(ctx, scancode, down.into())
                 }
                 // FreeRDP does not track key state, so on focus loss only the modifier keys are released

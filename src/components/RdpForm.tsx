@@ -6,8 +6,10 @@ import {
   type RdpConnectParams,
   type RdpResolution,
 } from "../rdp";
+import { newProfileId, type RdpProfile } from "../profiles";
 
 interface RdpFormValues {
+  name: string;
   host: string;
   username: string;
   password: string;
@@ -53,6 +55,7 @@ function loadRdpForm(): RdpFormValues {
   try {
     const saved = JSON.parse(localStorage.getItem("iruka.rdpForm") ?? "{}");
     return {
+      name: "",
       host: saved.host ?? "",
       username: saved.username ?? "",
       password: "",
@@ -65,6 +68,7 @@ function loadRdpForm(): RdpFormValues {
     };
   } catch {
     return {
+      name: "",
       host: "",
       username: "",
       password: "",
@@ -78,18 +82,62 @@ function loadRdpForm(): RdpFormValues {
   }
 }
 
+/** Form values taken from a saved connection (the password is always typed). */
+function fromProfile(profile: RdpProfile): RdpFormValues {
+  return {
+    name: profile.name,
+    host: profile.host,
+    username: profile.username,
+    password: "",
+    backend: profile.backend,
+    audio: profile.audio,
+    microphone: profile.microphone,
+    smallCache: profile.smallCache,
+    clipboard: profile.clipboard,
+    resolution: profile.resolution,
+  };
+}
+
 /**
  * The RDP connect form in the sidebar. The last-used values (except the password)
- * are kept in localStorage and loaded when the form is mounted.
+ * are kept in localStorage and loaded when the form is mounted. With `initial`
+ * it is pre-filled from a saved connection instead and keeps that profile's id.
  */
 export function RdpForm({
+  initial,
   onConnect,
+  onSave,
   onCancel,
 }: {
-  onConnect: (params: RdpConnectParams) => void;
+  initial?: RdpProfile;
+  /** Connect with `params`; `profile` is the saved entry to upsert (null when no name was given). */
+  onConnect: (params: RdpConnectParams, profile: RdpProfile | null) => void;
+  onSave: (profile: RdpProfile) => void;
   onCancel: () => void;
 }) {
-  const [rdpForm, setRdpForm] = useState<RdpFormValues>(loadRdpForm);
+  const [rdpForm, setRdpForm] = useState<RdpFormValues>(() =>
+    initial ? fromProfile(initial) : loadRdpForm(),
+  );
+
+  /** The saved-connection entry for the current fields; `name` falls back to the host. */
+  const toProfile = (): RdpProfile => ({
+    id: initial?.id ?? newProfileId(),
+    kind: "rdp",
+    name: rdpForm.name.trim() || rdpForm.host.trim(),
+    host: rdpForm.host.trim(),
+    username: rdpForm.username.trim(),
+    backend: rdpForm.backend,
+    audio: rdpForm.audio,
+    microphone: rdpForm.microphone,
+    smallCache: rdpForm.smallCache,
+    clipboard: rdpForm.clipboard,
+    resolution: rdpForm.resolution,
+  });
+
+  const saveProfile = () => {
+    if (!rdpForm.host.trim()) return;
+    onSave(toProfile());
+  };
 
   const submitRdpForm = () => {
     if (!rdpForm.host.trim() || !rdpForm.username.trim()) return;
@@ -122,7 +170,8 @@ export function RdpForm({
       smallCache: rdpForm.smallCache,
       clipboard: rdpForm.clipboard,
     };
-    onConnect(params);
+    // Every connection is remembered (named after the host when no name is given).
+    onConnect(params, toProfile());
   };
 
   return (
@@ -134,9 +183,14 @@ export function RdpForm({
       }}
     >
       <input
+        placeholder="Name (optional, saves this connection)"
+        value={rdpForm.name}
+        onChange={(e) => setRdpForm({ ...rdpForm, name: e.target.value })}
+      />
+      <input
         placeholder="Host (host or host:port)"
         value={rdpForm.host}
-        autoFocus
+        autoFocus={!initial}
         onChange={(e) => setRdpForm({ ...rdpForm, host: e.target.value })}
       />
       <input
@@ -150,6 +204,7 @@ export function RdpForm({
         type="password"
         placeholder="Password"
         value={rdpForm.password}
+        autoFocus={!!initial}
         onChange={(e) =>
           setRdpForm({ ...rdpForm, password: e.target.value })
         }
@@ -230,6 +285,9 @@ export function RdpForm({
           ))}
         </select>
         <button type="submit">Connect</button>
+        <button type="button" onClick={saveProfile}>
+          Save
+        </button>
         <button type="button" onClick={onCancel}>
           Cancel
         </button>

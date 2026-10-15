@@ -41,6 +41,7 @@ body {
 
 .connect-form {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 10px;
   border-bottom: 1px solid #1c2430;
@@ -59,6 +60,11 @@ body {
 
 .new-console-btn:hover {
   background: #27718f;
+}
+
+/* Second row of the button group */
+.new-ssh-btn {
+  flex: 1 1 100%;
 }
 
 .thumb-toggle {
@@ -219,6 +225,66 @@ body {
 }
 
 .close-btn:hover {
+  color: #e06c75;
+}
+
+/* Saved connections: compact rows above the session list, styled like .session-card */
+.profile-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #1c2430;
+}
+
+.section-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #5c6775;
+  padding: 2px 2px 2px;
+}
+
+.profile-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: #131926;
+  border: 1px solid transparent;
+  cursor: pointer;
+  user-select: none;
+}
+
+.profile-card:hover {
+  background: #182136;
+}
+
+.profile-title {
+  flex: 1;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.profile-btn {
+  background: none;
+  border: none;
+  color: #5c6775;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.profile-btn:hover {
+  color: #7fd1e8;
+}
+
+.profile-btn.delete:hover {
   color: #e06c75;
 }
 
@@ -501,6 +567,12 @@ body {
 .rdp-form-row {
   display: flex;
   gap: 6px;
+}
+
+.rdp-form-error {
+  font-size: 11px;
+  color: #f0b5ba;
+  line-height: 1.4;
 }
 
 .rdp-form-checks {

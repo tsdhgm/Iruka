@@ -41,6 +41,7 @@ A quick check on 2026-10-13 found no problems. Still to be checked more carefull
 - [ ] Decide what to do about `/cert:ignore` (certificate verification is skipped; LAN use only).
 - [ ] Windows build of the client (FreeRDP 3 has to be built or fetched for Windows).
 - [ ] Automated UI tests; Rust unit tests exist only for small helpers.
+- [ ] Store passwords of saved connections in the OS keyring, the way Remmina's "secret" plugin does: Secret Service (GNOME Keyring / KWallet) on Linux, Credential Manager on Windows, Keychain on macOS. Plan: the Rust `keyring` crate behind two Tauri commands (get/set by profile id); the frontend profile store keeps holding no password. Until then passwords are typed on every connection.
 
 ## Done
 

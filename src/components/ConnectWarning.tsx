@@ -1,9 +1,9 @@
-import type { MemoryCheck, RdpConnectParams } from "../rdp";
+import type { MemoryCheck, RdpConnectRequest } from "../rdp";
 
 /** A pre-connect check that stopped the connection; holds the pending connection parameters. */
 export type ConnectWarning =
-  | { kind: "self"; params: RdpConnectParams }
-  | { kind: "memory"; params: RdpConnectParams; check: MemoryCheck };
+  | { kind: "self"; params: RdpConnectRequest }
+  | { kind: "memory"; params: RdpConnectRequest; check: MemoryCheck };
 
 const formatMb = (bytes: number) => `${Math.round(bytes / 1048576).toLocaleString()} MB`;
 

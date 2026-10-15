@@ -42,11 +42,15 @@ Tauri 2 + React + TypeScript. RDP uses FreeRDP 3 (IronRDP is built in as a fallb
 - **Memory check**: before connecting, the available memory is compared with an estimate of what the session needs; if there is not enough, a "Memory may run short" dialog appears with "Connect anyway" / "Cancel". The estimate is learned from actual usage. A similar dialog, "This is the local machine", appears when the host turns out to be this PC.
 - **Disconnect messages**: when a session ends, the UI shows the reason with the backend name, e.g. "Disconnected (FreeRDP): The server closed the connection" or "Connection error (FreeRDP): Connection failed: …". The backend reasons are "Disconnected", "The server closed the connection", "Connection failed: …" and "Communication error: …".
 
+### Saved connections
+
+- **Saved connections**: every connection made from the "+ SSH" or "+ RDP" form is kept in a "Saved" list in the sidebar (`localStorage` key `iruka.profiles`); "Save" stores it without connecting. The optional "Name" is the label shown in the list (the host, or `user@host`, when left empty); connecting again to the same host and user updates the entry instead of adding one. What is saved: SSH: name, host, user and port; RDP: name, host, user and the options (Backend, Audio, Microphone, Low memory, Clipboard, Resolution). Passwords are **never** saved and have to be typed each time: clicking a saved RDP connection opens the form with everything filled in except the password. "+ SSH" (and clicking a saved SSH connection) opens a console and types `ssh user@host` for you; the host-key fingerprint and password prompts are answered in the terminal. "✎" edits an entry and "×" deletes it.
+
 ### Security notes
 
 - The client passes `/cert:ignore` to FreeRDP, so server certificates are not verified (the IronRDP backend skips verification too). Use it only on a trusted LAN.
 - The password is handed to FreeRDP as an in-process `/p:` argument. It does not show up in the process list, but FreeRDP prints a warning about it; moving to the settings API is planned.
-- The connect form is persisted in `localStorage` (`iruka.rdpForm`): Host, User, Backend, Audio, Microphone, Low memory, Clipboard and Resolution. The password is **not** saved; it is cleared every time the form is loaded.
+- The connect form is persisted in `localStorage` (`iruka.rdpForm`): Host, User, Backend, Audio, Microphone, Low memory, Clipboard and Resolution. The password is **not** saved; it is cleared every time the form is loaded. Saved connections (`iruka.profiles`) hold no password either.
 
 ## Limitations and known issues
 

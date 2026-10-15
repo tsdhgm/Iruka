@@ -42,11 +42,15 @@ Tauri 2 + React + TypeScript。RDP は FreeRDP 3 を使う（予備として Iro
 - **メモリ確認**: 接続する前に空きメモリと必要量の見積もりを比べ、足りなければ「Memory may run short（メモリが足りないかもしれない）」の確認画面を出す（「Connect anyway（それでも接続）」/「Cancel」）。見積もりは、実際の使用量から学習した値を使う。接続先がこの PC 自身だったときも、同じ形の「This is the local machine（これはローカルのマシン）」の確認画面が出る。
 - **切断時のメッセージ**: セッションが終わると、理由が接続方式の名前と一緒に出る。例: 「Disconnected (FreeRDP): The server closed the connection（切断 (FreeRDP): サーバーが接続を閉じた）」「Connection error (FreeRDP): Connection failed: …（接続エラー (FreeRDP): 接続に失敗）」。バックエンドの理由は「Disconnected（切断した）」「The server closed the connection（サーバーが接続を閉じた）」「Connection failed: …（接続に失敗）」「Communication error: …（通信エラー）」の 4 つ。
 
+### 接続の保存
+
+- **接続の保存**: 「+ SSH」「+ RDP」のフォームから接続すると、毎回サイドバーの「Saved（保存済み）」一覧に残る（`localStorage` の `iruka.profiles`）。「Save（保存）」は接続せずに保存だけする。「Name（名前）」は一覧に出す表示名で、空ならホスト名（または `user@host`）になる。同じホストとユーザーに再度接続すると、増えずに上書きされる。保存するのは、SSH は名前・ホスト・ユーザー名・ポート、RDP は名前・ホスト・ユーザー名と設定項目（Backend、Audio、Microphone、Low memory、Clipboard、Resolution）。パスワードは**保存しない**ので毎回入力する。保存した RDP 接続をクリックすると、パスワード以外が埋まったフォームが開く。「+ SSH」（と保存した SSH 接続のクリック）はコンソールを開いて `ssh user@host` を代わりに打ち込む。ホスト鍵の指紋の確認とパスワードはターミナル上で答える。「✎」で編集、「×」で削除。
+
 ### セキュリティに関する注意
 
 - FreeRDP には `/cert:ignore` を渡しているので、サーバー証明書は検証しない（IronRDP バックエンドも検証しない）。信頼できる LAN の中でだけ使うこと。
 - パスワードは、プロセス内の引数 `/p:` として FreeRDP に渡す。プロセス一覧には出ないが、FreeRDP が警告を出す。設定 API への移行を予定している。
-- 接続フォームの内容は `localStorage`（`iruka.rdpForm`）に保存する。保存するのは Host、User、Backend、Audio、Microphone、Low memory、Clipboard、Resolution。パスワードは**保存しない**（フォームを読み込むたびに空にする）。
+- 接続フォームの内容は `localStorage`（`iruka.rdpForm`）に保存する。保存するのは Host、User、Backend、Audio、Microphone、Low memory、Clipboard、Resolution。パスワードは**保存しない**（フォームを読み込むたびに空にする）。保存した接続（`iruka.profiles`）にもパスワードは入らない。
 
 ## 制限事項と既知の不具合
 

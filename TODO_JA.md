@@ -41,6 +41,7 @@
 - [ ] `/cert:ignore`（証明書を検証しない。LAN 専用）の扱いを決める。
 - [ ] クライアントの Windows ビルド（FreeRDP 3 を Windows 向けに用意する必要がある）。
 - [ ] UI の自動テスト。Rust の単体テストは小さな補助関数だけ。
+- [ ] 保存した接続のパスワードを OS のキーリングに預ける（Remmina の secret プラグインと同じ方式。Linux は Secret Service（GNOME Keyring / KWallet）、Windows は資格情報マネージャー、macOS はキーチェーン）。案: Rust の `keyring` クレートを Tauri コマンド 2 つ（プロファイル ID で取得 / 保存）で包む。フロントのプロファイルには引き続きパスワードを持たせない。それまでは接続のたびに入力する。
 
 ## 完了
 
