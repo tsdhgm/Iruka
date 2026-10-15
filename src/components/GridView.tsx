@@ -75,7 +75,9 @@ export function GridView({
       const n = sessions.length;
       if (n === 0) return;
       let next = focused;
-      switch (e.key) {
+      // Shift+Tab may arrive as "ISO_Left_Tab" rather than "Tab" (WebKitGTK), so go by the
+      // physical key for Tab.
+      switch (e.code === "Tab" ? "Tab" : e.key) {
         case "ArrowLeft":
           next = Math.max(0, focused - 1);
           break;
