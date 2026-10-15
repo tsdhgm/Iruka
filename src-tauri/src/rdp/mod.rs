@@ -64,6 +64,8 @@ pub enum Command {
     Input(Vec<RdpInput>),
     /// Announce the local clipboard text (None means empty) to the remote side
     ClipboardLocal(Option<String>),
+    /// Resend the whole screen (the frontend lost or hid its copy of the frame)
+    Refresh,
     Close,
 }
 
@@ -460,6 +462,16 @@ pub async fn rdp_set_active(state: tauri::State<'_, RdpState>, id: Option<u32>) 
         let _ = tx.send(Command::ClipboardLocal(text));
     }
     Ok(())
+}
+
+/// Ask the session to resend its whole screen. Called when a session is brought back to the
+/// front: WebKit may drop the contents of a large hidden canvas, which would otherwise stay
+/// black until the remote happens to repaint every pixel.
+#[tauri::command]
+pub fn rdp_refresh(state: tauri::State<'_, RdpState>, id: u32) -> Result<(), String> {
+    let sessions = state.sessions.lock().unwrap();
+    let tx = sessions.get(&id).ok_or("session not found")?;
+    tx.send(Command::Refresh).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

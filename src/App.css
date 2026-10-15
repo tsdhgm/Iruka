@@ -359,6 +359,12 @@ body {
   border-color: #3d8fb5;
 }
 
+/* Keyboard selection (arrow keys + Enter) */
+.grid-tile.focused {
+  outline: 2px solid #7fc4e6;
+  outline-offset: -2px;
+}
+
 .grid-tile-header {
   display: flex;
   align-items: center;

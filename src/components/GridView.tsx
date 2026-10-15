@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import type { SessionInfo } from "../session";
 import { ActivityBadge } from "./ActivityBadge";
 
@@ -50,6 +50,74 @@ export function GridView({
   lastActivityRef: RefObject<Map<number, number>>;
   onSelect: (id: number) => void;
 }) {
+  // Keyboard selection: the tile that Enter would open. Starts on the active session.
+  const [focused, setFocused] = useState(() => {
+    const i = sessions.findIndex((s) => s.id === activeId);
+    return i < 0 ? 0 : i;
+  });
+  const tileRefs = useRef(new Map<number, HTMLDivElement>());
+
+  // Keep the index valid when sessions come and go.
+  const count = sessions.length;
+  useEffect(() => {
+    setFocused((i) => (count === 0 ? 0 : Math.min(i, count - 1)));
+  }, [count]);
+
+  // Arrow keys and Tab / Shift+Tab move the selection, Enter opens it. Ignored while typing in a form field.
+  const latest = useRef({ sessions, gridCols, focused, onSelect });
+  latest.current = { sessions, gridCols, focused, onSelect };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target;
+      if (t instanceof HTMLElement && ["INPUT", "SELECT", "TEXTAREA"].includes(t.tagName)) return;
+      if (e.altKey || e.ctrlKey || e.metaKey) return;
+      const { sessions, gridCols, focused, onSelect } = latest.current;
+      const n = sessions.length;
+      if (n === 0) return;
+      let next = focused;
+      switch (e.key) {
+        case "ArrowLeft":
+          next = Math.max(0, focused - 1);
+          break;
+        case "ArrowRight":
+          next = Math.min(n - 1, focused + 1);
+          break;
+        case "ArrowUp":
+          next = focused - gridCols >= 0 ? focused - gridCols : focused;
+          break;
+        case "ArrowDown":
+          next = focused + gridCols < n ? focused + gridCols : focused;
+          break;
+        case "Tab":
+          // Tab cycles forward, Shift+Tab backward, wrapping around at the ends.
+          next = (focused + (e.shiftKey ? n - 1 : 1)) % n;
+          break;
+        case "Home":
+          next = 0;
+          break;
+        case "End":
+          next = n - 1;
+          break;
+        case "Enter":
+          e.preventDefault();
+          onSelect(sessions[focused].id);
+          return;
+        default:
+          return;
+      }
+      e.preventDefault();
+      setFocused(next);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Keep the selected tile visible when it moves off screen.
+  useEffect(() => {
+    const s = sessions[focused];
+    if (s) tileRefs.current.get(s.id)?.scrollIntoView({ block: "nearest" });
+  }, [focused, sessions]);
+
   // Tiles are 16:9. Divide the main pane width by the column count (minus padding and gaps).
   const tileW = Math.max(
     80,
@@ -66,12 +134,16 @@ export function GridView({
         gap: GRID_GAP,
       }}
     >
-      {sessions.map((s) => (
+      {sessions.map((s, i) => (
         <div
           key={s.id}
-          className={`grid-tile ${s.id === activeId ? "active" : ""}`}
-          title="Click to show on its own"
+          className={`grid-tile ${s.id === activeId ? "active" : ""} ${i === focused ? "focused" : ""}`}
+          title="Click to show on its own (or select with the arrow keys or Tab and press Enter)"
           onClick={() => onSelect(s.id)}
+          ref={(el) => {
+            if (el) tileRefs.current.set(s.id, el);
+            else tileRefs.current.delete(s.id);
+          }}
         >
           <div className="grid-tile-header">
             <span className={`status-dot ${s.status}`} />

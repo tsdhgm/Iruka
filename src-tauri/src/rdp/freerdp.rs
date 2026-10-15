@@ -177,11 +177,13 @@ impl Session {
 
     fn run(&self, commands: &Receiver<Command>, sink: &mut FrameSink) -> anyhow::Result<String> {
         let mut size = (0, 0);
+        let mut refresh = false;
         loop {
             loop {
                 match commands.try_recv() {
                     Ok(Command::Input(inputs)) => inputs.into_iter().for_each(|i| self.send_input(i)),
                     Ok(Command::ClipboardLocal(text)) => self.set_local_text(text.as_deref()),
+                    Ok(Command::Refresh) => refresh = true,
                     Ok(Command::Close) | Err(TryRecvError::Disconnected) => return Ok("Disconnected".into()),
                     Err(TryRecvError::Empty) => break,
                 }
@@ -220,7 +222,18 @@ impl Session {
                         height: r[3],
                     });
                 }
-                sink.flush(&fb, status != 1)?;
+                if refresh {
+                    refresh = false;
+                    sink.damage(Rect {
+                        x: 0,
+                        y: 0,
+                        width: fb.width,
+                        height: fb.height,
+                    });
+                    sink.flush(&fb, true)?;
+                } else {
+                    sink.flush(&fb, status != 1)?;
+                }
             }
 
             match status {

@@ -93,6 +93,7 @@ fn run_session(params: &RdpConnectParams, rx: &Receiver<Command>, sink: &mut Fra
 
     loop {
         // Handle input from the frontend
+        let mut refresh = false;
         let mut fastpath_events: Vec<FastPathInputEvent> = Vec::new();
         loop {
             match rx.try_recv() {
@@ -103,6 +104,16 @@ fn run_session(params: &RdpConnectParams, rx: &Receiver<Command>, sink: &mut Fra
                 }
                 // Clipboard is not supported
                 Ok(Command::ClipboardLocal(_)) => {}
+                Ok(Command::Refresh) => {
+                    let v = view(&image);
+                    sink.damage(Rect {
+                        x: 0,
+                        y: 0,
+                        width: v.width,
+                        height: v.height,
+                    });
+                    refresh = true;
+                }
                 Ok(Command::Close) | Err(TryRecvError::Disconnected) => {
                     if let Ok(outputs) = active_stage.graceful_shutdown() {
                         for out in outputs {
@@ -182,7 +193,7 @@ fn run_session(params: &RdpConnectParams, rx: &Receiver<Command>, sink: &mut Fra
             Err(e) => return Err(anyhow::Error::new(e).context("Receive error")),
         }
 
-        sink.flush(&view(&image), false)?;
+        sink.flush(&view(&image), refresh)?;
     }
 }
 

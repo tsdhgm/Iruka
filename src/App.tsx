@@ -83,6 +83,8 @@ function App() {
           invoke("rdp_set_active", { id: null }).catch(() => {});
         } else {
           handle.canvas.focus();
+          // The canvas was hidden; WebKit may have dropped its contents, so ask for a full frame.
+          invoke("rdp_refresh", { id }).catch(() => {});
         }
       });
     }
