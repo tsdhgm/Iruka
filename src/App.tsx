@@ -36,6 +36,10 @@ function App() {
   const [showThumbs, setShowThumbs] = useState<boolean>(
     () => localStorage.getItem("iruka.showThumbs") !== "0",
   );
+  // The "Saved" list folds away so it is not clicked by mistake once many sessions are open.
+  const [savedOpen, setSavedOpen] = useState<boolean>(
+    () => localStorage.getItem("iruka.savedOpen") === "1",
+  );
   const handlesRef = useRef<Map<number, SessionHandle>>(new Map());
   const mainRef = useRef<HTMLDivElement>(null);
   const activeIdRef = useRef<number | null>(null);
@@ -486,8 +490,20 @@ function App() {
         <div className="session-list">
           {profiles.length > 0 && (
             <div className="profile-section">
-              <div className="section-label">Saved</div>
-              {profiles.map((p) => (
+              <button
+                className="section-label section-toggle"
+                title={savedOpen ? "Hide saved connections" : "Show saved connections"}
+                onClick={() =>
+                  setSavedOpen((v) => {
+                    const next = !v;
+                    localStorage.setItem("iruka.savedOpen", next ? "1" : "0");
+                    return next;
+                  })
+                }
+              >
+                <span className="section-caret">{savedOpen ? "▾" : "▸"}</span> Saved ({profiles.length})
+              </button>
+              {savedOpen && profiles.map((p) => (
                 <div
                   key={p.id}
                   className="profile-card"
