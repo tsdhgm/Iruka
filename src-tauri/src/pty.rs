@@ -53,7 +53,7 @@ pub fn spawn_session(
 
     let program = program
         .or_else(|| std::env::var("SHELL").ok())
-        .unwrap_or_else(|| "bash".into());
+        .unwrap_or_else(default_shell);
     let mut cmd = CommandBuilder::new(&program);
     cmd.args(&args);
     cmd.env("TERM", "xterm-256color");
@@ -143,6 +143,17 @@ pub fn kill_session(state: tauri::State<'_, PtyState>, id: u32) -> Result<(), St
     session.killer.kill().map_err(|e| e.to_string())
 }
 
+/// Windows has no $SHELL; a bare "bash" there resolves to System32\bash.exe, the WSL launcher.
+fn default_shell() -> String {
+    if cfg!(windows) {
+        "powershell.exe".into()
+    } else {
+        "bash".into()
+    }
+}
+
 fn dirs_home() -> Option<std::path::PathBuf> {
-    std::env::var_os("HOME").map(std::path::PathBuf::from)
+    std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(std::path::PathBuf::from)
 }

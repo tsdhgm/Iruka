@@ -2,7 +2,7 @@
 
 # Windows で Iruka を動かす（クライアント側）
 
-状態: **未着手**（2026-10-15、最初の試行の前にリポジトリから書き起こした手順）。
+状態: **手順 1 は動作**（2026-10-16、Windows 11 24H2 ビルド 26100）。手順 2（FreeRDP）は作業中。
 実際にやった結果でこのファイルを更新すること。
 
 ## 前提
@@ -23,7 +23,7 @@ PTY のコンソール、UI）が動くことを確かめる:
 git clone https://github.com/tsdhgm/Iruka.git
 cd Iruka
 npm install
-npm run tauri dev -- --no-default-features --features ironrdp
+.\node_modules\.bin\tauri.cmd dev --features ironrdp -- --no-default-features
 ```
 
 期待する結果: ウィンドウが開く。「+ Console」で PowerShell / cmd のコンソールが開く（portable-pty は
@@ -32,6 +32,30 @@ Windows の接続先につながる（音声・マイク・クリップボード
 RDPGFX がないので拒否される。KNOWN_ISSUES_JA.md 参照）。
 
 Windows で特に確認すること:
+
+### 結果（2026-10-16）
+
+環境: リポジトリの編集は WSL 内の Claude Code から行い、ビルドと実行は Windows ネイティブで行った
+（WSL 内でビルドすると Linux のバイナリになる）。Rust は `winget install Rustlang.Rustup` で入れた
+（ユーザー単位、stable `x86_64-pc-windows-msvc`）。Node.js 22、Visual Studio 2022 の C++ ツール、
+WebView2、`ssh.exe` は最初から入っていた。clone 先は `C:\Users\<user>\Foundry\Iruka`
+（WSL の git で clone。Git for Windows は不要）。初回の `cargo build` は約 7 分、警告は 4 件
+（FreeRDP 専用コードが未使用になるため）。
+
+- `npm run tauri dev -- --no-default-features …` は動かない。npm がこのフラグを Tauri CLI に渡し、
+  CLI が受け付けない。cargo のフラグは上のコマンドのように 2 つ目の `--` の後に書く。
+- ウィンドウ、UI: OK。
+- 「+ Console」: 最初は WSL の bash が開いた。Windows には `$SHELL` がなく、代わりの `bash` が
+  `System32\bash.exe`（WSL の起動用）になったため。作業フォルダもホームにならなかった（`$HOME` がない）。
+  `src-tauri/src/pty.rs` で修正: 代わりのシェルを `powershell.exe` にし、ホームは `%USERPROFILE%` も
+  見るようにした。`SHELL` を設定すれば（例: `SHELL=wsl.exe`）そちらが優先される。
+- 「+ SSH」: OK。`ssh.exe` で接続できた。
+- IronRDP で Ubuntu（GNOME Remote Desktop）へ「+ RDP」: 想定どおり拒否された（IronRDP に RDPGFX が
+  ない。エラーの末尾は "received disconnect provider ultimatum"）。同じ接続先に Windows 標準の
+  リモート デスクトップ接続ではつながる。
+- IronRDP で Windows の接続先へ: 未確認（接続先の Windows を別に用意する）。
+
+まだ確認していないこと:
 
 - 表示切り替えキー（右 Alt）とウィンドウ全体のキー監視は GNOME / Wayland でしか試していない。
   Windows では配列によって右 Alt が AltGr になる。

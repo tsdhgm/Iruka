@@ -2,7 +2,7 @@
 
 # Running Iruka on Windows (client side)
 
-Status: **not tried yet** (written 2026-10-15 from the repository, before the first attempt).
+Status: **step 1 works** (2026-10-16, Windows 11 24H2 build 26100); step 2 (FreeRDP) in progress.
 Update this file with what actually happened.
 
 ## Prerequisites
@@ -23,7 +23,7 @@ The C bridge needs FreeRDP 3, which Windows does not ship. First confirm that ev
 git clone https://github.com/tsdhgm/Iruka.git
 cd Iruka
 npm install
-npm run tauri dev -- --no-default-features --features ironrdp
+.\node_modules\.bin\tauri.cmd dev --features ironrdp -- --no-default-features
 ```
 
 Expected: the window opens, "+ Console" opens a PowerShell/cmd console (portable-pty uses ConPTY),
@@ -32,6 +32,30 @@ Expected: the window opens, "+ Console" opens a PowerShell/cmd console (portable
 RDPGFX; see KNOWN_ISSUES.md).
 
 Things to check on Windows specifically:
+
+### Result (2026-10-16)
+
+Setup: the repository was edited from Claude Code inside WSL, but built and run natively on Windows
+(a build inside WSL produces a Linux binary). Rust was installed with
+`winget install Rustlang.Rustup` (per user, stable `x86_64-pc-windows-msvc`); Node.js 22,
+Visual Studio 2022 C++ tools, WebView2 and `ssh.exe` were already present. The clone lives at
+`C:\Users\<user>\Foundry\Iruka` (cloned with WSL's git; Git for Windows is not required).
+First `cargo build`: about 7 minutes, 4 dead-code warnings (FreeRDP-only code).
+
+- `npm run tauri dev -- --no-default-features …` does not work: npm passes the flag to the Tauri
+  CLI, which rejects it. Cargo flags go after a second `--`, as in the command above.
+- Window, UI: OK.
+- "+ Console": first opened WSL bash, because `$SHELL` is unset on Windows and the fallback `bash`
+  resolved to `System32\bash.exe` (the WSL launcher); the working directory was not the home folder
+  (`$HOME` unset). Fixed in `src-tauri/src/pty.rs`: the fallback is now `powershell.exe` and the home
+  folder falls back to `%USERPROFILE%`. Setting `SHELL` (for example `SHELL=wsl.exe`) still overrides.
+- "+ SSH": OK, `ssh.exe` connects.
+- "+ RDP" with IronRDP to Ubuntu (GNOME Remote Desktop): refused as expected (no RDPGFX in IronRDP;
+  the error ends in "received disconnect provider ultimatum"). The built-in Windows Remote Desktop
+  client connects to the same target.
+- IronRDP to a Windows target: not tried yet (a separate Windows target will be prepared).
+
+Still to check:
 
 - The view-toggle key (right Alt) and the window-level key listener were only tested on
   GNOME/Wayland. On Windows, right Alt is AltGr on some layouts.

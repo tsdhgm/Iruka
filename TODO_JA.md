@@ -39,7 +39,9 @@
 - [ ] パスワードを、プロセス内の `/p:` 引数ではなく FreeRDP の設定 API で渡す（デバッグ中は今のまま。FreeRDP が警告を出す）。
 - [ ] `iruka_perf` / `iruka_mem` のデバッグログを明示的に有効にしたときだけ出す（今は `src-tauri/src/lib.rs` の既定フィルターで有効）。
 - [ ] `/cert:ignore`（証明書を検証しない。LAN 専用）の扱いを決める。
-- [ ] クライアントの Windows ビルド（FreeRDP 3 を Windows 向けに用意する必要がある）。手順とメモ: docs/windows-client_JA.md。
+- [ ] クライアントの Windows ビルド（FreeRDP 3 を Windows 向けに用意する必要がある）。手順とメモ: docs/windows-client_JA.md。手順 1（IronRDP のみ）は動作。次は vcpkg の FreeRDP。
+- [ ] Windows クライアント: IronRDP で Windows の接続先へ、右 Alt の表示切り替え、全画面、上から降りるツールバー、クリップボード（接続先の Windows を別に用意する）。
+- [ ] コンソールのプロファイル: コンソールごとにシェルを選べるようにする（PowerShell、cmd、WSL、bash など）。今は `$SHELL`、なければ Windows では `powershell.exe`、それ以外は `bash`。
 - [ ] UI の自動テスト。Rust の単体テストは小さな補助関数だけ。
 - [ ] 保存した接続のパスワードを OS のキーリングに預ける（Remmina の secret プラグインと同じ方式。Linux は Secret Service（GNOME Keyring / KWallet）、Windows は資格情報マネージャー、macOS はキーチェーン）。案: Rust の `keyring` クレートを Tauri コマンド 2 つ（プロファイル ID で取得 / 保存）で包む。フロントのプロファイルには引き続きパスワードを持たせない。それまでは接続のたびに入力する。
 
