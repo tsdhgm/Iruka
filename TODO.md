@@ -44,7 +44,10 @@ A quick check on 2026-10-13 found no problems. Still to be checked more carefull
 - [ ] Windows installer: ship the FreeRDP / OpenSSL DLLs (with `legacy.dll`) in `bundle.resources`, and set `OPENSSL_MODULES` at startup (KNOWN_ISSUES.md).
   - Distribution plan: unsigned for now; publish both a Tauri NSIS installer and a portable zip (exe + DLLs, no install or admin rights; WebView2 is preinstalled on Windows 11). The README says: if SmartScreen warns, choose "More info → Run anyway".
   - A zip does not avoid SmartScreen: Explorer carries the Mark of the Web over to extracted files. Signing alone does not either: EV no longer grants instant reputation and every new build starts at zero.
-  - For wider distribution later: Azure Artifact Signing (about $10/month; individuals only in the US/Canada, organisations also in Japan), a free OSS signing service such as SignPath Foundation, or the Microsoft Store.
+  - For wider distribution later:
+    - Azure Artifact Signing: paid (about $10/month), no free tier for open source; free, trial and sponsored Azure subscriptions are refused. Individuals only in the US/Canada; the list of eligible countries for organisations differs between sources (with or without Japan), so check Microsoft's page before relying on it.
+    - SignPath Foundation (not a Microsoft programme; Microsoft's docs point open source projects to it): free for qualifying open source projects built in CI/CD. The publisher shown by Windows becomes "SignPath Foundation", and each release needs a manual approval on SignPath.
+    - The Microsoft Store.
 - [ ] Console profiles: let the user pick the shell per console (PowerShell, cmd, WSL, bash, …). Today it is `$SHELL`, else `powershell.exe` on Windows and `bash` elsewhere.
 - [ ] Automated UI tests; Rust unit tests exist only for small helpers.
 - [ ] Store passwords of saved connections in the OS keyring, the way Remmina's "secret" plugin does: Secret Service (GNOME Keyring / KWallet) on Linux, Credential Manager on Windows, Keychain on macOS. Plan: the Rust `keyring` crate behind two Tauri commands (get/set by profile id); the frontend profile store keeps holding no password. Until then passwords are typed on every connection.
