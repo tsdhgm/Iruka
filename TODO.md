@@ -42,6 +42,9 @@ A quick check on 2026-10-13 found no problems. Still to be checked more carefull
 - [ ] Windows client memory: about 1.6 GB `used_mb` with one 3840×2160 session, and memory not returned after closing a session. Compare with the Linux client measured the same way.
 - [ ] Audio playback from Ubuntu (GNOME Remote Desktop) stays on the remote although the client loads its audio backend (seen from the Windows client; microphone works). Postponed; compare with the Linux client (docs/windows-client-log.md).
 - [ ] Windows installer: ship the FreeRDP / OpenSSL DLLs (with `legacy.dll`) in `bundle.resources`, and set `OPENSSL_MODULES` at startup (KNOWN_ISSUES.md).
+  - Distribution plan: unsigned for now; publish both a Tauri NSIS installer and a portable zip (exe + DLLs, no install or admin rights; WebView2 is preinstalled on Windows 11). The README says: if SmartScreen warns, choose "More info → Run anyway".
+  - A zip does not avoid SmartScreen: Explorer carries the Mark of the Web over to extracted files. Signing alone does not either: EV no longer grants instant reputation and every new build starts at zero.
+  - For wider distribution later: Azure Artifact Signing (about $10/month; individuals only in the US/Canada, organisations also in Japan), a free OSS signing service such as SignPath Foundation, or the Microsoft Store.
 - [ ] Console profiles: let the user pick the shell per console (PowerShell, cmd, WSL, bash, …). Today it is `$SHELL`, else `powershell.exe` on Windows and `bash` elsewhere.
 - [ ] Automated UI tests; Rust unit tests exist only for small helpers.
 - [ ] Store passwords of saved connections in the OS keyring, the way Remmina's "secret" plugin does: Secret Service (GNOME Keyring / KWallet) on Linux, Credential Manager on Windows, Keychain on macOS. Plan: the Rust `keyring` crate behind two Tauri commands (get/set by profile id); the frontend profile store keeps holding no password. Until then passwords are typed on every connection.

@@ -42,6 +42,9 @@
 - [ ] Windows クライアントのメモリ: 3840×2160 を 1 本で `used_mb` 約 1.6 GB、セッションを閉じてもメモリが戻らない。同じ測り方で Linux 版と比べる。
 - [ ] Ubuntu（GNOME Remote Desktop）の音声が、クライアントは音声の出力先を読み込んでいるのにリモート側で鳴ったまま（Windows クライアントで確認。マイクは動く）。後回し。Linux 版と比べる（docs/windows-client-log_JA.md）。
 - [ ] Windows のインストーラー: FreeRDP / OpenSSL の DLL（`legacy.dll` を含む）を `bundle.resources` で同梱し、起動時に `OPENSSL_MODULES` を設定する（KNOWN_ISSUES_JA.md）。
+  - 配布の方針: 当面は署名なし。Tauri の NSIS インストーラーとポータブル zip（exe と DLL。インストールも管理者権限も不要。WebView2 は Windows 11 に入っている）の両方を出す。README に「SmartScreen の警告が出たら『詳細情報 → 実行』」と書く。
+  - zip でも SmartScreen は避けられない: エクスプローラーで展開すると Mark of the Web が引き継がれる。署名だけでも避けられない: EV でも最初から評判は付かず、ビルドごとに評判はゼロから。
+  - 広く配布するときの選択肢: Azure Artifact Signing（月 $10 程度。個人は米国・カナダのみ、法人は日本も対象）、OSS 向けの無料署名（SignPath Foundation など）、Microsoft Store。
 - [ ] コンソールのプロファイル: コンソールごとにシェルを選べるようにする（PowerShell、cmd、WSL、bash など）。今は `$SHELL`、なければ Windows では `powershell.exe`、それ以外は `bash`。
 - [ ] UI の自動テスト。Rust の単体テストは小さな補助関数だけ。
 - [ ] 保存した接続のパスワードを OS のキーリングに預ける（Remmina の secret プラグインと同じ方式。Linux は Secret Service（GNOME Keyring / KWallet）、Windows は資格情報マネージャー、macOS はキーチェーン）。案: Rust の `keyring` クレートを Tauri コマンド 2 つ（プロファイル ID で取得 / 保存）で包む。フロントのプロファイルには引き続きパスワードを持たせない。それまでは接続のたびに入力する。
