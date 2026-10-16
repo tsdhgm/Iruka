@@ -12,13 +12,20 @@ KNOWN_ISSUES.md and TODO.md.
 
 ## Current hand-off (keep this section up to date at the end of each session)
 
-- **2026-10-16: the Windows client works** (development build, FreeRDP 3.32.1 from vcpkg, connected
-  to GNOME Remote Desktop). Procedure: docs/windows-client.md; history: docs/windows-client-log.md.
-  On the Windows machine Claude Code runs in WSL and drives the build through `powershell.exe`, with
-  the clone at `C:\Users\tosihide\Foundry\Iruka` and the environment in
-  `C:\Users\tosihide\Foundry\iruka-env.ps1` (see "Developing from WSL" in that doc).
-- **Next**: Windows target works with FreeRDP (NLA, audio, microphone, clipboard). IronRDP to Windows,
-  right Alt and fullscreen work too. Left: the memory comparison with Linux, and an installer. Keep appending to docs/windows-client-log.md.
+- **2026-10-16: the Windows client works** (FreeRDP 3.32.1 from vcpkg, IronRDP now labelled
+  experimental). Checked against Ubuntu GNOME Remote Desktop and a Windows target: NLA, audio,
+  microphone, clipboard, right Alt, fullscreen. A portable zip (unsigned, for the user's own use) is
+  built and verified; the installer is postponed (distribution and signing notes in TODO.md).
+  Procedure: docs/windows-client.md; history with the dead ends: docs/windows-client-log.md (keep
+  appending to it).
+- **Windows machine setup**: Claude Code runs in WSL and drives the build through `powershell.exe`.
+  Clone at `C:\Users\tosihide\Foundry\Iruka` (remotes `wsl` = the WSL repository, `origin` = GitHub;
+  commit in WSL, then `git pull wsl main` there), vcpkg at `C:\Users\tosihide\Foundry\vcpkg`,
+  environment in `C:\Users\tosihide\Foundry\iruka-env.ps1`, zips in `C:\Users\tosihide\Foundry\dist`.
+  Stop `tauri dev` before touching the Windows clone. See "Developing from WSL" in docs/windows-client.md.
+- **Next (the user is moving back to Ubuntu)**: a `.deb` or tarball/AppImage for the user's own use;
+  compare memory use with the Windows figures (about 1.6 GB `used_mb` for one 4K session, not
+  returned after closing); Ubuntu audio playback staying on the remote (compare with the Linux client).
 - Tested so far: clients on Ubuntu 26.04 LTS and Windows 11 24H2; targets Windows 11 Pro, Ubuntu
   GNOME Remote Desktop, Apple Silicon Mac running clintcan/macrdp.
 - Open items live in TODO.md; do not keep a separate list elsewhere.
