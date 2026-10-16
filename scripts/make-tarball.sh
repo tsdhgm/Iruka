@@ -36,6 +36,7 @@ cp "$exe" "$stage/iruka"
 cp LICENSE "$stage/LICENSE"
 cp src-tauri/icons/icon.png "$stage/iruka.png"
 cp scripts/install-desktop-entry.sh "$stage/install-desktop-entry.sh"
+cp scripts/check-deps.sh "$stage/check-deps.sh"
 
 # FreeRDP 3 and WinPR: copy the real files under their soname, as the loader asks for them.
 for entry in $(ldd "$exe" | awk '/freerdp|winpr/ { print $1 "=" $3 }'); do
@@ -51,6 +52,18 @@ done
 
 # DT_RPATH (not RUNPATH) so that it also applies when a bundled library loads another one.
 patchelf --force-rpath --set-rpath '$ORIGIN/lib' "$stage/iruka"
+
+# soname -> Debian package table for check-deps.sh, from everything the binary loads here.
+if command -v dpkg-query >/dev/null; then
+	tmp=$(mktemp -d)
+	ldd "$stage/iruka" | awk '$3 ~ /^\// { print $1, $3 }' > "$tmp/sonames"
+	# shellcheck disable=SC2046
+	dpkg-query -S $(awk '{ print $2 }' "$tmp/sonames") 2>/dev/null | sed 's/^\([^:]*\):[^:]*: /\1 /' > "$tmp/pkgs"
+	awk 'NR == FNR { pkg[$2] = $1; next } ($2 in pkg) && $1 !~ /^lib(freerdp|winpr)/ { print $1, pkg[$2] }' \
+		"$tmp/pkgs" "$tmp/sonames" | sort > "$stage/lib/packages.txt"
+	rm -rf "$tmp"
+	echo "   recorded $(wc -l < "$stage/lib/packages.txt") library -> package entries in lib/packages.txt"
+fi
 
 # What the bundled libraries need from the distribution (from the Debian package metadata).
 deps=""
@@ -70,11 +83,15 @@ Run:
 No installation is needed. The binary finds the libraries in lib/ through its RPATH
 (\$ORIGIN/lib), so the folder can live anywhere; do not separate iruka from lib/.
 
+If it does not start, see which system libraries are missing and how to install them:
+    ./check-deps.sh
+
 Optional: add Iruka to the application menu and give it its dock icon:
     ./install-desktop-entry.sh
 
 Bundled in lib/: FreeRDP 3 ($freerdp_version), Apache-2.0, see lib/FreeRDP.copyright.
-Expected from the distribution (all present on an Ubuntu desktop):
+Expected from the distribution (all present on an Ubuntu desktop; tested on GNOME, should
+also work on KDE and other desktops since Iruka is a GTK 3 / WebKitGTK application):
     GTK 3 and WebKitGTK 4.1 (libgtk-3-0t64, libwebkit2gtk-4.1-0)
     FreeRDP's own dependencies: $deps
 

@@ -66,19 +66,38 @@ See [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
 - [docs/code-notes.md](docs/code-notes.md): design notes and known weak spots (architecture, threading and the FFI boundary, conventions).
 - [TODO.md](TODO.md): open tasks and things still to verify.
 
-## Installing on Linux (tarball)
+## Installing on Linux
 
-Build a self-contained tarball on an Ubuntu machine that has the development requirements below plus `patchelf`:
+Both packages are built on an Ubuntu machine that has the development requirements below. Iruka is a
+GTK 3 / WebKitGTK application, so it is not tied to GNOME; it has only been tested on GNOME (Wayland),
+and KDE or other desktops are untested.
+
+### Debian package (recommended on Ubuntu)
 
 ```sh
-scripts/make-tarball.sh      # -> release/iruka-<version>-linux-x86_64.tar.gz
+scripts/make-deb.sh                          # -> release/iruka_<version>_amd64.deb
+sudo apt install ./release/iruka_0.1.0_amd64.deb
 ```
 
-Extract it anywhere and run `./iruka`. The FreeRDP 3 libraries are bundled in `lib/` and found through
-the binary's RPATH (`$ORIGIN/lib`), so nothing has to be installed or added to `PATH` / `LD_LIBRARY_PATH`.
-GTK 3, WebKitGTK 4.1 and FreeRDP's own dependencies are expected from the distribution (an Ubuntu
-desktop has them; the tarball's `README.txt` lists them). `./install-desktop-entry.sh` inside the
-extracted folder adds Iruka to the application menu with its icon.
+The package depends on Ubuntu's own FreeRDP 3 (`libfreerdp-client3-3`), WebKitGTK and GTK packages, so
+apt installs whatever is missing and keeps FreeRDP updated. It installs `/usr/bin/iruka`, the desktop
+entry and the icon.
+
+### Tarball (no installation, no root)
+
+Needs `patchelf` on the build machine:
+
+```sh
+scripts/make-tarball.sh                      # -> release/iruka-<version>-linux-x86_64.tar.gz
+```
+
+Extract it anywhere and run `./iruka`. The FreeRDP 3 libraries (a copy of Ubuntu's, frozen at the
+version on the build machine) are bundled in `lib/` and found through the binary's RPATH (`$ORIGIN/lib`),
+so nothing has to be installed or added to `PATH` / `LD_LIBRARY_PATH`. GTK 3, WebKitGTK 4.1 and
+FreeRDP's own dependencies are expected from the distribution; an Ubuntu desktop has them all. There is
+no dependency check at install time, so if `./iruka` does not start, run `./check-deps.sh`: it lists the
+missing libraries and the `apt install` line for them. `./install-desktop-entry.sh` adds Iruka to the
+application menu with its icon.
 
 ## Development
 

@@ -41,7 +41,7 @@ A quick check on 2026-10-13 found no problems. Still to be checked more carefull
 - [ ] Decide what to do about `/cert:ignore` (certificate verification is skipped; LAN use only).
 - [ ] Windows client memory: about 1.6 GB `used_mb` with one 3840×2160 session, and memory not returned after closing a session. Compare with the Linux client measured the same way.
 - [ ] Audio playback from Ubuntu (GNOME Remote Desktop) stays on the remote although the client loads its audio backend (seen from the Windows client; microphone works). Postponed; compare with the Linux client (docs/windows-client-log.md).
-- [ ] Linux `.deb` / AppImage, if the tarball (done 2026-10-16) is not enough: `tauri build --bundles deb` with `bundle.linux.deb.depends` for the FreeRDP 3 libraries.
+- [ ] Try Iruka on KDE (or another non-GNOME desktop): window icon matching via `StartupWMClass`, the right-Alt toggle, clipboard.
 - [ ] Windows installer: ship the FreeRDP / OpenSSL DLLs (with `legacy.dll`) in `bundle.resources`, and set `OPENSSL_MODULES` at startup (KNOWN_ISSUES.md).
   - Distribution plan: unsigned for now; publish both a Tauri NSIS installer and a portable zip (exe + DLLs, no install or admin rights; WebView2 is preinstalled on Windows 11). The README says: if SmartScreen warns, choose "More info → Run anyway".
   - A zip does not avoid SmartScreen: Explorer carries the Mark of the Web over to extracted files. Signing alone does not either: EV no longer grants instant reputation and every new build starts at zero.
@@ -55,7 +55,7 @@ A quick check on 2026-10-13 found no problems. Still to be checked more carefull
 
 ## Done
 
-- [x] 2026-10-16: self-contained Linux tarball (`scripts/make-tarball.sh`: release binary with RPATH `$ORIGIN/lib`, FreeRDP 3 libraries in `lib/`).
+- [x] 2026-10-16: Linux packages: `.deb` (`scripts/make-deb.sh`, depends on Ubuntu's FreeRDP 3) and a self-contained tarball (`scripts/make-tarball.sh`: RPATH `$ORIGIN/lib`, FreeRDP 3 libraries in `lib/`, `check-deps.sh`).
 - [x] 2026-10-16: Windows portable zip for the user's own use (docs/windows-client.md, "Portable zip").
 - [x] 2026-10-16: Windows client against a Windows target: FreeRDP (NLA, audio, microphone, clipboard) and IronRDP; right Alt toggle, fullscreen and the drop-down toolbar work (docs/windows-client.md).
 - [x] 2026-10-16: Windows build of the client, development build with FreeRDP 3.32.1 from vcpkg; connects to GNOME Remote Desktop (docs/windows-client.md).

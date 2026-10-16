@@ -31,6 +31,14 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "linux": {
+      "deb": {
+        "depends": [
+          "libfreerdp-client3-3"
+        ],
+        "desktopTemplate": "linux/iruka.desktop"
+      }
+    }
   }
 }

@@ -23,10 +23,12 @@ KNOWN_ISSUES.md and TODO.md.
   commit in WSL, then `git pull wsl main` there), vcpkg at `C:\Users\tosihide\Foundry\vcpkg`,
   environment in `C:\Users\tosihide\Foundry\iruka-env.ps1`, zips in `C:\Users\tosihide\Foundry\dist`.
   Stop `tauri dev` before touching the Windows clone. See "Developing from WSL" in docs/windows-client.md.
-- **2026-10-16, back on Ubuntu: self-contained Linux tarball done** (`scripts/make-tarball.sh`:
-  release binary with RPATH `$ORIGIN/lib`, FreeRDP 3 libraries in `lib/`, README.txt, desktop-entry
-  script; verified to start from another folder with the bundled libraries). `.deb` / AppImage only
-  if the tarball turns out not to be enough.
+- **2026-10-16, back on Ubuntu: Linux packages done.** `scripts/make-deb.sh` (deb depending on
+  Ubuntu's `libfreerdp-client3-3`; desktop template `src-tauri/linux/iruka.desktop` sets
+  `StartupWMClass` to the identifier because `enableGTKAppId` makes that the Wayland app id) and
+  `scripts/make-tarball.sh` (release binary with RPATH `$ORIGIN/lib`, FreeRDP 3 libraries in `lib/`,
+  `check-deps.sh` with a soname -> package table, desktop-entry script). Release binaries are stripped
+  (`[profile.release] strip = true`). Only GNOME (Wayland) is tested; KDE is in TODO.md.
 - **Next**: compare memory use with the Windows figures (about 1.6 GB `used_mb` for one 4K session,
   not returned after closing); Ubuntu audio playback staying on the remote (compare with the Linux
   client).
@@ -64,4 +66,5 @@ npx tsc --noEmit -p tsconfig.json && npm run build
 ```
 
 `scripts/install-desktop-entry.sh` registers the dev build's icon with a Linux desktop (optional).
-`scripts/make-tarball.sh` builds the self-contained Linux tarball (release binary + FreeRDP libraries, RPATH `$ORIGIN/lib`).
+`scripts/make-deb.sh` builds the Debian package; `scripts/make-tarball.sh` the self-contained tarball
+(release binary + FreeRDP libraries, RPATH `$ORIGIN/lib`). Both land in `release/` (ignored).

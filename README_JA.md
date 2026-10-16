@@ -66,19 +66,37 @@ Tauri 2 + React + TypeScript。RDP は FreeRDP 3 を使う（予備として Iro
 - [docs/code-notes_JA.md](docs/code-notes_JA.md): 設計メモと弱いところ（構成、スレッドと FFI の境界、決めごと）。
 - [TODO_JA.md](TODO_JA.md): 残っている課題と、これから確認すること。
 
-## Linux へのインストール（tar アーカイブ）
+## Linux へのインストール
 
-下の開発環境に `patchelf` を足した Ubuntu で、自己完結の tar アーカイブを作れる:
+どちらのパッケージも、下の開発環境を入れた Ubuntu で作る。Iruka は GTK 3 / WebKitGTK のアプリなので
+GNOME 専用ではないが、試したのは GNOME（Wayland）だけで、KDE などのデスクトップは未検証。
+
+### Debian パッケージ（Ubuntu ではこちらを推奨）
 
 ```sh
-scripts/make-tarball.sh      # -> release/iruka-<version>-linux-x86_64.tar.gz
+scripts/make-deb.sh                          # -> release/iruka_<version>_amd64.deb
+sudo apt install ./release/iruka_0.1.0_amd64.deb
 ```
 
-どこかに展開して `./iruka` を実行するだけでよい。FreeRDP 3 のライブラリは `lib/` に同梱してあり、
-バイナリの RPATH（`$ORIGIN/lib`）で見つかるので、インストールも `PATH` / `LD_LIBRARY_PATH` の設定も要らない。
-GTK 3、WebKitGTK 4.1 と FreeRDP 自身が依存するライブラリはディストリビューションのものを使う
-（Ubuntu のデスクトップには入っている。アーカイブ内の `README.txt` に一覧がある）。展開したフォルダの
-`./install-desktop-entry.sh` を実行すると、アプリ一覧にアイコン付きで登録される。
+パッケージは Ubuntu 自身の FreeRDP 3（`libfreerdp-client3-3`）、WebKitGTK、GTK に依存するので、足りない
+ものは apt が入れ、FreeRDP の更新も apt が面倒を見る。`/usr/bin/iruka`、デスクトップエントリ、アイコンが
+入る。
+
+### tar アーカイブ（インストール不要、root 不要）
+
+作る側の Ubuntu に `patchelf` が要る:
+
+```sh
+scripts/make-tarball.sh                      # -> release/iruka-<version>-linux-x86_64.tar.gz
+```
+
+どこかに展開して `./iruka` を実行するだけでよい。FreeRDP 3 のライブラリ（Ubuntu のもののコピー。作った
+ときのバージョンで固定）は `lib/` に同梱してあり、バイナリの RPATH（`$ORIGIN/lib`）で見つかるので、
+インストールも `PATH` / `LD_LIBRARY_PATH` の設定も要らない。GTK 3、WebKitGTK 4.1 と FreeRDP 自身が依存する
+ライブラリはディストリビューションのものを使う（Ubuntu のデスクトップには全部入っている）。インストール時の
+依存チェックはないので、`./iruka` が起動しないときは `./check-deps.sh` を実行する。足りないライブラリと、
+それを入れる `apt install` の一行を表示する。`./install-desktop-entry.sh` を実行すると、アプリ一覧に
+アイコン付きで登録される。
 
 ## 開発
 

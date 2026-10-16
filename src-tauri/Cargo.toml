@@ -52,3 +52,7 @@ ironrdp = [
     "dep:x509-cert",
     "dep:rustls",
 ]
+
+[profile.release]
+# Packaged builds (deb, tarball) ship this binary; symbols are only needed in dev builds.
+strip = true
