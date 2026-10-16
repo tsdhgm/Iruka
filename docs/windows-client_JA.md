@@ -2,6 +2,8 @@
 
 # Windows で Iruka を動かす（クライアント側）
 
+試行錯誤を含む作業記録: [windows-client-log_JA.md](windows-client-log_JA.md)。
+
 状態: **手順 1 は動作**（2026-10-16、Windows 11 24H2 ビルド 26100）。手順 2（FreeRDP）は作業中。
 実際にやった結果でこのファイルを更新すること。
 

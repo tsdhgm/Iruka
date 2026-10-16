@@ -2,6 +2,8 @@
 
 # Running Iruka on Windows (client side)
 
+Work log with the dead ends: [windows-client-log.md](windows-client-log.md).
+
 Status: **step 1 works** (2026-10-16, Windows 11 24H2 build 26100); step 2 (FreeRDP) in progress.
 Update this file with what actually happened.
 
