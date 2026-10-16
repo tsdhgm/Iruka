@@ -40,6 +40,7 @@ A quick check on 2026-10-13 found no problems. Still to be checked more carefull
 - [ ] Make the `iruka_perf` / `iruka_mem` debug logging opt-in (today the default filter in `src-tauri/src/lib.rs` enables it).
 - [ ] Decide what to do about `/cert:ignore` (certificate verification is skipped; LAN use only).
 - [ ] Windows client: a Windows target (FreeRDP with NTLM, and IronRDP), audio and microphone, right Alt view toggle, fullscreen, drop-down toolbar (a separate Windows target will be prepared). See docs/windows-client.md.
+- [ ] Windows client: audio playback from Ubuntu stays on the remote (microphone works). Postponed; first compare with the Linux client, then retry with `WLOG_FILTER` for rdpsnd (docs/windows-client-log.md).
 - [ ] Windows installer: ship the FreeRDP / OpenSSL DLLs (with `legacy.dll`) in `bundle.resources`, and set `OPENSSL_MODULES` at startup (KNOWN_ISSUES.md).
 - [ ] Console profiles: let the user pick the shell per console (PowerShell, cmd, WSL, bash, …). Today it is `$SHELL`, else `powershell.exe` on Windows and `bash` elsewhere.
 - [ ] Automated UI tests; Rust unit tests exist only for small helpers.
