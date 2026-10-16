@@ -4,7 +4,7 @@
 
 Status: **works with FreeRDP** (2026-10-16, Windows 11 24H2 build 26100, development build).
 Connected to Ubuntu (GNOME Remote Desktop) through FreeRDP 3.32.1 from vcpkg; no change to
-`build.rs` or the C bridge was needed. Also connected to a Windows target (NLA, audio, microphone, clipboard). Not yet tried: IronRDP to Windows, an installer.
+`build.rs` or the C bridge was needed. Also connected to a Windows target (NLA, audio, microphone, clipboard). IronRDP to Windows works too. Not yet tried: an installer.
 The step-by-step history with the dead ends is in [windows-client-log.md](windows-client-log.md).
 
 ## Prerequisites
@@ -76,13 +76,15 @@ Claude Code can run inside WSL and drive the Windows build:
 | Audio playback from Ubuntu | the sound stays on the remote, although the WinMM backend is loaded; probably GNOME Remote Desktop behaviour, not yet compared with the Linux client |
 | FreeRDP → Windows (3840×2160, NLA / NTLM) | OK |
 | Audio, microphone, clipboard with a Windows target | OK (sound played locally, microphone reaches the remote, clipboard both ways) |
+| IronRDP → Windows | OK (no audio / microphone, as on Linux: only wired for FreeRDP) |
+| Right Alt view toggle | OK (Japanese layout; AltGr layouts not tried) |
+| Fullscreen, drop-down toolbar | OK |
 | IronRDP → Ubuntu | refused, as on Linux (IronRDP has no RDPGFX) |
 | Memory (`iruka_mem`) | about 390 MB with no session; about 1.0 GB with two 1920×1080 sessions; about 1.6 GB with one 3840×2160 session; not returned after a session closes (not yet compared with Linux) |
 
 ## Not yet checked
 
-- IronRDP to a Windows target.
-- Right Alt view toggle (AltGr on some layouts), fullscreen, the drop-down toolbar.
+- Right Alt view toggle on layouts where it is AltGr.
 - An installer: the FreeRDP / OpenSSL DLLs, including `legacy.dll`, must ship next to `iruka.exe`
   (`bundle.resources` in the Tauri configuration), and `OPENSSL_MODULES` must point at them —
   probably set by Iruka itself at startup.

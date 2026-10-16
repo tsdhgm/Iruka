@@ -39,7 +39,6 @@
 - [ ] パスワードを、プロセス内の `/p:` 引数ではなく FreeRDP の設定 API で渡す（デバッグ中は今のまま。FreeRDP が警告を出す）。
 - [ ] `iruka_perf` / `iruka_mem` のデバッグログを明示的に有効にしたときだけ出す（今は `src-tauri/src/lib.rs` の既定フィルターで有効）。
 - [ ] `/cert:ignore`（証明書を検証しない。LAN 専用）の扱いを決める。
-- [ ] Windows クライアント: IronRDP で Windows の接続先へ、右 Alt の表示切り替え、全画面、上から降りるツールバー。docs/windows-client_JA.md 参照。
 - [ ] Windows クライアントのメモリ: 3840×2160 を 1 本で `used_mb` 約 1.6 GB、セッションを閉じてもメモリが戻らない。同じ測り方で Linux 版と比べる。
 - [ ] Ubuntu（GNOME Remote Desktop）の音声が、クライアントは音声の出力先を読み込んでいるのにリモート側で鳴ったまま（Windows クライアントで確認。マイクは動く）。後回し。Linux 版と比べる（docs/windows-client-log_JA.md）。
 - [ ] Windows のインストーラー: FreeRDP / OpenSSL の DLL（`legacy.dll` を含む）を `bundle.resources` で同梱し、起動時に `OPENSSL_MODULES` を設定する（KNOWN_ISSUES_JA.md）。
@@ -49,6 +48,7 @@
 
 ## 完了
 
+- [x] 2026-10-16: Windows クライアントから Windows の接続先へ: FreeRDP（NLA、音声、マイク、クリップボード）と IronRDP。右 Alt、全画面、ドロップダウンのツールバーも動作（docs/windows-client_JA.md）。
 - [x] 2026-10-16: クライアントの Windows ビルド。vcpkg の FreeRDP 3.32.1 で開発ビルドが動作し、GNOME Remote Desktop に接続できた（docs/windows-client_JA.md）。
 - [x] 2026-10-13: clintcan/macrdp 経由で Mac に接続。Iruka の変更なし（docs/mac-target_JA.md）。
 - [x] 2026-10-13: 4K セッション 2 本での segfault を修正（動的チャネルを poll のスレッドで処理）。

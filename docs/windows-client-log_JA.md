@@ -126,6 +126,15 @@ Windows でクライアントとして Iruka を動かすまでの作業を、�
   Ubuntu 1 本で約 760〜780。そのセッションを閉じた後も約 1,010（戻らない）。3840×2160 の
   Windows 1 本で約 1,580〜1,630。
 
+### 接続先 Windows（IronRDP）と残りの UI 確認
+
+- IronRDP → Windows: 接続できた。
+- IronRDP では音声の再生とマイクは動かない。想定どおり: Iruka が音声、マイク、Low memory、
+  クリップボードをつないでいるのは FreeRDP だけ（README）。ユーザーの意見: IronRDP 自体がまだ
+  実装途上なので、「experimental」扱いでよいかもしれない。
+- 右 Alt の表示切り替え: 動いた（ここでは日本語配列。AltGr になる配列は試していない）。
+- 全画面と、上部中央のドロップダウンのツールバー: 動いた。
+
 ### まとめを作成
 
 - [windows-client_JA.md](windows-client_JA.md) を、うまくいった手順のまとめとして書き直した。

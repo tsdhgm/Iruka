@@ -126,6 +126,15 @@ The cleaned-up procedure is in [windows-client.md](windows-client.md).
   one 1920×1080 Ubuntu session; about 1,010 after that session was closed (not returned);
   about 1,580–1,630 with one 3840×2160 Windows session.
 
+### Windows target (IronRDP) and the remaining UI checks
+
+- IronRDP → Windows: connected.
+- Audio playback and microphone do not work through IronRDP. Expected: Iruka only wires audio,
+  microphone, Low memory and clipboard for FreeRDP (README). The user's view: IronRDP itself is still
+  maturing; labelling it "experimental" would be fair.
+- Right Alt view toggle: works (the Japanese keyboard layout here; AltGr layouts not tried).
+- Fullscreen and the drop-down toolbar at the top centre: work.
+
 ### Summary written
 
 - [windows-client.md](windows-client.md) rewritten as the procedure that worked.
