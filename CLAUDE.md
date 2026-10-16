@@ -17,9 +17,8 @@ KNOWN_ISSUES.md and TODO.md.
   On the Windows machine Claude Code runs in WSL and drives the build through `powershell.exe`, with
   the clone at `C:\Users\tosihide\Foundry\Iruka` and the environment in
   `C:\Users\tosihide\Foundry\iruka-env.ps1` (see "Developing from WSL" in that doc).
-- **Next**: a Windows target (being prepared) — FreeRDP with NTLM (check the `OPENSSL_MODULES`
-  workaround in KNOWN_ISSUES.md) and IronRDP; then audio, the right Alt toggle, fullscreen, and an
-  installer. Keep appending to docs/windows-client-log.md.
+- **Next**: Windows target works with FreeRDP (NLA, audio, microphone, clipboard). Left: IronRDP to
+  Windows, the right Alt toggle, fullscreen, the memory comparison with Linux, and an installer. Keep appending to docs/windows-client-log.md.
 - Tested so far: clients on Ubuntu 26.04 LTS and Windows 11 24H2; targets Windows 11 Pro, Ubuntu
   GNOME Remote Desktop, Apple Silicon Mac running clintcan/macrdp.
 - Open items live in TODO.md; do not keep a separate list elsewhere.

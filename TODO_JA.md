@@ -39,8 +39,9 @@
 - [ ] パスワードを、プロセス内の `/p:` 引数ではなく FreeRDP の設定 API で渡す（デバッグ中は今のまま。FreeRDP が警告を出す）。
 - [ ] `iruka_perf` / `iruka_mem` のデバッグログを明示的に有効にしたときだけ出す（今は `src-tauri/src/lib.rs` の既定フィルターで有効）。
 - [ ] `/cert:ignore`（証明書を検証しない。LAN 専用）の扱いを決める。
-- [ ] Windows クライアント: 接続先が Windows の場合（FreeRDP の NTLM、IronRDP）、音声とマイク、右 Alt の表示切り替え、全画面、上から降りるツールバー（接続先の Windows を別に用意する）。docs/windows-client_JA.md 参照。
-- [ ] Windows クライアント: Ubuntu の音声がリモート側で鳴ったまま（マイクは動く）。後回し。まず Linux 版と比べ、次に rdpsnd の `WLOG_FILTER` を付けて再確認（docs/windows-client-log_JA.md）。
+- [ ] Windows クライアント: IronRDP で Windows の接続先へ、右 Alt の表示切り替え、全画面、上から降りるツールバー。docs/windows-client_JA.md 参照。
+- [ ] Windows クライアントのメモリ: 3840×2160 を 1 本で `used_mb` 約 1.6 GB、セッションを閉じてもメモリが戻らない。同じ測り方で Linux 版と比べる。
+- [ ] Ubuntu（GNOME Remote Desktop）の音声が、クライアントは音声の出力先を読み込んでいるのにリモート側で鳴ったまま（Windows クライアントで確認。マイクは動く）。後回し。Linux 版と比べる（docs/windows-client-log_JA.md）。
 - [ ] Windows のインストーラー: FreeRDP / OpenSSL の DLL（`legacy.dll` を含む）を `bundle.resources` で同梱し、起動時に `OPENSSL_MODULES` を設定する（KNOWN_ISSUES_JA.md）。
 - [ ] コンソールのプロファイル: コンソールごとにシェルを選べるようにする（PowerShell、cmd、WSL、bash など）。今は `$SHELL`、なければ Windows では `powershell.exe`、それ以外は `bash`。
 - [ ] UI の自動テスト。Rust の単体テストは小さな補助関数だけ。

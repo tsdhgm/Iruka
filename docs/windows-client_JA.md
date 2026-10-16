@@ -4,7 +4,7 @@
 
 状態: **FreeRDP で動作**（2026-10-16、Windows 11 24H2 ビルド 26100、開発ビルド）。
 vcpkg の FreeRDP 3.32.1 で Ubuntu（GNOME Remote Desktop）に接続できた。`build.rs` と C ブリッジの
-変更は不要だった。まだ試していないもの: 接続先が Windows の場合、インストーラー。
+変更は不要だった。接続先が Windows でもつながった（NLA、音声、マイク、クリップボード）。まだ試していないもの: IronRDP で Windows へ、インストーラー。
 試行錯誤を含む経緯は [windows-client-log_JA.md](windows-client-log_JA.md)。
 
 ## 前提
@@ -74,14 +74,15 @@ WSL 内の Claude Code から Windows のビルドを動かせる:
 | クリップボード（テキスト）の双方向 | OK |
 | 一覧表示、Tab での移動、選択して拡大表示 | OK |
 | マイク → Ubuntu | OK |
-| Ubuntu の音声の再生 | **動かない**: 音がリモート側で鳴ったまま。原因不明。Linux 版との比較はまだ |
+| Ubuntu の音声の再生 | WinMM の出力先は読み込まれるが、音はリモート側で鳴ったまま。GNOME Remote Desktop 側の振る舞いと思われる。Linux 版との比較はまだ |
+| FreeRDP → Windows（3840×2160、NLA / NTLM） | OK |
+| 接続先 Windows での音声、マイク、クリップボード | OK（音はローカルで鳴り、マイクはリモートに届き、クリップボードは双方向） |
 | IronRDP → Ubuntu | 拒否される。Linux 版と同じ（IronRDP に RDPGFX がない） |
-| メモリ | セッションなしで約 390 MB、1920×1080 のセッション 2 本で約 1.0 GB（`iruka_mem`） |
+| メモリ（`iruka_mem`） | セッションなしで約 390 MB、1920×1080 を 2 本で約 1.0 GB、3840×2160 を 1 本で約 1.6 GB。セッションを閉じても戻らない（Linux との比較はまだ） |
 
 ## まだ確認していないこと
 
-- 接続先が Windows の場合（FreeRDP、IronRDP）。NTLM には上の `OPENSSL_MODULES` が必要。未確認。
-- 音声の再生（上の表）。
+- IronRDP で Windows の接続先へ。
 - 右 Alt の表示切り替え（配列によっては AltGr）、全画面、上から降りるツールバー。
 - インストーラー: FreeRDP / OpenSSL の DLL（`legacy.dll` を含む）を `iruka.exe` の横に同梱し
   （Tauri 設定の `bundle.resources`）、`OPENSSL_MODULES` をそこに向ける必要がある。Iruka 自身が

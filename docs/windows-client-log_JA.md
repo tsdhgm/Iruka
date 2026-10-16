@@ -112,6 +112,20 @@ Windows でクライアントとして Iruka を動かすまでの作業を、�
 - Windows 版特有かどうかは未確定: GNOME Remote Desktop での音声は Linux 版からも確かめていない
   （TODO）。vcpkg の FreeRDP は `WITH_WINMM=ON` でビルドされている。
 
+### 接続先が Windows（FreeRDP）
+
+- 3840×2160 の Windows に NLA でつながった。`OPENSSL_MODULES` を設定すれば NTLM は動く。
+  1 回だけ `ERRCONNECT_LOGON_FAILURE`（サーバーがログオンを拒否。パスワードの打ち間違いと思われる）、
+  次の試行でつながった。
+- 音声はローカルで鳴り、マイクはリモートに届き、クリップボードは双方向で動いた。
+- **上の Ubuntu 音声テストの訂正**: FreeRDP のログは遅れて出ていた（バッファリング）。出そろってみると、
+  Ubuntu の 2 回の接続でも `Loaded winmm backend for rdpsnd`（static と dynamic）と
+  `Loaded winmm backend for audin` が出ていた。クライアント側は正常なので、音が Ubuntu 側で鳴ったまま
+  なのは GNOME Remote Desktop 側の振る舞いと思われる。Windows クライアントの問題ではなさそう。
+- メモリ（`iruka_mem` の used_mb。Linux との比較はまだ）: セッションなしで 393。1920×1080 の
+  Ubuntu 1 本で約 760〜780。そのセッションを閉じた後も約 1,010（戻らない）。3840×2160 の
+  Windows 1 本で約 1,580〜1,630。
+
 ### まとめを作成
 
 - [windows-client_JA.md](windows-client_JA.md) を、うまくいった手順のまとめとして書き直した。

@@ -112,6 +112,20 @@ The cleaned-up procedure is in [windows-client.md](windows-client.md).
 - Not yet known whether this is Windows-specific: audio against GNOME Remote Desktop has never been
   checked from the Linux client either (TODO). vcpkg's FreeRDP is built with `WITH_WINMM=ON`.
 
+### Windows target (FreeRDP)
+
+- Connected to a Windows target at 3840×2160 through NLA, so NTLM works with `OPENSSL_MODULES` set.
+  One attempt ended in `ERRCONNECT_LOGON_FAILURE` (the server rejected the logon, presumably a
+  mistyped password); the next one connected.
+- Audio is played locally, the microphone reaches the remote, the clipboard works in both directions.
+- **Correction to the Ubuntu audio test above**: the FreeRDP log lines arrived late (the log is
+  buffered); once they showed up, both Ubuntu sessions had `Loaded winmm backend for rdpsnd`
+  (static and dynamic) and `Loaded winmm backend for audin`. The client side is fine, so the sound
+  staying on the Ubuntu side is probably GNOME Remote Desktop behaviour, not a Windows client issue.
+- Memory (`iruka_mem` used_mb, not compared with Linux yet): 393 with no session; about 760–780 with
+  one 1920×1080 Ubuntu session; about 1,010 after that session was closed (not returned);
+  about 1,580–1,630 with one 3840×2160 Windows session.
+
 ### Summary written
 
 - [windows-client.md](windows-client.md) rewritten as the procedure that worked.
