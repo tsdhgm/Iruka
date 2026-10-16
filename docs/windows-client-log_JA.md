@@ -69,7 +69,39 @@ Windows でクライアントとして Iruka を動かすまでの作業を、�
   まずは `client` だけにする。
 - WSL の git で `C:\Users\tosihide\Foundry\vcpkg` に clone し、`bootstrap-vcpkg.bat -disableMetrics`
   を実行（vcpkg 2026-09-26）。
-- `vcpkg install "freerdp[client]:x64-windows" "pkgconf:x64-windows"`: パッケージは 9 個。依存
-  （OpenSSL、zlib、cJSON など）は問題なくビルドできた。FreeRDP 本体のビルドが進行中。
+- `vcpkg install "freerdp[client]:x64-windows" "pkgconf:x64-windows"`: 9 パッケージ、合計 20 分
+  （FreeRDP 本体 4.6 分）。エラーなし。`lib\pkgconfig` に `freerdp-client3.pc` など、`bin` に
+  `freerdp3.dll` / `freerdp-client3.dll` / `winpr3.dll` / OpenSSL / zlib / cJSON の DLL、
+  `tools\pkgconf\pkgconf.exe` が入った。
+- `iruka-env.ps1` に追加: PATH に vcpkg の `bin`（実行時の DLL）と `tools\pkgconf`、
+  `PKG_CONFIG=...\pkgconf.exe`、`PKG_CONFIG_PATH=...\lib\pkgconfig`。
+  `pkgconf --cflags --libs freerdp-client3` が正しく解決することを確認した。
+- ビルド **失敗 2**: `cargo build`（既定の feature）が `failed to remove file ...\iruka.exe` で止まった。
+  手順 1 の `tauri dev` を WSL 側で止めても、Windows 側のプロセス（tauri.js / cargo / vite /
+  iruka.exe）は残っていて、exe がロックされていた。`taskkill /T /F` で止めた。
+  → WSL から起動したものは、WSL 側のジョブを止めても Windows 側では終わらない。
+- ビルド **成功**: `build.rs` も `freerdp_bridge.c` も変更なし。pkg-config の仕組みがそのまま
+  MSVC で動いた（25 秒。C コンパイラの警告は記録しそこねた）。
+- 起動 **成功**: `.\node_modules\.bin\tauri.cmd dev`（既定の feature = freerdp,ironrdp）。DLL は
+  vcpkg の `bin` を PATH に入れて読み込ませている（exe の横へのコピーはまだしていない）。
 
-（続く）
+### 手順 2 の動作確認（ユーザーが操作）
+
+- FreeRDP → Ubuntu（GNOME Remote Desktop）: **接続できた**。
+- クリップボード: 双方向のコピー＆ペースト OK。
+- 一覧表示、Tab でのセッション移動、選択して拡大表示: OK。
+- メモリ: `iruka_mem` の used_mb が約 1024（セッション 2 本、pixels = 2 × 1920×1080）、baseline 388。
+
+### ログで見つけたこと: md4 / rc4 がない
+
+- 接続時の FreeRDP の警告: `md4: NTLM support not available`、
+  `rc4: … NTLM and autoreconnect cookies will not work`、`rc4: RDP licensing and RDP security will not work`。
+- OpenSSL 3 の legacy プロバイダーを疑った。vcpkg の `libcrypto-3-x64.dll` を `strings` で見ると
+  `MODULESDIR: "C:\Program Files\OpenSSL\bin"`。`legacy.dll` は vcpkg の `bin` にある。確定。
+- `iruka-env.ps1` に `OPENSSL_MODULES=<vcpkg>\bin` を追加した。警告が消えるか、Windows の接続先に
+  NTLM でつながるかはまだ確認していない。KNOWN_ISSUES_JA.md に記録した。
+- ほかの警告は想定どおりのもの（コマンドラインの `/p`、`/cert:ignore`）。
+
+### まとめを作成
+
+- [windows-client_JA.md](windows-client_JA.md) を、うまくいった手順のまとめとして書き直した。

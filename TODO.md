@@ -39,14 +39,15 @@ A quick check on 2026-10-13 found no problems. Still to be checked more carefull
 - [ ] Pass the password to FreeRDP through the settings API instead of the in-process `/p:` argument (kept for now while debugging; FreeRDP prints a warning).
 - [ ] Make the `iruka_perf` / `iruka_mem` debug logging opt-in (today the default filter in `src-tauri/src/lib.rs` enables it).
 - [ ] Decide what to do about `/cert:ignore` (certificate verification is skipped; LAN use only).
-- [ ] Windows build of the client (FreeRDP 3 has to be built or fetched for Windows). Plan and notes: docs/windows-client.md. Step 1 (IronRDP only) works; FreeRDP through vcpkg is next.
-- [ ] Windows client: IronRDP to a Windows target, right Alt view toggle, fullscreen, drop-down toolbar, clipboard (a separate Windows target will be prepared).
+- [ ] Windows client: a Windows target (FreeRDP with NTLM, and IronRDP), audio and microphone, right Alt view toggle, fullscreen, drop-down toolbar (a separate Windows target will be prepared). See docs/windows-client.md.
+- [ ] Windows installer: ship the FreeRDP / OpenSSL DLLs (with `legacy.dll`) in `bundle.resources`, and set `OPENSSL_MODULES` at startup (KNOWN_ISSUES.md).
 - [ ] Console profiles: let the user pick the shell per console (PowerShell, cmd, WSL, bash, …). Today it is `$SHELL`, else `powershell.exe` on Windows and `bash` elsewhere.
 - [ ] Automated UI tests; Rust unit tests exist only for small helpers.
 - [ ] Store passwords of saved connections in the OS keyring, the way Remmina's "secret" plugin does: Secret Service (GNOME Keyring / KWallet) on Linux, Credential Manager on Windows, Keychain on macOS. Plan: the Rust `keyring` crate behind two Tauri commands (get/set by profile id); the frontend profile store keeps holding no password. Until then passwords are typed on every connection.
 
 ## Done
 
+- [x] 2026-10-16: Windows build of the client, development build with FreeRDP 3.32.1 from vcpkg; connects to GNOME Remote Desktop (docs/windows-client.md).
 - [x] 2026-10-13: Mac as a target through clintcan/macrdp, no Iruka changes (docs/mac-target.md).
 - [x] 2026-10-13: segfault with two 4K sessions fixed (dynamic channels now run on the poll thread).
 - [x] 2026-10-13: App.tsx split into modules; comments, UI and docs in English with `*_JA.md` twins.

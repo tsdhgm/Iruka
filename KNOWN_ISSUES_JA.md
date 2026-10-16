@@ -37,6 +37,13 @@
 - **理由**: 監視用途ではテキストで十分と判断した。画像は追加の手間が小さいので、必要になれば対応できる。ファイルはファイルの中身を少しずつ転送する仕組み（cliprdr の FileContents）が別に必要で、手間が大きい。
 - **関連**: 同期するのは表示中のセッションだけ（README の「クリップボード」参照）。これは仕様で、裏のセッションでのコピーがローカルのクリップボードを上書きしないようにしている。
 
+## Windows: vcpkg の OpenSSL が legacy プロバイダーを見つけられない（NTLM）
+
+- **状態**: 環境変数で回避。NTLM が必要な接続先ではまだ試していない（2026-10-16）
+- **症状**: 接続時に FreeRDP が `[SSL] {Digest} build or configuration missing: md4: NTLM support not available` と `rc4: … NTLM and autoreconnect cookies will not work` を出す。GNOME Remote Desktop にはつながる。NLA で NTLM を使う Windows の接続先には失敗する見込み。
+- **原因**: OpenSSL 3 では MD4 と RC4 は「legacy」プロバイダー（`legacy.dll`）にある。vcpkg の `libcrypto-3-x64.dll` は `MODULESDIR` = `C:\Program Files\OpenSSL\bin` でビルドされていて、そこを探す。`legacy.dll` が実際にある vcpkg の `bin` は見ない。
+- **対処**: Iruka の起動前に、`OPENSSL_MODULES` を `legacy.dll` のあるフォルダー（vcpkg の `installed\x64-windows\bin`）にする。インストーラーでは `legacy.dll` を `iruka.exe` の横に同梱し、変数が未設定なら Iruka が起動時に自分のフォルダーを `OPENSSL_MODULES` に設定する。
+
 ## FreeRDP が使わない展開用バッファーを確保する
 
 - **状態**: FreeRDP 側の問題として保留（2026-10-09）

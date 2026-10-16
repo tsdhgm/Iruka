@@ -68,7 +68,40 @@ The cleaned-up procedure is in [windows-client.md](windows-client.md).
   `client` only.
 - Cloned with WSL's git into `C:\Users\tosihide\Foundry\vcpkg`, then
   `bootstrap-vcpkg.bat -disableMetrics` (vcpkg 2026-09-26).
-- `vcpkg install "freerdp[client]:x64-windows" "pkgconf:x64-windows"`: 9 packages. The dependencies
-  (OpenSSL, zlib, cJSON, …) built without problems; FreeRDP itself is building.
+- `vcpkg install "freerdp[client]:x64-windows" "pkgconf:x64-windows"`: 9 packages, 20 min in total
+  (FreeRDP itself 4.6 min), no errors. `lib\pkgconfig` has `freerdp-client3.pc` and friends, `bin` has
+  `freerdp3.dll` / `freerdp-client3.dll` / `winpr3.dll` and the OpenSSL / zlib / cJSON DLLs, and
+  `tools\pkgconf\pkgconf.exe` is there.
+- Added to `iruka-env.ps1`: vcpkg's `bin` (runtime DLLs) and `tools\pkgconf` on PATH,
+  `PKG_CONFIG=...\pkgconf.exe`, `PKG_CONFIG_PATH=...\lib\pkgconfig`.
+  `pkgconf --cflags --libs freerdp-client3` resolves correctly.
+- Build **failure 2**: `cargo build` (default features) stopped with
+  `failed to remove file ...\iruka.exe`. Stopping step 1's `tauri dev` on the WSL side had left the
+  Windows processes (tauri.js / cargo / vite / iruka.exe) running, locking the exe. Killed with
+  `taskkill /T /F`.
+  → Stopping a job on the WSL side does not end the Windows processes it started.
+- Build **success**: no change to `build.rs` or `freerdp_bridge.c`; the pkg-config path works as is
+  with MSVC (25 s; the C compiler warnings were not captured).
+- Launch **success**: `.\node_modules\.bin\tauri.cmd dev` (default features = freerdp,ironrdp). The
+  DLLs load because vcpkg's `bin` is on PATH (not yet copied next to the exe).
 
-(to be continued)
+### Step 2 checks (done by the user)
+
+- FreeRDP → Ubuntu (GNOME Remote Desktop): **connected**.
+- Clipboard: copy and paste in both directions OK.
+- Grid view, Tab to move between sessions, select to enlarge: OK.
+- Memory: `iruka_mem` used_mb about 1024 with two sessions (pixels = 2 × 1920×1080), baseline 388.
+
+### Found in the log: md4 / rc4 missing
+
+- FreeRDP's warnings on connect: `md4: NTLM support not available`,
+  `rc4: … NTLM and autoreconnect cookies will not work`, `rc4: RDP licensing and RDP security will not work`.
+- Suspected the OpenSSL 3 legacy provider. `strings` on vcpkg's `libcrypto-3-x64.dll` shows
+  `MODULESDIR: "C:\Program Files\OpenSSL\bin"`, while `legacy.dll` is in vcpkg's `bin`. Confirmed.
+- Added `OPENSSL_MODULES=<vcpkg>\bin` to `iruka-env.ps1`. Whether the warnings go away, and whether
+  NTLM to a Windows target works, is not checked yet. Recorded in KNOWN_ISSUES.md.
+- Other warnings were the expected ones (`/p` on the command line, `/cert:ignore`).
+
+### Summary written
+
+- [windows-client.md](windows-client.md) rewritten as the procedure that worked.

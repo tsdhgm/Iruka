@@ -2,103 +2,85 @@
 
 # Running Iruka on Windows (client side)
 
-Work log with the dead ends: [windows-client-log.md](windows-client-log.md).
-
-Status: **step 1 works** (2026-10-16, Windows 11 24H2 build 26100); step 2 (FreeRDP) in progress.
-Update this file with what actually happened.
+Status: **works with FreeRDP** (2026-10-16, Windows 11 24H2 build 26100, development build).
+Connected to Ubuntu (GNOME Remote Desktop) through FreeRDP 3.32.1 from vcpkg; no change to
+`build.rs` or the C bridge was needed. Not yet tried: a Windows target, an installer.
+The step-by-step history with the dead ends is in [windows-client-log.md](windows-client-log.md).
 
 ## Prerequisites
 
-- Tauri 2 on Windows: Microsoft Visual Studio C++ Build Tools (Desktop development with C++),
-  the WebView2 runtime (preinstalled on Windows 11), Rust (MSVC toolchain, `rustup`), Node.js.
-  See https://v2.tauri.app/start/prerequisites/.
-- OpenSSH client (`ssh.exe`), preinstalled on Windows 10/11; needed by the "+ SSH" feature, which
-  types `ssh user@host` into a console.
-- Git.
+| What | How | Notes |
+| --- | --- | --- |
+| Visual Studio 2022 C++ tools | "Desktop development with C++" (Build Tools are enough) | MSVC compiles the C bridge and links |
+| WebView2 | preinstalled on Windows 11 | |
+| Node.js | 22 used | |
+| Rust | `winget install --id Rustlang.Rustup -e` | per user, no admin; stable `x86_64-pc-windows-msvc` |
+| vcpkg | `git clone https://github.com/microsoft/vcpkg.git` then `bootstrap-vcpkg.bat -disableMetrics` | |
+| FreeRDP 3 | `vcpkg install "freerdp[client]:x64-windows" "pkgconf:x64-windows"` | 20 min the first time; FreeRDP 3.32.1 |
+| `ssh.exe` | preinstalled (OpenSSH client) | for "+ SSH" |
+| Git | Git for Windows, or WSL's git | |
 
-## Step 1: build without FreeRDP (pure Rust)
+## Environment
 
-The C bridge needs FreeRDP 3, which Windows does not ship. First confirm that everything else
-(Tauri, WebView2, the PTY consoles, the UI) works:
+Every PowerShell session that builds or runs Iruka needs these (paths assume vcpkg in
+`%USERPROFILE%\Foundry\vcpkg`; keep them in a script and dot-source it):
 
 ```powershell
-git clone https://github.com/tsdhgm/Iruka.git
-cd Iruka
+$vcpkg = "$env:USERPROFILE\Foundry\vcpkg\installed\x64-windows"
+$env:Path = "$env:USERPROFILE\.cargo\bin;$vcpkg\bin;$vcpkg\tools\pkgconf;" + $env:Path
+$env:PKG_CONFIG = "$vcpkg\tools\pkgconf\pkgconf.exe"   # build: build.rs finds FreeRDP through pkg-config
+$env:PKG_CONFIG_PATH = "$vcpkg\lib\pkgconfig"
+$env:OPENSSL_MODULES = "$vcpkg\bin"                    # run: OpenSSL legacy provider, see KNOWN_ISSUES.md
+```
+
+`$vcpkg\bin` on `Path` is how `iruka.exe` finds `freerdp3.dll`, `freerdp-client3.dll`, `winpr3.dll`
+and the OpenSSL / zlib / cJSON DLLs at run time.
+
+## Build and run
+
+```powershell
 npm install
-.\node_modules\.bin\tauri.cmd dev --features ironrdp -- --no-default-features
+.\node_modules\.bin\tauri.cmd dev                                            # FreeRDP + IronRDP (default)
+.\node_modules\.bin\tauri.cmd dev --features ironrdp -- --no-default-features # IronRDP only, no vcpkg needed
 ```
 
-Expected: the window opens, "+ Console" opens a PowerShell/cmd console (portable-pty uses ConPTY),
-"+ SSH" types the ssh command, and "+ RDP" with Backend "IronRDP" connects to a Windows target
-(no audio / microphone / clipboard, and GNOME Remote Desktop targets are refused — IronRDP has no
-RDPGFX; see KNOWN_ISSUES.md).
+- Cargo flags go after the second `--`. `npm run tauri dev -- --no-default-features` does not work
+  (npm hands the flag to the Tauri CLI, which rejects it).
+- First build about 7 minutes; later builds 25–60 s.
 
-Things to check on Windows specifically:
+## Developing from WSL
 
-### Result (2026-10-16)
+Claude Code can run inside WSL and drive the Windows build:
 
-Setup: the repository was edited from Claude Code inside WSL, but built and run natively on Windows
-(a build inside WSL produces a Linux binary). Rust was installed with
-`winget install Rustlang.Rustup` (per user, stable `x86_64-pc-windows-msvc`); Node.js 22,
-Visual Studio 2022 C++ tools, WebView2 and `ssh.exe` were already present. The clone lives at
-`C:\Users\<user>\Foundry\Iruka` (cloned with WSL's git; Git for Windows is not required).
-First `cargo build`: about 7 minutes, 4 dead-code warnings (FreeRDP-only code).
+- Build natively on Windows: a build inside WSL produces a Linux binary that only runs under WSLg.
+- Keep the clone on the Windows file system (for example `C:\Users\<user>\Foundry\Iruka`, which is
+  `/mnt/c/Users/<user>/Foundry/Iruka` from WSL); WSL's git works there, so Git for Windows is optional.
+- Call `powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '. <env script>; …'` from bash.
+  Windows processes started from WSL inherit the PATH from when WSL started, so a fresh install of
+  Rust is not on it; the environment script handles that.
+- Stopping the WSL-side job does not stop the Windows processes it started (tauri / vite / cargo /
+  `iruka.exe`). Close the Iruka window, or `taskkill /T /F /PID <pid of tauri.js>`; otherwise the next
+  build fails with `failed to remove file ...\iruka.exe`.
 
-- `npm run tauri dev -- --no-default-features …` does not work: npm passes the flag to the Tauri
-  CLI, which rejects it. Cargo flags go after a second `--`, as in the command above.
-- Window, UI: OK.
-- "+ Console": first opened WSL bash, because `$SHELL` is unset on Windows and the fallback `bash`
-  resolved to `System32\bash.exe` (the WSL launcher); the working directory was not the home folder
-  (`$HOME` unset). Fixed in `src-tauri/src/pty.rs`: the fallback is now `powershell.exe` and the home
-  folder falls back to `%USERPROFILE%`. Setting `SHELL` (for example `SHELL=wsl.exe`) still overrides.
-- "+ SSH": OK, `ssh.exe` connects.
-- "+ RDP" with IronRDP to Ubuntu (GNOME Remote Desktop): refused as expected (no RDPGFX in IronRDP;
-  the error ends in "received disconnect provider ultimatum"). The built-in Windows Remote Desktop
-  client connects to the same target.
-- IronRDP to a Windows target: not tried yet (a separate Windows target will be prepared).
+## What was checked (2026-10-16)
 
-Still to check:
+| Feature | Result |
+| --- | --- |
+| Window, UI | OK |
+| "+ Console" | PowerShell in the user folder (after a fix to `pty.rs`; `SHELL` overrides, for example `SHELL=wsl.exe`) |
+| "+ SSH" | OK through `ssh.exe` |
+| FreeRDP → Ubuntu (GNOME Remote Desktop) | OK |
+| Clipboard (text), both directions | OK |
+| Grid view, Tab to move, select to enlarge | OK |
+| IronRDP → Ubuntu | refused, as on Linux (IronRDP has no RDPGFX) |
+| Memory | about 390 MB with no session; about 1.0 GB with two 1920×1080 sessions (`iruka_mem`) |
 
-- The view-toggle key (right Alt) and the window-level key listener were only tested on
-  GNOME/Wayland. On Windows, right Alt is AltGr on some layouts.
-- Fullscreen (`setFullscreen`) and the drop-down toolbar.
-- Memory check: `sysinfo` works on Windows; the model file lives in the Tauri app-data directory.
-- Clipboard: `arboard` supports Windows.
+## Not yet checked
 
-## Step 2: add FreeRDP 3
-
-`src-tauri/build.rs` locates FreeRDP with `pkg-config` (`freerdp-client3`) and compiles
-`native/freerdp_bridge.c` with the `cc` crate. On Windows, options:
-
-1. **vcpkg** (recommended with the MSVC toolchain): install `freerdp` from vcpkg, then make
-   `pkg-config` resolvable: install `pkgconf` from vcpkg too, and point `PKG_CONFIG_PATH` at
-   `<vcpkg>/installed/x64-windows/lib/pkgconfig`. The crate `pkg-config` also needs the
-   `pkg-config`/`pkgconf` executable on `PATH` (or `PKG_CONFIG` set to it).
-2. **Build FreeRDP from source** with CMake and MSVC, then provide the `.pc` files the same way.
-3. **MSYS2** has a FreeRDP package, but it is MinGW; it will not link with an MSVC-built Rust
-   target. Only usable together with the `x86_64-pc-windows-gnu` Rust toolchain, which Tauri does
-   not recommend.
-
-Then build with the default features:
-
-```powershell
-npm run tauri dev
-```
-
-Things that may need changes in the repository:
-
-- `build.rs`: if `pkg-config` is a problem on Windows, add a `FREERDP_DIR` fallback that sets the
-  include and lib paths directly (`cargo:rustc-link-search`, `cargo:rustc-link-lib=freerdp-client3`
-  etc.). Keep the pkg-config path for Linux.
-- The bridge is written against the Linux build of FreeRDP 3.32; check that the WinPR headers and
-  `CRITICAL_SECTION` usage compile with MSVC (they should, WinPR mirrors Win32).
-- The FreeRDP DLLs must be next to `iruka.exe` at runtime (copy from vcpkg `bin`), and the Tauri
-  bundle configuration needs them listed under `bundle.resources` for an installer.
-- Audio: `/sound` and `/microphone` use FreeRDP's Windows audio backends; verify.
-
-## Step 3: record the result
-
-- Update this file (and `windows-client_JA.md`) with the exact commands that worked and any
-  changes made.
-- Add anything FreeRDP- or Windows-specific that does not work to KNOWN_ISSUES.md.
-- Tick "Windows build of the client" in TODO.md when done.
+- A Windows target (FreeRDP and IronRDP). NTLM needs the `OPENSSL_MODULES` setting above; untested.
+- Audio and microphone (FreeRDP's Windows backends).
+- Right Alt view toggle (AltGr on some layouts), fullscreen, the drop-down toolbar.
+- An installer: the FreeRDP / OpenSSL DLLs, including `legacy.dll`, must ship next to `iruka.exe`
+  (`bundle.resources` in the Tauri configuration), and `OPENSSL_MODULES` must point at them —
+  probably set by Iruka itself at startup.
+- Whether the vcpkg `ffmpeg` feature is worth adding (H.264 / AVC444 decoding).

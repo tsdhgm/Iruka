@@ -12,12 +12,16 @@ KNOWN_ISSUES.md and TODO.md.
 
 ## Current hand-off (keep this section up to date at the end of each session)
 
-- **Next step (set 2026-10-15): run Iruka as a client on Windows.** Follow docs/windows-client.md.
-  Start with the IronRDP-only build (`--no-default-features --features ironrdp`) to validate
-  Tauri / WebView2 / PTY, then add FreeRDP. Record what happens in docs/windows-client.md (+ `_JA`)
-  and TODO.md.
-- Tested so far: client on Ubuntu 26.04 LTS; targets Windows 11 Pro, Ubuntu GNOME Remote Desktop,
-  Apple Silicon Mac running clintcan/macrdp.
+- **2026-10-16: the Windows client works** (development build, FreeRDP 3.32.1 from vcpkg, connected
+  to GNOME Remote Desktop). Procedure: docs/windows-client.md; history: docs/windows-client-log.md.
+  On the Windows machine Claude Code runs in WSL and drives the build through `powershell.exe`, with
+  the clone at `C:\Users\tosihide\Foundry\Iruka` and the environment in
+  `C:\Users\tosihide\Foundry\iruka-env.ps1` (see "Developing from WSL" in that doc).
+- **Next**: a Windows target (being prepared) — FreeRDP with NTLM (check the `OPENSSL_MODULES`
+  workaround in KNOWN_ISSUES.md) and IronRDP; then audio, the right Alt toggle, fullscreen, and an
+  installer. Keep appending to docs/windows-client-log.md.
+- Tested so far: clients on Ubuntu 26.04 LTS and Windows 11 24H2; targets Windows 11 Pro, Ubuntu
+  GNOME Remote Desktop, Apple Silicon Mac running clintcan/macrdp.
 - Open items live in TODO.md; do not keep a separate list elsewhere.
 
 ## Conventions
