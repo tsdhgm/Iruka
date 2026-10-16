@@ -72,13 +72,15 @@ Claude Code can run inside WSL and drive the Windows build:
 | FreeRDP → Ubuntu (GNOME Remote Desktop) | OK |
 | Clipboard (text), both directions | OK |
 | Grid view, Tab to move, select to enlarge | OK |
+| Microphone → Ubuntu | OK |
+| Audio playback from Ubuntu | **not working**: the sound stays on the remote; cause unknown, not yet compared with the Linux client |
 | IronRDP → Ubuntu | refused, as on Linux (IronRDP has no RDPGFX) |
 | Memory | about 390 MB with no session; about 1.0 GB with two 1920×1080 sessions (`iruka_mem`) |
 
 ## Not yet checked
 
 - A Windows target (FreeRDP and IronRDP). NTLM needs the `OPENSSL_MODULES` setting above; untested.
-- Audio and microphone (FreeRDP's Windows backends).
+- Audio playback (see the table above).
 - Right Alt view toggle (AltGr on some layouts), fullscreen, the drop-down toolbar.
 - An installer: the FreeRDP / OpenSSL DLLs, including `legacy.dll`, must ship next to `iruka.exe`
   (`bundle.resources` in the Tauri configuration), and `OPENSSL_MODULES` must point at them —

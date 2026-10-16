@@ -39,7 +39,7 @@ Known bugs and limitations. Problems whose cause lies outside Iruka (FreeRDP or 
 
 ## Windows: vcpkg's OpenSSL does not find its legacy provider (NTLM)
 
-- **Status**: worked around in the environment, untested against a target that needs NTLM (2026-10-16)
+- **Status**: worked around in the environment; with `OPENSSL_MODULES` set the warnings are gone. Untested against a target that needs NTLM (2026-10-16)
 - **Symptom**: on connect, FreeRDP logs `[SSL] {Digest} build or configuration missing: md4: NTLM support not available` and `rc4: … NTLM and autoreconnect cookies will not work`. GNOME Remote Desktop still connects; a Windows target that uses NLA with NTLM is expected to fail.
 - **Cause**: OpenSSL 3 keeps MD4 and RC4 in the "legacy" provider (`legacy.dll`). vcpkg's `libcrypto-3-x64.dll` is built with `MODULESDIR` = `C:\Program Files\OpenSSL\bin`, so it looks there, not in vcpkg's `bin` where `legacy.dll` actually is.
 - **Fix**: set `OPENSSL_MODULES` to the folder holding `legacy.dll` (vcpkg's `installed\x64-windows\bin`) before Iruka starts. For an installer, ship `legacy.dll` next to `iruka.exe` and have Iruka set `OPENSSL_MODULES` to its own folder at startup when the variable is unset.

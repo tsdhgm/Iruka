@@ -102,6 +102,16 @@ The cleaned-up procedure is in [windows-client.md](windows-client.md).
   NTLM to a Windows target works, is not checked yet. Recorded in KNOWN_ISSUES.md.
 - Other warnings were the expected ones (`/p` on the command line, `/cert:ignore`).
 
+### Audio test (Ubuntu, Audio and Microphone on, two connections)
+
+- Restarted with `OPENSSL_MODULES` set: the md4 / rc4 warnings are **gone**.
+- Microphone: the local microphone reaches the remote. OK.
+- Audio playback: the sound kept playing **on the remote**, not locally. The log has no rdpsnd lines
+  at all this time, so the backend in use is unknown. (The earlier "Loaded fake backend for rdpsnd" was
+  with Audio off, where Iruka passes `/audio-mode:2`; that is expected.)
+- Not yet known whether this is Windows-specific: audio against GNOME Remote Desktop has never been
+  checked from the Linux client either (TODO). vcpkg's FreeRDP is built with `WITH_WINMM=ON`.
+
 ### Summary written
 
 - [windows-client.md](windows-client.md) rewritten as the procedure that worked.

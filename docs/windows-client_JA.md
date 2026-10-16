@@ -73,13 +73,15 @@ WSL 内の Claude Code から Windows のビルドを動かせる:
 | FreeRDP → Ubuntu（GNOME Remote Desktop） | OK |
 | クリップボード（テキスト）の双方向 | OK |
 | 一覧表示、Tab での移動、選択して拡大表示 | OK |
+| マイク → Ubuntu | OK |
+| Ubuntu の音声の再生 | **動かない**: 音がリモート側で鳴ったまま。原因不明。Linux 版との比較はまだ |
 | IronRDP → Ubuntu | 拒否される。Linux 版と同じ（IronRDP に RDPGFX がない） |
 | メモリ | セッションなしで約 390 MB、1920×1080 のセッション 2 本で約 1.0 GB（`iruka_mem`） |
 
 ## まだ確認していないこと
 
 - 接続先が Windows の場合（FreeRDP、IronRDP）。NTLM には上の `OPENSSL_MODULES` が必要。未確認。
-- 音声とマイク（FreeRDP の Windows 用バックエンド）。
+- 音声の再生（上の表）。
 - 右 Alt の表示切り替え（配列によっては AltGr）、全画面、上から降りるツールバー。
 - インストーラー: FreeRDP / OpenSSL の DLL（`legacy.dll` を含む）を `iruka.exe` の横に同梱し
   （Tauri 設定の `bundle.resources`）、`OPENSSL_MODULES` をそこに向ける必要がある。Iruka 自身が

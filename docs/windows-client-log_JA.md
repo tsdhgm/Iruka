@@ -102,6 +102,16 @@ Windows でクライアントとして Iruka を動かすまでの作業を、�
   NTLM でつながるかはまだ確認していない。KNOWN_ISSUES_JA.md に記録した。
 - ほかの警告は想定どおりのもの（コマンドラインの `/p`、`/cert:ignore`）。
 
+### 音声テスト（Ubuntu、Audio と Microphone をオン、2 回接続）
+
+- `OPENSSL_MODULES` を設定して起動し直した: md4 / rc4 の警告は**消えた**。
+- マイク: ローカルのマイクがリモートに届いた。OK。
+- 音声の再生: 音は**リモート側で**鳴ったまま、ローカルでは鳴らなかった。今回はログに rdpsnd の行が
+  1 行もなく、どの出力先が使われたか分からない（前回の「Loaded fake backend for rdpsnd」は Audio
+  オフのとき。Iruka は `/audio-mode:2` を渡すので想定どおり）。
+- Windows 版特有かどうかは未確定: GNOME Remote Desktop での音声は Linux 版からも確かめていない
+  （TODO）。vcpkg の FreeRDP は `WITH_WINMM=ON` でビルドされている。
+
 ### まとめを作成
 
 - [windows-client_JA.md](windows-client_JA.md) を、うまくいった手順のまとめとして書き直した。
