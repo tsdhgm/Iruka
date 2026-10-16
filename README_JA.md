@@ -4,7 +4,7 @@
 
 複数の PC を一度に見守るためのビューアー。SSH などのコンソールとリモートデスクトップ（RDP）を、左のサイドバーにライブのサムネイルとして並べ、クリックで右側に大きく表示する。表示していないセッションも接続したまま動き続ける。
 
-Tauri 2 + React + TypeScript。RDP は FreeRDP 3 を使う（予備として IronRDP も組み込んである）。
+Tauri 2 + React + TypeScript。RDP は FreeRDP 3 を使う（予備として IronRDP も組み込んである。experimental 扱い）。
 
 **状態**: 個人用の初期段階のツール（1.0 未満）。クライアントは Ubuntu 26.04 LTS、接続先は Windows 11 Pro、Ubuntu の GNOME Remote Desktop、Apple Silicon の macOS（macrdp）で試している。
 
@@ -26,7 +26,7 @@ Tauri 2 + React + TypeScript。RDP は FreeRDP 3 を使う（予備として Iro
   | 項目 | 内容 | 初期値 |
   |---|---|---|
   | Resolution（解像度） | 「Same as local（ローカルと同じ）」/「2560×1440」/「1920×1080」。大きいほどメモリを使う | Same as local |
-  | Backend（接続方式） | 「Auto (FreeRDP first)（自動、FreeRDP 優先）」/「FreeRDP」/「IronRDP」 | Auto (FreeRDP first) |
+  | Backend（接続方式） | 「Auto (FreeRDP first)（自動、FreeRDP 優先）」/「FreeRDP」/「IronRDP (experimental)」。IronRDP には音声・マイク・クリップボード・Low memory がなく、GNOME Remote Desktop にはつながらない（RDPGFX がない） | Auto (FreeRDP first) |
   | Audio（音声） | リモートの音をローカルで鳴らす | オフ |
   | Microphone（マイク） | ローカルのマイクをリモートへ送る | オフ |
   | Low memory（省メモリ） | RDPGFX のキャッシュを 100MB から 16MB に減らす | オン |

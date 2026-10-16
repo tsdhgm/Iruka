@@ -4,7 +4,7 @@
 
 A viewer for keeping an eye on many PCs at once. Consoles (SSH and the like) and remote desktops (RDP) are lined up as live thumbnails in a sidebar on the left; click one to show it large on the right. Sessions that are not on screen stay connected and keep running.
 
-Tauri 2 + React + TypeScript. RDP uses FreeRDP 3 (IronRDP is built in as a fallback).
+Tauri 2 + React + TypeScript. RDP uses FreeRDP 3 (IronRDP is built in as an experimental fallback).
 
 **Status**: an early, personal-use tool (pre-1.0). Tested with Ubuntu 26.04 LTS as the client, against Windows 11 Pro, Ubuntu GNOME Remote Desktop and macOS on Apple Silicon (macrdp) targets.
 
@@ -26,7 +26,7 @@ Tauri 2 + React + TypeScript. RDP uses FreeRDP 3 (IronRDP is built in as a fallb
   | Option | Meaning | Default |
   |---|---|---|
   | Resolution | "Same as local" / "2560×1440" / "1920×1080". Larger uses more memory | Same as local |
-  | Backend | "Auto (FreeRDP first)" / "FreeRDP" / "IronRDP" | Auto (FreeRDP first) |
+  | Backend | "Auto (FreeRDP first)" / "FreeRDP" / "IronRDP (experimental)". IronRDP has no audio, microphone, clipboard or Low memory, and cannot connect to GNOME Remote Desktop (no RDPGFX) | Auto (FreeRDP first) |
   | Audio | Play the remote's sound locally | Off |
   | Microphone | Send the local microphone to the remote | Off |
   | Low memory | Shrink the RDPGFX cache from 100 MB to 16 MB | On |

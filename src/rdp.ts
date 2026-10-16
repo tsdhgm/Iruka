@@ -16,7 +16,7 @@ export type RdpBackendKind = "auto" | "freerdp" | "ironrdp";
 export const RDP_BACKENDS: { value: RdpBackendKind; label: string }[] = [
   { value: "auto", label: "Auto (FreeRDP first)" },
   { value: "freerdp", label: "FreeRDP" },
-  { value: "ironrdp", label: "IronRDP" },
+  { value: "ironrdp", label: "IronRDP (experimental)" },
 ];
 
 export interface RdpConnectParams {
