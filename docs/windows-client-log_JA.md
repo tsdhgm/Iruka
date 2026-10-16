@@ -135,6 +135,26 @@ Windows でクライアントとして Iruka を動かすまでの作業を、�
 - 右 Alt の表示切り替え: 動いた（ここでは日本語配列。AltGr になる配列は試していない）。
 - 全画面と、上部中央のドロップダウンのツールバー: 動いた。
 
+### ポータブル zip（ユーザー自身が使う用）
+
+- `src-tauri/src/lib.rs`: Windows では起動時に、`legacy.dll` が exe のフォルダーにあり変数が未設定なら、
+  `OPENSSL_MODULES` をそのフォルダーにする。
+- 編集した `lib.rs` を Windows 側の clone にコピーしたら、動いていた `tauri dev` が再ビルドして Iruka を
+  再起動し、開いていたセッションが切れた。→ Windows 側の clone に触る前に `tauri dev` を止める。
+- `tauri.cmd build --no-bundle`: 9 分 50 秒。zip は `C:\Users\tosihide\Foundry\dist` にまとめた。
+- 動作確認: vcpkg のフォルダーを PATH に入れていない PowerShell から起動して、ウィンドウが開いた
+  （exe の横の DLL が読み込まれた）。接続の確認はこれから。
+
+### SignPath Foundation（OSS 向けの無料署名）、規約を確認
+
+- 条件: すべての部品が OSI ライセンス、活発にメンテナンスされ既にリリースしていること、リポジトリから
+  検証できる形でビルドすること（CI）、チーム全員の多要素認証、役割（作者、レビュアー、承認者）の定義、
+  プロジェクトのページに「Code signing policy」の節、リリースごとの手動承認。Windows に出る発行元は
+  「SignPath Foundation」。
+- 利用者数の下限は書かれていないが、実行ファイルには「検証できる一定の評判」を求め、最初の審査は人が
+  行い、受け入れるかどうかは SignPath の裁量。公開したばかりで一人で使っているツールは、今はまず
+  通らない見込み。
+
 ### まとめを作成
 
 - [windows-client_JA.md](windows-client_JA.md) を、うまくいった手順のまとめとして書き直した。

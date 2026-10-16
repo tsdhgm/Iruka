@@ -29,10 +29,30 @@ fn tune_malloc() {
     }
 }
 
+/// OpenSSL 3 needs its "legacy" provider (legacy.dll) for MD4 / RC4, which NTLM uses.
+/// vcpkg's OpenSSL looks for it in the path baked in at build time
+/// (C:\Program Files\OpenSSL\bin), so point it at the folder of iruka.exe when the
+/// DLLs ship next to it (portable zip). An OPENSSL_MODULES set by the user wins.
+#[cfg(windows)]
+fn point_openssl_at_exe_dir() {
+    if std::env::var_os("OPENSSL_MODULES").is_some() {
+        return;
+    }
+    let Some(dir) = std::env::current_exe().ok().and_then(|exe| exe.parent().map(|d| d.to_path_buf())) else {
+        return;
+    };
+    if dir.join("legacy.dll").exists() {
+        // Still single-threaded here, before any FreeRDP / OpenSSL call.
+        std::env::set_var("OPENSSL_MODULES", dir);
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
     tune_malloc();
+    #[cfg(windows)]
+    point_openssl_at_exe_dir();
 
     // Diagnostic logging for RDP connections (override with IRUKA_LOG)
     let filter = tracing_subscriber::EnvFilter::try_from_env("IRUKA_LOG").unwrap_or_else(|_| {

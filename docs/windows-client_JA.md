@@ -48,6 +48,22 @@ npm install
   （npm がフラグを Tauri CLI に渡し、CLI が受け付けない）。
 - 初回のビルドは約 7 分。2 回目以降は 25〜60 秒。
 
+## ポータブル zip
+
+開発環境なしで使うため（署名なし。配布の方針は TODO_JA.md）:
+
+```powershell
+.\node_modules\.bin\tauri.cmd build --no-bundle   # src-tauri\target\release\iruka.exe。フロントエンドを埋め込み（約 10 分）
+```
+
+その後、vcpkg の `installed\x64-windows\bin` から `freerdp3.dll`、`freerdp-client3.dll`、`winpr3.dll`、
+`libcrypto-3-x64.dll`、`libssl-3-x64.dll`、`legacy.dll`、`z.dll`、`cjson.dll` を `iruka.exe` の横に置き
+（`pkgconf-8.dll` と `.pdb` は不要）、`LICENSE.txt` と短い `README.txt` を添えてフォルダーごと zip にする。
+2026-10-16: 展開後 26 MB、zip で 9.7 MB。
+
+Windows では起動時に、`legacy.dll` が同じフォルダーにあり `OPENSSL_MODULES` が未設定なら、Iruka が
+自分のフォルダーをこの変数に設定する（`src-tauri/src/lib.rs`）。設定なしで NTLM が動く。
+
 ## WSL から開発する
 
 WSL 内の Claude Code から Windows のビルドを動かせる:

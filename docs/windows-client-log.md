@@ -135,6 +135,26 @@ The cleaned-up procedure is in [windows-client.md](windows-client.md).
 - Right Alt view toggle: works (the Japanese keyboard layout here; AltGr layouts not tried).
 - Fullscreen and the drop-down toolbar at the top centre: work.
 
+### Portable zip (for the user's own use)
+
+- `src-tauri/src/lib.rs`: on Windows, set `OPENSSL_MODULES` to the exe folder at startup when
+  `legacy.dll` is there and the variable is unset.
+- Copying the edited `lib.rs` into the Windows clone made the running `tauri dev` rebuild and restart
+  Iruka, dropping the open sessions. → Stop `tauri dev` before touching the Windows clone.
+- `tauri.cmd build --no-bundle`: 9 min 50 s. Zip assembled under `C:\Users\tosihide\Foundry\dist`.
+- Smoke test: started from a PowerShell without the vcpkg folders on PATH: the window opens
+  (the DLLs next to the exe are found). Connection test pending.
+
+### SignPath Foundation (free signing for open source), checked against its terms
+
+- Requires an OSI licence for every component, an actively maintained and already released project,
+  builds verifiably from the repository (CI), MFA for every team member, defined roles (authors,
+  reviewers, approvers), a "Code signing policy" section on the project page, and manual approval of
+  every release. The publisher shown by Windows is "SignPath Foundation".
+- No minimum user count is stated, but for executable programs it requires "a certain verifiable
+  reputation", checked by people at the first review, and acceptance is at its discretion.
+  A newly published tool used by one person would most likely not pass yet.
+
 ### Summary written
 
 - [windows-client.md](windows-client.md) rewritten as the procedure that worked.
