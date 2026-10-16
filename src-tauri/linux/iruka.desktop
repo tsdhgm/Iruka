@@ -6,6 +6,7 @@ Exec={{exec}}
 Icon={{icon}}
 Terminal=false
 Categories=Network;RemoteAccess;
-# The Wayland app id is the Tauri identifier (tauri.conf.json "enableGTKAppId"), not the
-# binary name, so name it here for the desktop to match the window to this entry.
-StartupWMClass=dev.tosihide.iruka
+# The window's Wayland app id is the binary name ("iruka"). The Tauri identifier
+# (dev.tosihide.iruka, from "enableGTKAppId") only travels as the GtkApplication id, which
+# GNOME tries first as <id>.desktop and then falls back to this StartupWMClass match.
+StartupWMClass={{exec}}

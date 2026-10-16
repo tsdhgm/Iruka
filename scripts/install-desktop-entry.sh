@@ -6,8 +6,9 @@
 #   - inside an extracted tarball (this script next to `iruka` and `iruka.png`),
 #   - inside the repository (scripts/, registers the `npm run tauri dev` binary).
 # Packaged builds (deb, AppImage) carry their own .desktop file and do not need this.
-# The entry's file name matches the Tauri identifier (dev.tosihide.iruka), which is
-# also the Wayland app id because tauri.conf.json sets "enableGTKAppId": true.
+# The entry's file name matches the Tauri identifier (dev.tosihide.iruka), which the
+# window carries as its GtkApplication id ("enableGTKAppId" in tauri.conf.json); GNOME
+# looks that up first. The Wayland app id itself is the binary name, hence StartupWMClass.
 set -eu
 
 here=$(cd "$(dirname "$0")" && pwd)

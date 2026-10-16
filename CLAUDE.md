@@ -24,8 +24,9 @@ KNOWN_ISSUES.md and TODO.md.
   environment in `C:\Users\tosihide\Foundry\iruka-env.ps1`, zips in `C:\Users\tosihide\Foundry\dist`.
   Stop `tauri dev` before touching the Windows clone. See "Developing from WSL" in docs/windows-client.md.
 - **2026-10-16, back on Ubuntu: Linux packages done.** `scripts/make-deb.sh` (deb depending on
-  Ubuntu's `libfreerdp-client3-3`; desktop template `src-tauri/linux/iruka.desktop` sets
-  `StartupWMClass` to the identifier because `enableGTKAppId` makes that the Wayland app id) and
+  Ubuntu's `libfreerdp-client3-3`; desktop template `src-tauri/linux/iruka.desktop` adds Categories
+  and keeps `StartupWMClass=iruka`: the Wayland app id is the binary name, the identifier only
+  travels as the GtkApplication id) and
   `scripts/make-tarball.sh` (release binary with RPATH `$ORIGIN/lib`, FreeRDP 3 libraries in `lib/`,
   `check-deps.sh` with a soname -> package table, desktop-entry script). Release binaries are stripped
   (`[profile.release] strip = true`). Only GNOME (Wayland) is tested; KDE is in TODO.md.
