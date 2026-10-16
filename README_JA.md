@@ -66,6 +66,20 @@ Tauri 2 + React + TypeScript。RDP は FreeRDP 3 を使う（予備として Iro
 - [docs/code-notes_JA.md](docs/code-notes_JA.md): 設計メモと弱いところ（構成、スレッドと FFI の境界、決めごと）。
 - [TODO_JA.md](TODO_JA.md): 残っている課題と、これから確認すること。
 
+## Linux へのインストール（tar アーカイブ）
+
+下の開発環境に `patchelf` を足した Ubuntu で、自己完結の tar アーカイブを作れる:
+
+```sh
+scripts/make-tarball.sh      # -> release/iruka-<version>-linux-x86_64.tar.gz
+```
+
+どこかに展開して `./iruka` を実行するだけでよい。FreeRDP 3 のライブラリは `lib/` に同梱してあり、
+バイナリの RPATH（`$ORIGIN/lib`）で見つかるので、インストールも `PATH` / `LD_LIBRARY_PATH` の設定も要らない。
+GTK 3、WebKitGTK 4.1 と FreeRDP 自身が依存するライブラリはディストリビューションのものを使う
+（Ubuntu のデスクトップには入っている。アーカイブ内の `README.txt` に一覧がある）。展開したフォルダの
+`./install-desktop-entry.sh` を実行すると、アプリ一覧にアイコン付きで登録される。
+
 ## 開発
 
 ### 必要なもの（Ubuntu）
@@ -84,7 +98,7 @@ npm run tauri dev
 Linux のデスクトップでは、開発ビルドのドックのアイコンが汎用のものになる。一度だけ次を実行すると Iruka のアイコンになる（パッケージ版では不要）:
 
 ```sh
-scripts/install-dev-desktop.sh
+scripts/install-desktop-entry.sh
 ```
 
 RDP の調査用ログは、環境変数 `IRUKA_LOG` で絞り込める（例: `IRUKA_LOG=iruka_mem=debug`）。

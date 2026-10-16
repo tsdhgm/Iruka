@@ -23,9 +23,13 @@ KNOWN_ISSUES.md and TODO.md.
   commit in WSL, then `git pull wsl main` there), vcpkg at `C:\Users\tosihide\Foundry\vcpkg`,
   environment in `C:\Users\tosihide\Foundry\iruka-env.ps1`, zips in `C:\Users\tosihide\Foundry\dist`.
   Stop `tauri dev` before touching the Windows clone. See "Developing from WSL" in docs/windows-client.md.
-- **Next (the user is moving back to Ubuntu)**: a `.deb` or tarball/AppImage for the user's own use;
-  compare memory use with the Windows figures (about 1.6 GB `used_mb` for one 4K session, not
-  returned after closing); Ubuntu audio playback staying on the remote (compare with the Linux client).
+- **2026-10-16, back on Ubuntu: self-contained Linux tarball done** (`scripts/make-tarball.sh`:
+  release binary with RPATH `$ORIGIN/lib`, FreeRDP 3 libraries in `lib/`, README.txt, desktop-entry
+  script; verified to start from another folder with the bundled libraries). `.deb` / AppImage only
+  if the tarball turns out not to be enough.
+- **Next**: compare memory use with the Windows figures (about 1.6 GB `used_mb` for one 4K session,
+  not returned after closing); Ubuntu audio playback staying on the remote (compare with the Linux
+  client).
 - Tested so far: clients on Ubuntu 26.04 LTS and Windows 11 24H2; targets Windows 11 Pro, Ubuntu
   GNOME Remote Desktop, Apple Silicon Mac running clintcan/macrdp.
 - Open items live in TODO.md; do not keep a separate list elsewhere.
@@ -59,4 +63,5 @@ cd src-tauri && cargo test --no-default-features --features freerdp,ironrdp
 npx tsc --noEmit -p tsconfig.json && npm run build
 ```
 
-`scripts/install-dev-desktop.sh` registers the dev build's icon with a Linux desktop (optional).
+`scripts/install-desktop-entry.sh` registers the dev build's icon with a Linux desktop (optional).
+`scripts/make-tarball.sh` builds the self-contained Linux tarball (release binary + FreeRDP libraries, RPATH `$ORIGIN/lib`).

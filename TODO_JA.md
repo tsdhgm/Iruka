@@ -41,7 +41,7 @@
 - [ ] `/cert:ignore`（証明書を検証しない。LAN 専用）の扱いを決める。
 - [ ] Windows クライアントのメモリ: 3840×2160 を 1 本で `used_mb` 約 1.6 GB、セッションを閉じてもメモリが戻らない。同じ測り方で Linux 版と比べる。
 - [ ] Ubuntu（GNOME Remote Desktop）の音声が、クライアントは音声の出力先を読み込んでいるのにリモート側で鳴ったまま（Windows クライアントで確認。マイクは動く）。後回し。Linux 版と比べる（docs/windows-client-log_JA.md）。
-- [ ] 自分で使う用の Linux パッケージ: `.deb`（`tauri build --bundles deb`。FreeRDP 3 のライブラリを `bundle.linux.deb.depends` に書く）か、tar アーカイブ / AppImage。Ubuntu に戻ってから。
+- [ ] Linux の `.deb` / AppImage。tar アーカイブ（2026-10-16 に完了）で足りなければ: `tauri build --bundles deb` で、FreeRDP 3 のライブラリを `bundle.linux.deb.depends` に書く。
 - [ ] Windows のインストーラー: FreeRDP / OpenSSL の DLL（`legacy.dll` を含む）を `bundle.resources` で同梱し、起動時に `OPENSSL_MODULES` を設定する（KNOWN_ISSUES_JA.md）。
   - 配布の方針: 当面は署名なし。Tauri の NSIS インストーラーとポータブル zip（exe と DLL。インストールも管理者権限も不要。WebView2 は Windows 11 に入っている）の両方を出す。README に「SmartScreen の警告が出たら『詳細情報 → 実行』」と書く。
   - zip でも SmartScreen は避けられない: エクスプローラーで展開すると Mark of the Web が引き継がれる。署名だけでも避けられない: EV でも最初から評判は付かず、ビルドごとに評判はゼロから。
@@ -55,6 +55,7 @@
 
 ## 完了
 
+- [x] 2026-10-16: 自己完結の Linux tar アーカイブ（`scripts/make-tarball.sh`: RPATH `$ORIGIN/lib` 付きのリリースバイナリと `lib/` の FreeRDP 3 ライブラリ）。
 - [x] 2026-10-16: 自分で使う用の Windows ポータブル zip（docs/windows-client_JA.md の「ポータブル zip」）。
 - [x] 2026-10-16: Windows クライアントから Windows の接続先へ: FreeRDP（NLA、音声、マイク、クリップボード）と IronRDP。右 Alt、全画面、ドロップダウンのツールバーも動作（docs/windows-client_JA.md）。
 - [x] 2026-10-16: クライアントの Windows ビルド。vcpkg の FreeRDP 3.32.1 で開発ビルドが動作し、GNOME Remote Desktop に接続できた（docs/windows-client_JA.md）。

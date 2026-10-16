@@ -28,3 +28,6 @@ dist-ssr
 
 # Local helper script (per-PC, not shared)
 /next.sh
+
+# Tarballs from scripts/make-tarball.sh
+/release

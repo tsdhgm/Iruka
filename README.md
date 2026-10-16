@@ -66,6 +66,20 @@ See [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
 - [docs/code-notes.md](docs/code-notes.md): design notes and known weak spots (architecture, threading and the FFI boundary, conventions).
 - [TODO.md](TODO.md): open tasks and things still to verify.
 
+## Installing on Linux (tarball)
+
+Build a self-contained tarball on an Ubuntu machine that has the development requirements below plus `patchelf`:
+
+```sh
+scripts/make-tarball.sh      # -> release/iruka-<version>-linux-x86_64.tar.gz
+```
+
+Extract it anywhere and run `./iruka`. The FreeRDP 3 libraries are bundled in `lib/` and found through
+the binary's RPATH (`$ORIGIN/lib`), so nothing has to be installed or added to `PATH` / `LD_LIBRARY_PATH`.
+GTK 3, WebKitGTK 4.1 and FreeRDP's own dependencies are expected from the distribution (an Ubuntu
+desktop has them; the tarball's `README.txt` lists them). `./install-desktop-entry.sh` inside the
+extracted folder adds Iruka to the application menu with its icon.
+
 ## Development
 
 ### Requirements (Ubuntu)
@@ -84,7 +98,7 @@ npm run tauri dev
 On a Linux desktop the dev build shows a generic dock icon until it is registered once (packaged builds do not need this):
 
 ```sh
-scripts/install-dev-desktop.sh
+scripts/install-desktop-entry.sh
 ```
 
 The RDP diagnostic logs can be filtered with the `IRUKA_LOG` environment variable (e.g. `IRUKA_LOG=iruka_mem=debug`).
