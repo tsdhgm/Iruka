@@ -143,7 +143,11 @@ The cleaned-up procedure is in [windows-client.md](windows-client.md).
   Iruka, dropping the open sessions. → Stop `tauri dev` before touching the Windows clone.
 - `tauri.cmd build --no-bundle`: 9 min 50 s. Zip assembled under `C:\Users\tosihide\Foundry\dist`.
 - Smoke test: started from a PowerShell without the vcpkg folders on PATH: the window opens
-  (the DLLs next to the exe are found). Connection test pending.
+  (the DLLs next to the exe are found).
+- The user copied the zip to `C:\Tmp`, unpacked it and started `iruka.exe` from there: no warning
+  (the zip was made on this PC, so it carries no Mark of the Web), connected to the Windows target
+  through NLA, and audio played locally. So the startup `OPENSSL_MODULES` setting works without any
+  environment setup.
 
 ### SignPath Foundation (free signing for open source), checked against its terms
 

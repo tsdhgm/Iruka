@@ -143,7 +143,10 @@ Windows でクライアントとして Iruka を動かすまでの作業を、�
   再起動し、開いていたセッションが切れた。→ Windows 側の clone に触る前に `tauri dev` を止める。
 - `tauri.cmd build --no-bundle`: 9 分 50 秒。zip は `C:\Users\tosihide\Foundry\dist` にまとめた。
 - 動作確認: vcpkg のフォルダーを PATH に入れていない PowerShell から起動して、ウィンドウが開いた
-  （exe の横の DLL が読み込まれた）。接続の確認はこれから。
+  （exe の横の DLL が読み込まれた）。
+- ユーザーが zip を `C:\Tmp` にコピーして展開し、そこから `iruka.exe` を起動: 警告なし（この PC で
+  作った zip なので Mark of the Web が付いていない）。Windows の接続先に NLA でつながり、音声も
+  ローカルで鳴った。起動時の `OPENSSL_MODULES` の設定が、環境の準備なしで効いている。
 
 ### SignPath Foundation（OSS 向けの無料署名）、規約を確認
 

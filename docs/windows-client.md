@@ -62,7 +62,8 @@ Then put next to `iruka.exe`, from vcpkg's `installed\x64-windows\bin`: `freerdp
 `README.txt`, and zip the folder. 2026-10-16: 26 MB unpacked, 9.7 MB zipped.
 
 At startup on Windows Iruka sets `OPENSSL_MODULES` to its own folder when `legacy.dll` is there and
-the variable is unset (`src-tauri/src/lib.rs`), so NTLM works without any setup.
+the variable is unset (`src-tauri/src/lib.rs`), so NTLM works without any setup (checked 2026-10-16:
+unpacked to another folder, connected to a Windows target, audio played locally).
 
 ## Developing from WSL
 

@@ -62,7 +62,8 @@ npm install
 2026-10-16: 展開後 26 MB、zip で 9.7 MB。
 
 Windows では起動時に、`legacy.dll` が同じフォルダーにあり `OPENSSL_MODULES` が未設定なら、Iruka が
-自分のフォルダーをこの変数に設定する（`src-tauri/src/lib.rs`）。設定なしで NTLM が動く。
+自分のフォルダーをこの変数に設定する（`src-tauri/src/lib.rs`）。設定なしで NTLM が動く（2026-10-16 確認:
+別のフォルダーに展開して Windows の接続先につながり、音声もローカルで鳴った）。
 
 ## WSL から開発する
 
