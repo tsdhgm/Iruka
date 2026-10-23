@@ -36,7 +36,7 @@
 
 ## Linux: 高負荷時、たとえば OBS で画面キャプチャ中にアプリ全体が SIGKILL で消える
 
-- **状態**: 2026-10-23 に原因を特定。回避策は未決定（TODO_JA.md）
+- **状態**: 2026-10-23 に原因を特定。作者の判断で記録のみ（回避策の候補は TODO_JA.md）。調査の経緯と質疑応答: docs/realtime-kill_JA.md
 - **症状**: 3840×2160 のセッションを複数開いているとき、特に OBS Studio が PipeWire で 4K ディスプレイをキャプチャしていると、Iruka が 1〜数分で消える。記録は何も残らない。クラッシュレポートなし、カーネルの OOM なし、Iruka・GTK・FreeRDP のメッセージもなし。gdb の下では `Program terminated with signal SIGKILL`。
 - **原因**: WebKitGTK（WTF の `RealTimeThreads`。WebKitGTK 2.52.6 で確認）が RealtimeKit に頼んで IPC 受信スレッド（`ReceiveQueue`、UI プロセスに 2 本）を `SCHED_RR` 優先度 5 にし、`RLIMIT_RTTIME` を RealtimeKit の上限（ハード 200 ms、ソフト 160 ms）に設定する。カーネルは、リアルタイムスレッドがブロックせずに `RLIMIT_RTTIME` を超える CPU 時間を使ったプロセスを kill する。Iruka の IPC 量（4K セッション複数本のフレームが WebKit の IPC を通る）に OBS の CPU 競合が重なると、受信スレッドがブロックせずに 200 ms 以上走り、カーネルがプロセス全体に SIGKILL を送る。`signal_generate` の bpftrace で確認: `sig=9 to ReceiveQueue(...) from ReceiveQueue(同じプロセス) code=128`（SI_KERNEL）。WebKit はソフト上限で自分のスレッドを降格させる SIGXCPU ハンドラーを入れているが、トレースでは SIGKILL の前に SIGXCPU が出ておらず（カーネル 7.0、HZ=1000）、この保険は効かなかった。
 - **確認方法**: `sudo bpftrace -e 'tracepoint:signal:signal_generate /args->sig == 9/ { printf("%s to %s(%d) from %s(%d) code=%d\n", strftime("%H:%M:%S", nsecs), args->comm, args->pid, comm, pid, args->code); }'` を動かして再現する。`ps -L -o tid,cls,rtprio,comm -p $(pgrep -x iruka)` で `RR` のスレッドが、`grep realtime /proc/$(pgrep -x iruka)/limits` で上限が見える。

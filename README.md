@@ -61,6 +61,7 @@ See [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
 
 - [docs/windows-client.md](docs/windows-client.md): running Iruka on Windows (prerequisites, FreeRDP via vcpkg; not tried yet).
 - [docs/mac-target.md](docs/mac-target.md): how to use a Mac as a target, and the results of connecting through macrdp (2026-10-13).
+- [docs/realtime-kill.md](docs/realtime-kill.md): why Iruka was SIGKILLed under load (WebKitGTK's real-time IPC threads), how it was traced, and the design comparison with Remmina that came out of it (2026-10-23).
 
 ## For contributors
 

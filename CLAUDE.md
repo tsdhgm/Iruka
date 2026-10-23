@@ -43,8 +43,8 @@ KNOWN_ISSUES.md and TODO.md.
 - **2026-10-23: Iruka gets SIGKILLed under load (seen with OBS capturing the 4K display).** Cause
   found with gdb + bpftrace: WebKitGTK makes its IPC `ReceiveQueue` threads real-time via RealtimeKit
   with `RLIMIT_RTTIME` 200 ms, and the kernel kills the process when one runs that long without
-  blocking (KNOWN_ISSUES.md). Workaround not decided; candidate in TODO.md (demote those threads to
-  `SCHED_OTHER` from the memory sampler thread).
+  blocking (KNOWN_ISSUES.md; full story and the Remmina design comparison in docs/realtime-kill.md).
+  Owner's decision: recorded only, no workaround in code; the candidate stays in TODO.md.
 - The deb from `scripts/make-deb.sh` is installed on the Ubuntu box (`/usr/bin/iruka`, dolphin
   icon verified; rebuilt and reinstalled 2026-10-23 with the cursor feature, via `sudo dpkg -i`
   because the version is still 0.1.0 and `apt install` does not replace a same-version package);

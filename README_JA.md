@@ -61,6 +61,7 @@ Tauri 2 + React + TypeScript。RDP は FreeRDP 3 を使う（予備として Iro
 
 - [docs/windows-client_JA.md](docs/windows-client_JA.md): Windows で Iruka を動かす（前提、vcpkg での FreeRDP。未着手）。
 - [docs/mac-target_JA.md](docs/mac-target_JA.md): Mac を接続先にする方法の調査と、macrdp での接続結果（2026-10-13）。
+- [docs/realtime-kill_JA.md](docs/realtime-kill_JA.md): 高負荷時に Iruka が SIGKILL で消えた理由（WebKitGTK のリアルタイム IPC スレッド）、追跡の手順、そこから出た Remmina との設計比較（2026-10-23）。
 
 ## 開発に参加する人へ
 
