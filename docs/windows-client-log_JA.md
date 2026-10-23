@@ -122,7 +122,7 @@ Windows でクライアントとして Iruka を動かすまでの作業を、�
   Ubuntu の 2 回の接続でも `Loaded winmm backend for rdpsnd`（static と dynamic）と
   `Loaded winmm backend for audin` が出ていた。クライアント側は正常なので、音が Ubuntu 側で鳴ったまま
   なのは GNOME Remote Desktop 側の振る舞いと思われる。Windows クライアントの問題ではなさそう。
-- メモリ（`iruka_mem` の used_mb。Linux との比較はまだ）: セッションなしで 393。1920×1080 の
+- メモリ（`iruka_mem` の used_mb。Linux との比較は docs/code-notes_JA.md「メモリモデル」）: セッションなしで 393。1920×1080 の
   Ubuntu 1 本で約 760〜780。そのセッションを閉じた後も約 1,010（戻らない）。3840×2160 の
   Windows 1 本で約 1,580〜1,630。
 

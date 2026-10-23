@@ -39,7 +39,7 @@
 - [ ] パスワードを、プロセス内の `/p:` 引数ではなく FreeRDP の設定 API で渡す（デバッグ中は今のまま。FreeRDP が警告を出す）。
 - [ ] `iruka_perf` / `iruka_mem` のデバッグログを明示的に有効にしたときだけ出す（今は `src-tauri/src/lib.rs` の既定フィルターで有効）。
 - [ ] `/cert:ignore`（証明書を検証しない。LAN 専用）の扱いを決める。
-- [ ] Windows クライアントのメモリ: 3840×2160 を 1 本で `used_mb` 約 1.6 GB、セッションを閉じてもメモリが戻らない。同じ測り方で Linux 版と比べる。
+- [ ] セッションを閉じても残るメモリ（両クライアント。数字は docs/code-notes_JA.md「メモリモデル」）: Linux では閉じた後に約 600 MB が残り、大半は本体プロセスの常駐した glibc malloc アリーナ。セッション終了時の `malloc_trim(0)` か `M_ARENA_MAX` を試して測り直し、本当のリークがないか heaptrack で見る。
 - [ ] Ubuntu（GNOME Remote Desktop）の音声が、クライアントは音声の出力先を読み込んでいるのにリモート側で鳴ったまま（Windows クライアントで確認。マイクは動く）。後回し。Linux 版と比べる（docs/windows-client-log_JA.md）。
 - [ ] KDE（など GNOME 以外のデスクトップ）で Iruka を試す: `StartupWMClass` によるウィンドウとアイコンの対応、右 Alt の切り替え、クリップボード。
 - [ ] Windows のインストーラー: FreeRDP / OpenSSL の DLL（`legacy.dll` を含む）を `bundle.resources` で同梱し、起動時に `OPENSSL_MODULES` を設定する（KNOWN_ISSUES_JA.md）。
@@ -55,6 +55,7 @@
 
 ## 完了
 
+- [x] 2026-10-23: Windows クライアントとのメモリ比較（docs/code-notes_JA.md「メモリモデル」）: 3840×2160 を 1 本のコストは Linux で約 550 MB、Windows で約 1.2 GB。
 - [x] 2026-10-23: リモート画面上のカーソルがリモートの形になる（FreeRDP のポインター更新 → CSS cursor。docs/code-notes_JA.md「カーソルの形」）。
 - [x] 2026-10-16: Linux のパッケージ: `.deb`（`scripts/make-deb.sh`。Ubuntu の FreeRDP 3 に依存）と自己完結の tar アーカイブ（`scripts/make-tarball.sh`: RPATH `$ORIGIN/lib`、`lib/` の FreeRDP 3 ライブラリ、`check-deps.sh`）。
 - [x] 2026-10-16: 自分で使う用の Windows ポータブル zip（docs/windows-client_JA.md の「ポータブル zip」）。

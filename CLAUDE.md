@@ -32,12 +32,13 @@ KNOWN_ISSUES.md and TODO.md.
   (`[profile.release] strip = true`). Only GNOME (Wayland) is tested; KDE is in TODO.md.
 - **2026-10-23: the cursor over the remote screen follows the remote's shape** (FreeRDP pointer
   updates → CSS cursor; docs/code-notes.md "Cursor shape"). Verified on a Windows target.
-- **Next (set 2026-10-16): memory comparison.** Measure the Linux client
-  the way the Windows session did (`iruka_mem` `used_mb` samples in the log: idle, one 3840×2160
-  FreeRDP session, after closing it) and compare with the Windows figures (about 1.6 GB `used_mb`
-  for one 4K session, not returned after closing; see docs/windows-client-log.md). Record the
-  numbers in docs/code-notes.md (+ `_JA`) or a new docs page, and in TODO.md. After that: Ubuntu
-  audio playback staying on the remote (compare with the Linux client).
+- **2026-10-23: memory comparison done** (table in docs/code-notes.md "Memory model"). One
+  3840×2160 FreeRDP session costs about 550 MB over the baseline on Linux against about 1.2 GB on
+  Windows. Both clients keep memory after a session closes; on Linux about 600 MB stayed, almost
+  all of it in fully resident 64 MB glibc malloc arenas of the main process, growing with each
+  open/close cycle.
+- **Next:** try `malloc_trim(0)` at session end or `M_ARENA_MAX` and re-measure (TODO.md). After
+  that: Ubuntu audio playback staying on the remote (compare with the Linux client).
 - The deb from `scripts/make-deb.sh` is installed on the Ubuntu box (`/usr/bin/iruka`, dolphin
   icon verified); the dev desktop entry was removed since the deb's entry also matches dev builds.
 - Tested so far: clients on Ubuntu 26.04 LTS and Windows 11 24H2; targets Windows 11 Pro, Ubuntu

@@ -122,7 +122,7 @@ The cleaned-up procedure is in [windows-client.md](windows-client.md).
   buffered); once they showed up, both Ubuntu sessions had `Loaded winmm backend for rdpsnd`
   (static and dynamic) and `Loaded winmm backend for audin`. The client side is fine, so the sound
   staying on the Ubuntu side is probably GNOME Remote Desktop behaviour, not a Windows client issue.
-- Memory (`iruka_mem` used_mb, not compared with Linux yet): 393 with no session; about 760–780 with
+- Memory (`iruka_mem` used_mb; the Linux comparison is in docs/code-notes.md "Memory model"): 393 with no session; about 760–780 with
   one 1920×1080 Ubuntu session; about 1,010 after that session was closed (not returned);
   about 1,580–1,630 with one 3840×2160 Windows session.
 

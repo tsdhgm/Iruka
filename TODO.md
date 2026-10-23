@@ -39,7 +39,7 @@ A quick check on 2026-10-13 found no problems. Still to be checked more carefull
 - [ ] Pass the password to FreeRDP through the settings API instead of the in-process `/p:` argument (kept for now while debugging; FreeRDP prints a warning).
 - [ ] Make the `iruka_perf` / `iruka_mem` debug logging opt-in (today the default filter in `src-tauri/src/lib.rs` enables it).
 - [ ] Decide what to do about `/cert:ignore` (certificate verification is skipped; LAN use only).
-- [ ] Windows client memory: about 1.6 GB `used_mb` with one 3840×2160 session, and memory not returned after closing a session. Compare with the Linux client measured the same way.
+- [ ] Memory kept after a session closes (both clients; figures in docs/code-notes.md "Memory model"): on Linux about 600 MB stays after closing, mostly in fully resident glibc malloc arenas of the main process. Try `malloc_trim(0)` at session end or `M_ARENA_MAX`, re-measure, and look for a real leak with heaptrack.
 - [ ] Audio playback from Ubuntu (GNOME Remote Desktop) stays on the remote although the client loads its audio backend (seen from the Windows client; microphone works). Postponed; compare with the Linux client (docs/windows-client-log.md).
 - [ ] Try Iruka on KDE (or another non-GNOME desktop): window icon matching via `StartupWMClass`, the right-Alt toggle, clipboard.
 - [ ] Windows installer: ship the FreeRDP / OpenSSL DLLs (with `legacy.dll`) in `bundle.resources`, and set `OPENSSL_MODULES` at startup (KNOWN_ISSUES.md).
@@ -55,6 +55,7 @@ A quick check on 2026-10-13 found no problems. Still to be checked more carefull
 
 ## Done
 
+- [x] 2026-10-23: memory comparison with the Windows client (docs/code-notes.md "Memory model"): one 3840×2160 session costs about 550 MB on Linux, about 1.2 GB on Windows.
 - [x] 2026-10-23: the cursor over the remote screen takes the remote's shape (FreeRDP pointer updates → CSS cursor; docs/code-notes.md "Cursor shape").
 - [x] 2026-10-16: Linux packages: `.deb` (`scripts/make-deb.sh`, depends on Ubuntu's FreeRDP 3) and a self-contained tarball (`scripts/make-tarball.sh`: RPATH `$ORIGIN/lib`, FreeRDP 3 libraries in `lib/`, `check-deps.sh`).
 - [x] 2026-10-16: Windows portable zip for the user's own use (docs/windows-client.md, "Portable zip").

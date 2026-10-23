@@ -97,6 +97,21 @@ The frontend converts `KeyboardEvent.code` to PC/AT Set 1 scancodes with the `SC
 
 `rdp_memory_check` returns available memory (from the OS) and the estimate; in debug builds `IRUKA_FAKE_AVAILABLE_MB` fakes the available figure for testing the dialog. `lib.rs` also sets glibc's `M_MMAP_THRESHOLD` to 256 KB on Linux so large frame buffers go back to the OS when freed instead of lingering in per-thread arenas.
 
+**Measured 2026-10-23** (Linux client, debug build, Ubuntu 26.04, FreeRDP 3.32.1, WebKitGTK 2.52.6; `used_mb` is the whole process tree; the target was a Windows 11 PC at 3840×2160):
+
+| State | `used_mb` |
+|---|---|
+| Idle after start (baseline) | 482–512 |
+| One 3840×2160 session, the first of the run | 1009–1115 |
+| After closing it | 665–711 |
+| Two 3840×2160 sessions (85 min) | 1692–1940 |
+| Back to one session (operated for 15 min) | 1444–1592 |
+| All sessions closed, 6 min later | 1079–1117, steady |
+
+Windows client (docs/windows-client-log.md): 393 idle, about 1,580–1,630 with one 3840×2160 session, 1,010 after closing a 1920×1080 session. So one 4K session costs about 550 MB on Linux against about 1.2 GB on Windows. Both clients keep memory after a session closes, and on Linux the kept amount grows with each open/close cycle (after-close readings in one run: 666 → 684 → 791 → 1080).
+
+Where it sits (`/proc/<pid>/smaps` of the main process after everything was closed): 574 MB anonymous memory in the main process, 114 MB in the WebKit web process. Seven mappings of the main process were 64 MB glibc malloc arena heaps, each almost fully resident (about 440 MB together), plus two part-filled ones. That is most likely memory the session threads freed but glibc kept: an arena only shrinks from its top, and these are fragmented with allocations below `M_MMAP_THRESHOLD` (FreeRDP codec and cache state, channel buffers). Things to try: `malloc_trim(0)` when a session ends, or `M_ARENA_MAX` to cap the number of arenas; whether part of it is a real leak (FreeRDP context or codec state not freed) is not established and would need a heaptrack run. Tracked in TODO.md.
+
 ### Clipboard
 
 Text only, and only for the session on screen. `clipboard.rs` keeps one `arboard::Clipboard` for the life of the process (on X11 the owner object must stay alive for other applications to read the data) and an `ACTIVE` session id. `rdp_set_active` (called by the frontend on focus changes) stores the id and pushes the local text to that session as `Command::ClipboardLocal`; `FrameSink::clipboard_from_remote` only writes to the local clipboard when the copying session is the active one. Line endings are normalised to CRLF towards the remote and to LF on non-Windows locally. In the C bridge, cliprdr is wired by `iruka_on_channel_connected`: the server's format list triggers a request for `CF_UNICODETEXT`, the response is stored in `remote_text` for the Rust loop to collect, and a server data request is answered from `local_text`.
