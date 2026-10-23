@@ -37,8 +37,9 @@ KNOWN_ISSUES.md and TODO.md.
   Windows. Both clients keep memory after a session closes; on Linux about 600 MB stayed, almost
   all of it in fully resident 64 MB glibc malloc arenas of the main process, growing with each
   open/close cycle.
-- **Next:** try `malloc_trim(0)` at session end or `M_ARENA_MAX` and re-measure (TODO.md). After
-  that: Ubuntu audio playback staying on the remote (compare with the Linux client).
+- The kept-memory follow-up (`malloc_trim(0)` at session end or `M_ARENA_MAX`, re-measure, heaptrack)
+  is **deferred by the owner** to a later occasion; it stays in TODO.md. **Next:** Ubuntu audio
+  playback staying on the remote (compare with the Linux client).
 - The deb from `scripts/make-deb.sh` is installed on the Ubuntu box (`/usr/bin/iruka`, dolphin
   icon verified); the dev desktop entry was removed since the deb's entry also matches dev builds.
 - Tested so far: clients on Ubuntu 26.04 LTS and Windows 11 24H2; targets Windows 11 Pro, Ubuntu

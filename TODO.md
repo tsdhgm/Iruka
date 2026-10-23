@@ -39,7 +39,7 @@ A quick check on 2026-10-13 found no problems. Still to be checked more carefull
 - [ ] Pass the password to FreeRDP through the settings API instead of the in-process `/p:` argument (kept for now while debugging; FreeRDP prints a warning).
 - [ ] Make the `iruka_perf` / `iruka_mem` debug logging opt-in (today the default filter in `src-tauri/src/lib.rs` enables it).
 - [ ] Decide what to do about `/cert:ignore` (certificate verification is skipped; LAN use only).
-- [ ] Memory kept after a session closes (both clients; figures in docs/code-notes.md "Memory model"): on Linux about 600 MB stays after closing, mostly in fully resident glibc malloc arenas of the main process. Try `malloc_trim(0)` at session end or `M_ARENA_MAX`, re-measure, and look for a real leak with heaptrack.
+- [ ] (Deferred by the owner, 2026-10-23.) Memory kept after a session closes (both clients; figures in docs/code-notes.md "Memory model"): on Linux about 600 MB stays after closing, mostly in fully resident glibc malloc arenas of the main process. Try `malloc_trim(0)` at session end or `M_ARENA_MAX`, re-measure, and look for a real leak with heaptrack.
 - [ ] Audio playback from Ubuntu (GNOME Remote Desktop) stays on the remote although the client loads its audio backend (seen from the Windows client; microphone works). Postponed; compare with the Linux client (docs/windows-client-log.md).
 - [ ] Try Iruka on KDE (or another non-GNOME desktop): window icon matching via `StartupWMClass`, the right-Alt toggle, clipboard.
 - [ ] Windows installer: ship the FreeRDP / OpenSSL DLLs (with `legacy.dll`) in `bundle.resources`, and set `OPENSSL_MODULES` at startup (KNOWN_ISSUES.md).

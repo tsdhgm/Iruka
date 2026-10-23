@@ -39,7 +39,7 @@
 - [ ] パスワードを、プロセス内の `/p:` 引数ではなく FreeRDP の設定 API で渡す（デバッグ中は今のまま。FreeRDP が警告を出す）。
 - [ ] `iruka_perf` / `iruka_mem` のデバッグログを明示的に有効にしたときだけ出す（今は `src-tauri/src/lib.rs` の既定フィルターで有効）。
 - [ ] `/cert:ignore`（証明書を検証しない。LAN 専用）の扱いを決める。
-- [ ] セッションを閉じても残るメモリ（両クライアント。数字は docs/code-notes_JA.md「メモリモデル」）: Linux では閉じた後に約 600 MB が残り、大半は本体プロセスの常駐した glibc malloc アリーナ。セッション終了時の `malloc_trim(0)` か `M_ARENA_MAX` を試して測り直し、本当のリークがないか heaptrack で見る。
+- [ ] （作者が後回しにした、2026-10-23。）セッションを閉じても残るメモリ（両クライアント。数字は docs/code-notes_JA.md「メモリモデル」）: Linux では閉じた後に約 600 MB が残り、大半は本体プロセスの常駐した glibc malloc アリーナ。セッション終了時の `malloc_trim(0)` か `M_ARENA_MAX` を試して測り直し、本当のリークがないか heaptrack で見る。
 - [ ] Ubuntu（GNOME Remote Desktop）の音声が、クライアントは音声の出力先を読み込んでいるのにリモート側で鳴ったまま（Windows クライアントで確認。マイクは動く）。後回し。Linux 版と比べる（docs/windows-client-log_JA.md）。
 - [ ] KDE（など GNOME 以外のデスクトップ）で Iruka を試す: `StartupWMClass` によるウィンドウとアイコンの対応、右 Alt の切り替え、クリップボード。
 - [ ] Windows のインストーラー: FreeRDP / OpenSSL の DLL（`legacy.dll` を含む）を `bundle.resources` で同梱し、起動時に `OPENSSL_MODULES` を設定する（KNOWN_ISSUES_JA.md）。
