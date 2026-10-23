@@ -41,7 +41,9 @@ KNOWN_ISSUES.md and TODO.md.
   is **deferred by the owner** to a later occasion; it stays in TODO.md. **Next:** Ubuntu audio
   playback staying on the remote (compare with the Linux client).
 - The deb from `scripts/make-deb.sh` is installed on the Ubuntu box (`/usr/bin/iruka`, dolphin
-  icon verified); the dev desktop entry was removed since the deb's entry also matches dev builds.
+  icon verified; rebuilt and reinstalled 2026-10-23 with the cursor feature, via `sudo dpkg -i`
+  because the version is still 0.1.0 and `apt install` does not replace a same-version package);
+  the dev desktop entry was removed since the deb's entry also matches dev builds.
 - Tested so far: clients on Ubuntu 26.04 LTS and Windows 11 24H2; targets Windows 11 Pro, Ubuntu
   GNOME Remote Desktop, Apple Silicon Mac running clintcan/macrdp.
 - Open items live in TODO.md; do not keep a separate list elsewhere.
