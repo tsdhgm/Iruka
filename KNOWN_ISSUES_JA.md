@@ -34,6 +34,14 @@
 - **原因**: OpenSSL 3 では MD4 と RC4 は「legacy」プロバイダー（`legacy.dll`）にある。vcpkg の `libcrypto-3-x64.dll` は `MODULESDIR` = `C:\Program Files\OpenSSL\bin` でビルドされていて、そこを探す。`legacy.dll` が実際にある vcpkg の `bin` は見ない。
 - **対処**: Iruka の起動前に、`OPENSSL_MODULES` を `legacy.dll` のあるフォルダー（vcpkg の `installed\x64-windows\bin`）にする。インストーラーでは `legacy.dll` を `iruka.exe` の横に同梱し、変数が未設定なら Iruka が起動時に自分のフォルダーを `OPENSSL_MODULES` に設定する。
 
+## Linux: 高負荷時、たとえば OBS で画面キャプチャ中にアプリ全体が SIGKILL で消える
+
+- **状態**: 2026-10-23 に原因を特定。回避策は未決定（TODO_JA.md）
+- **症状**: 3840×2160 のセッションを複数開いているとき、特に OBS Studio が PipeWire で 4K ディスプレイをキャプチャしていると、Iruka が 1〜数分で消える。記録は何も残らない。クラッシュレポートなし、カーネルの OOM なし、Iruka・GTK・FreeRDP のメッセージもなし。gdb の下では `Program terminated with signal SIGKILL`。
+- **原因**: WebKitGTK（WTF の `RealTimeThreads`。WebKitGTK 2.52.6 で確認）が RealtimeKit に頼んで IPC 受信スレッド（`ReceiveQueue`、UI プロセスに 2 本）を `SCHED_RR` 優先度 5 にし、`RLIMIT_RTTIME` を RealtimeKit の上限（ハード 200 ms、ソフト 160 ms）に設定する。カーネルは、リアルタイムスレッドがブロックせずに `RLIMIT_RTTIME` を超える CPU 時間を使ったプロセスを kill する。Iruka の IPC 量（4K セッション複数本のフレームが WebKit の IPC を通る）に OBS の CPU 競合が重なると、受信スレッドがブロックせずに 200 ms 以上走り、カーネルがプロセス全体に SIGKILL を送る。`signal_generate` の bpftrace で確認: `sig=9 to ReceiveQueue(...) from ReceiveQueue(同じプロセス) code=128`（SI_KERNEL）。WebKit はソフト上限で自分のスレッドを降格させる SIGXCPU ハンドラーを入れているが、トレースでは SIGKILL の前に SIGXCPU が出ておらず（カーネル 7.0、HZ=1000）、この保険は効かなかった。
+- **確認方法**: `sudo bpftrace -e 'tracepoint:signal:signal_generate /args->sig == 9/ { printf("%s to %s(%d) from %s(%d) code=%d\n", strftime("%H:%M:%S", nsecs), args->comm, args->pid, comm, pid, args->code); }'` を動かして再現する。`ps -L -o tid,cls,rtprio,comm -p $(pgrep -x iruka)` で `RR` のスレッドが、`grep realtime /proc/$(pgrep -x iruka)/limits` で上限が見える。
+- **直すなら**: 上限は上げられない（RealtimeKit が 200 ms で頭打ちにし、プロセスはハード上限を下げることしかできない）。選択肢: (1) Iruka が自分のプロセスの `ReceiveQueue` スレッドを `SCHED_OTHER` に戻す（`/proc/self/task` のうちポリシーが `SCHED_RR` のスレッドに `sched_setscheduler`。WebKit はビューが見えるようになると再び昇格させるので、既存のメモリ計測スレッドから繰り返す）。IPC の遅延がわずかに増えるが Iruka には不要な速さ。(2) SIGXCPU の保険が効かなかったことを WebKitGTK に報告する。(3) Iruka の IPC 量を減らす（フレームを減らす・小さくする）。これは閾値をずらすだけ。
+
 ## FreeRDP が使わない展開用バッファーを確保する
 
 - **状態**: FreeRDP 側の問題として保留（2026-10-09）

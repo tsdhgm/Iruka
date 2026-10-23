@@ -40,6 +40,11 @@ KNOWN_ISSUES.md and TODO.md.
 - The kept-memory follow-up (`malloc_trim(0)` at session end or `M_ARENA_MAX`, re-measure, heaptrack)
   is **deferred by the owner** to a later occasion; it stays in TODO.md. **Next:** Ubuntu audio
   playback staying on the remote (compare with the Linux client).
+- **2026-10-23: Iruka gets SIGKILLed under load (seen with OBS capturing the 4K display).** Cause
+  found with gdb + bpftrace: WebKitGTK makes its IPC `ReceiveQueue` threads real-time via RealtimeKit
+  with `RLIMIT_RTTIME` 200 ms, and the kernel kills the process when one runs that long without
+  blocking (KNOWN_ISSUES.md). Workaround not decided; candidate in TODO.md (demote those threads to
+  `SCHED_OTHER` from the memory sampler thread).
 - The deb from `scripts/make-deb.sh` is installed on the Ubuntu box (`/usr/bin/iruka`, dolphin
   icon verified; rebuilt and reinstalled 2026-10-23 with the cursor feature, via `sudo dpkg -i`
   because the version is still 0.1.0 and `apt install` does not replace a same-version package);
