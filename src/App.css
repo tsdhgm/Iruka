@@ -656,7 +656,7 @@ body {
   flex-shrink: 0;
   margin: auto; /* centered when smaller than the viewport, anchored top-left when larger */
   outline: none;
-  cursor: default; /* the remote cursor is not drawn, so show the local one */
+  cursor: default; /* replaced per pointer update by rdpSession.ts (the remote's cursor shape) */
 }
 
 .rdp-status {

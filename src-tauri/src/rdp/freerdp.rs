@@ -10,7 +10,9 @@ use std::{
 
 use anyhow::{bail, Context as _};
 
-use super::{Command, FrameSink, FrameView, RdpBackend, RdpConnectParams, RdpInput, Rect, MAX_DIRTY_RECTS};
+use super::{
+    Command, CursorImage, FrameSink, FrameView, RdpBackend, RdpConnectParams, RdpInput, Rect, MAX_DIRTY_RECTS,
+};
 
 /// Maximum time to wait for events. The input queue and pending frames are also checked at this interval.
 const POLL_TIMEOUT_MS: u32 = 15;
@@ -32,6 +34,16 @@ extern "C" {
     fn iruka_rdp_set_local_text(ctx: *mut RdpContext, text: *const c_char);
     fn iruka_rdp_take_remote_text(ctx: *mut RdpContext) -> *mut c_char;
     fn iruka_rdp_free_text(text: *mut c_char);
+    fn iruka_rdp_take_cursor_image(
+        ctx: *mut RdpContext,
+        id: *mut u32,
+        width: *mut u32,
+        height: *mut u32,
+        hot_x: *mut u32,
+        hot_y: *mut u32,
+    ) -> *mut u8;
+    fn iruka_rdp_free_cursor_image(rgba: *mut u8);
+    fn iruka_rdp_take_cursor(ctx: *mut RdpContext, id: *mut u32) -> c_int;
     fn iruka_rdp_last_error(ctx: *mut RdpContext) -> *const c_char;
     fn iruka_rdp_disconnect(ctx: *mut RdpContext);
     fn iruka_rdp_free(ctx: *mut RdpContext);
@@ -48,6 +60,10 @@ const PTR_FLAGS_BUTTON3: u16 = 0x4000; // middle
 const PTR_XFLAGS_DOWN: u16 = 0x8000;
 const PTR_XFLAGS_BUTTON1: u16 = 0x0001;
 const PTR_XFLAGS_BUTTON2: u16 = 0x0002;
+
+// Cursor ids reserved by the C bridge (CURSOR_DEFAULT / CURSOR_HIDDEN in freerdp_bridge.c)
+const CURSOR_DEFAULT: u32 = 0;
+const CURSOR_HIDDEN: u32 = 1;
 
 pub struct FreeRdp;
 
@@ -203,6 +219,12 @@ impl Session {
             if let Some(text) = self.take_remote_text() {
                 sink.clipboard_from_remote(&text);
             }
+            while let Some(img) = self.take_cursor_image() {
+                sink.cursor_image(img);
+            }
+            if let Some(id) = self.take_cursor() {
+                sink.cursor(id);
+            }
 
             if let Some(fb) = self.framebuffer() {
                 if (fb.width, fb.height) != size {
@@ -273,6 +295,48 @@ impl Session {
         // `text` is an owned copy.
         unsafe { iruka_rdp_free_text(ptr) };
         Some(text)
+    }
+
+    fn take_cursor_image(&self) -> Option<CursorImage> {
+        let (mut id, mut width, mut height, mut hot_x, mut hot_y) = (0, 0, 0, 0, 0);
+        // SAFETY: ctx is the valid context owned by this Session; the out-pointers refer to
+        // locals that live for the duration of the call. The C side hands over ownership of
+        // a heap buffer of width * height * 4 bytes (or NULL).
+        let ptr = unsafe {
+            iruka_rdp_take_cursor_image(self.ctx, &mut id, &mut width, &mut height, &mut hot_x, &mut hot_y)
+        };
+        if ptr.is_null() {
+            return None;
+        }
+        let len = width as usize * height as usize * 4;
+        // SAFETY: ptr is non-null and points to `len` initialised bytes (see above); they are
+        // copied out before the buffer is freed, exactly once, below.
+        let rgba = unsafe { std::slice::from_raw_parts(ptr, len) }.to_vec();
+        // SAFETY: ptr came from iruka_rdp_take_cursor_image and is freed exactly once here;
+        // `rgba` is an owned copy.
+        unsafe { iruka_rdp_free_cursor_image(ptr) };
+        Some(CursorImage {
+            id,
+            width,
+            height,
+            hot_x,
+            hot_y,
+            rgba,
+        })
+    }
+
+    /// The cursor the server selected since the last poll, if any (None inside = hidden).
+    fn take_cursor(&self) -> Option<Option<u32>> {
+        let mut id = 0;
+        // SAFETY: ctx is the valid context owned by this Session; `id` lives for the call.
+        if unsafe { iruka_rdp_take_cursor(self.ctx, &mut id) } == 0 {
+            return None;
+        }
+        Some(match id {
+            CURSOR_HIDDEN => None,
+            CURSOR_DEFAULT => Some(0),
+            other => Some(other),
+        })
     }
 
     fn send_input(&self, input: RdpInput) {

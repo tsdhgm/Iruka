@@ -101,13 +101,17 @@ The frontend converts `KeyboardEvent.code` to PC/AT Set 1 scancodes with the `SC
 
 Text only, and only for the session on screen. `clipboard.rs` keeps one `arboard::Clipboard` for the life of the process (on X11 the owner object must stay alive for other applications to read the data) and an `ACTIVE` session id. `rdp_set_active` (called by the frontend on focus changes) stores the id and pushes the local text to that session as `Command::ClipboardLocal`; `FrameSink::clipboard_from_remote` only writes to the local clipboard when the copying session is the active one. Line endings are normalised to CRLF towards the remote and to LF on non-Windows locally. In the C bridge, cliprdr is wired by `iruka_on_channel_connected`: the server's format list triggers a request for `CF_UNICODETEXT`, the response is stored in `remote_text` for the Rust loop to collect, and a server data request is answered from `local_text`.
 
+### Cursor shape
+
+In RDP the cursor is not part of the screen image; the server sends each shape as a pointer update and selects one (also from its cache) as the user moves. The C bridge registers a pointer class with `graphics_register_pointer` (`iruka_pointer_*`): `New` converts the shape to RGBA with `freerdp_image_copy_from_pointer_data` and queues it with a fresh id (`cursor_images`), `Set` / `SetNull` / `SetDefault` record the selection (`cursor_id`, ids 0 and 1 are the local default and hidden). After every poll the Rust loop drains the queue into `RdpEvent::CursorImage` (base64 RGBA, hotspot) and the selection into `RdpEvent::Cursor`. The frontend (`rdpSession.ts`) keeps up to `MAX_CURSOR_SHAPES` shapes as PNG data URLs and sets the canvas's CSS `cursor`; `remoteCursorStyle` in `rdp.ts` scales the image by the device pixel ratio, because the canvas shows remote pixels 1:1 physically while a CSS cursor image is in CSS pixels. WebKit ignores cursor images larger than 128×128 CSS pixels (the bridge drops anything above 256×256); Windows gets there only with a very large "Mouse pointer size" setting, and the local arrow is shown instead. IronRDP sends no cursor events, so the default arrow stays.
+
 ## 2. Threading and the FFI boundary
 
 Threads involved in one FreeRDP session:
 
 | Thread | What runs on it |
 |---|---|
-| session thread (spawned by `rdp_connect`) | `RdpBackend::run`: the poll loop, all `iruka_rdp_*` calls, `FrameSink::flush` (pixel copy) |
+| session thread (spawned by `rdp_connect`) | `RdpBackend::run`: the poll loop, all `iruka_rdp_*` calls, `FrameSink::flush` (pixel copy), the pointer callbacks (`iruka_pointer_*`, delivered on the main channel inside `iruka_rdp_poll`) |
 | send thread (spawned by `FrameSink::new`) | `Channel::send` to the WebView |
 | FreeRDP static-channel threads | cliprdr callbacks (`clip_*` in the C bridge) |
 | memory sampler (`memory::start`) | `sysinfo` refresh, model update, file save |

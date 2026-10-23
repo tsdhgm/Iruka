@@ -55,6 +55,7 @@
 
 ## 完了
 
+- [x] 2026-10-23: リモート画面上のカーソルがリモートの形になる（FreeRDP のポインター更新 → CSS cursor。docs/code-notes_JA.md「カーソルの形」）。
 - [x] 2026-10-16: Linux のパッケージ: `.deb`（`scripts/make-deb.sh`。Ubuntu の FreeRDP 3 に依存）と自己完結の tar アーカイブ（`scripts/make-tarball.sh`: RPATH `$ORIGIN/lib`、`lib/` の FreeRDP 3 ライブラリ、`check-deps.sh`）。
 - [x] 2026-10-16: 自分で使う用の Windows ポータブル zip（docs/windows-client_JA.md の「ポータブル zip」）。
 - [x] 2026-10-16: Windows クライアントから Windows の接続先へ: FreeRDP（NLA、音声、マイク、クリップボード）と IronRDP。右 Alt、全画面、ドロップダウンのツールバーも動作（docs/windows-client_JA.md）。

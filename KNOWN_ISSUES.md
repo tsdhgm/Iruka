@@ -13,16 +13,6 @@ Known bugs and limitations. Problems whose cause lies outside Iruka (FreeRDP or 
   - Linux: a GTK keyboard grab, or the Wayland keyboard-shortcuts-inhibit protocol.
   - Windows: a low-level keyboard hook (`WH_KEYBOARD_LL`), the same approach as mstsc.
 
-## The mouse cursor shape does not follow the remote
-
-- **Status**: limitation (2026-10-09)
-- **Symptom**: over the RDP view the cursor is always the local arrow. It does not become a resize shape (↔ and so on) over window borders, nor an I-beam over text or a hand over links. The operations themselves (resizing by dragging a border, for example) work.
-- **Cause**: in RDP the cursor is not part of the screen image; its shape arrives separately as pointer updates, and the client shows it as the local cursor (to avoid lag). Iruka ignores that information and always shows the local arrow (`cursor: default` on `.rdp-canvas` in `src/App.css`).
-- **If it is to be fixed**:
-  - Receive FreeRDP's pointer updates (New / Set / SetNull / SetDefault) in `freerdp_bridge.c` and convert the cursor image to RGBA.
-  - Send it to the frontend together with the hotspot and set it as the canvas's CSS `cursor: url(...) x y`.
-  - At high display scale factors (4K and the like) the cursor image gets large. Whether the WebView has limits on cursor size or scale handling needs checking.
-
 ## Option+V paste does not work on a Mac (macrdp)
 
 - **Status**: parked (2026-10-13)

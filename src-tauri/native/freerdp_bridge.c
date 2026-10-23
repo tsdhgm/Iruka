@@ -21,8 +21,10 @@
 #include <freerdp/channels/channels.h>
 #include <freerdp/channels/cliprdr.h>
 #include <freerdp/client/cliprdr.h>
+#include <freerdp/codec/color.h>
 #include <freerdp/gdi/gdi.h>
 #include <freerdp/gdi/gfx.h>
+#include <freerdp/graphics.h>
 #include <freerdp/input.h>
 #include <freerdp/scancode.h>
 #include <winpr/string.h>
@@ -36,6 +38,25 @@ typedef struct
 	INT32 x, y, w, h;
 } DirtyRect;
 
+/* Cursor ids handed to Rust: 0 and 1 are reserved, pointer images get 2 and up */
+#define CURSOR_DEFAULT 0 /* the local default arrow */
+#define CURSOR_HIDDEN 1  /* no cursor (the server hid it) */
+
+/* A cursor shape received from the server, converted to RGBA, waiting for Rust to take it */
+typedef struct cursor_image
+{
+	struct cursor_image* next;
+	uint32_t id, width, height, hot_x, hot_y;
+	uint8_t* rgba; /* width * height * 4 bytes, in the order R, G, B, A */
+} CursorImage;
+
+/* FreeRDP's pointer object, extended with the id Iruka gave its image */
+typedef struct
+{
+	rdpPointer base;
+	uint32_t id;
+} IrukaPointer;
+
 typedef struct
 {
 	rdpClientContext common;
@@ -43,6 +64,12 @@ typedef struct
 	/* Regions changed since the last iruka_rdp_take_dirty() */
 	DirtyRect dirty[MAX_DIRTY];
 	int ndirty;
+
+	/* Cursor shape (pointer updates, see "Pointer" below). Poll thread only */
+	uint32_t next_cursor_id;
+	CursorImage* cursor_images; /* images not yet taken by Rust, oldest first */
+	uint32_t cursor_id;         /* what the server wants shown now */
+	BOOL cursor_changed;        /* cursor_id changed since the last iruka_rdp_take_cursor() */
 
 	/* Clipboard (text only). Protected by clip_lock */
 	CRITICAL_SECTION clip_lock;
@@ -126,6 +153,104 @@ static BOOL iruka_desktop_resize(rdpContext* context)
 		return FALSE;
 	ic->ndirty = 0;
 	return TRUE;
+}
+
+/* ---- Pointer (cursor shape) ----
+ *
+ * In RDP the cursor is not part of the screen image: the server sends its shape as
+ * pointer updates and the client shows it as the local cursor, so it moves without
+ * lag. FreeRDP keeps a cache of pointers and calls New when a shape arrives, Set when
+ * the server selects one (also from the cache), SetNull to hide it and SetDefault for
+ * the ordinary arrow. These run on the poll thread: pointer updates travel on the main
+ * channel, which iruka_rdp_poll processes. Each new shape is converted to RGBA and
+ * queued once (cursor_images); the selection is a cursor id (cursor_id). Rust takes
+ * both after every poll and the frontend sets the canvas's CSS cursor from them.
+ */
+
+static BOOL iruka_pointer_new(rdpContext* context, rdpPointer* pointer)
+{
+	IrukaContext* ic = (IrukaContext*)context;
+	IrukaPointer* ip = (IrukaPointer*)pointer;
+	const UINT32 w = pointer->width, h = pointer->height;
+	ip->id = CURSOR_DEFAULT; /* shown instead if the image cannot be converted */
+	if (w == 0 || h == 0 || w > 256 || h > 256 || !context->gdi)
+		return TRUE;
+	CursorImage* img = calloc(1, sizeof(*img));
+	if (!img)
+		return TRUE;
+	img->rgba = malloc((size_t)w * h * 4);
+	if (!img->rgba ||
+	    !freerdp_image_copy_from_pointer_data(img->rgba, PIXEL_FORMAT_RGBA32, w * 4, 0, 0, w, h,
+	                                          pointer->xorMaskData, pointer->lengthXorMask,
+	                                          pointer->andMaskData, pointer->lengthAndMask,
+	                                          pointer->xorBpp, &context->gdi->palette))
+	{
+		free(img->rgba);
+		free(img);
+		return TRUE;
+	}
+	ip->id = ic->next_cursor_id++;
+	img->id = ip->id;
+	img->width = w;
+	img->height = h;
+	img->hot_x = pointer->xPos;
+	img->hot_y = pointer->yPos;
+	CursorImage** tail = &ic->cursor_images;
+	while (*tail)
+		tail = &(*tail)->next;
+	*tail = img;
+	return TRUE;
+}
+
+static void iruka_pointer_free(rdpContext* context, rdpPointer* pointer)
+{
+	/* The pixel data belongs to FreeRDP; the queued copy (if still queued) is Rust's to take */
+	WINPR_UNUSED(context);
+	WINPR_UNUSED(pointer);
+}
+
+static void set_cursor(IrukaContext* ic, uint32_t id)
+{
+	ic->cursor_id = id;
+	ic->cursor_changed = TRUE;
+}
+
+static BOOL iruka_pointer_set(rdpContext* context, rdpPointer* pointer)
+{
+	set_cursor((IrukaContext*)context, ((IrukaPointer*)pointer)->id);
+	return TRUE;
+}
+
+static BOOL iruka_pointer_set_null(rdpContext* context)
+{
+	set_cursor((IrukaContext*)context, CURSOR_HIDDEN);
+	return TRUE;
+}
+
+static BOOL iruka_pointer_set_default(rdpContext* context)
+{
+	set_cursor((IrukaContext*)context, CURSOR_DEFAULT);
+	return TRUE;
+}
+
+static BOOL iruka_pointer_set_position(rdpContext* context, UINT32 x, UINT32 y)
+{
+	/* The server moved its cursor; the local cursor stays where the user has it */
+	WINPR_UNUSED(context);
+	WINPR_UNUSED(x);
+	WINPR_UNUSED(y);
+	return TRUE;
+}
+
+static void free_cursor_images(IrukaContext* ic)
+{
+	while (ic->cursor_images)
+	{
+		CursorImage* img = ic->cursor_images;
+		ic->cursor_images = img->next;
+		free(img->rgba);
+		free(img);
+	}
 }
 
 /* ---- Clipboard (cliprdr, text only) ----
@@ -329,6 +454,16 @@ static BOOL iruka_post_connect(freerdp* instance)
 	update->BeginPaint = iruka_begin_paint;
 	update->EndPaint = iruka_end_paint;
 	update->DesktopResize = iruka_desktop_resize;
+	/* Cursor shapes (gdi_init registers bitmaps and glyphs, the pointer class is the client's) */
+	rdpPointer pointer = { 0 };
+	pointer.size = sizeof(IrukaPointer);
+	pointer.New = iruka_pointer_new;
+	pointer.Free = iruka_pointer_free;
+	pointer.Set = iruka_pointer_set;
+	pointer.SetNull = iruka_pointer_set_null;
+	pointer.SetDefault = iruka_pointer_set_default;
+	pointer.SetPosition = iruka_pointer_set_position;
+	graphics_register_pointer(instance->context->graphics, &pointer);
 	return TRUE;
 }
 
@@ -350,6 +485,7 @@ static BOOL iruka_client_new(freerdp* instance, rdpContext* context)
 	IrukaContext* ic = (IrukaContext*)context;
 	if (!InitializeCriticalSectionAndSpinCount(&ic->clip_lock, 4000))
 		return FALSE;
+	ic->next_cursor_id = CURSOR_HIDDEN + 1;
 	instance->PreConnect = iruka_pre_connect;
 	instance->PostConnect = iruka_post_connect;
 	instance->PostDisconnect = iruka_post_disconnect;
@@ -360,6 +496,7 @@ static void iruka_client_free(freerdp* instance, rdpContext* context)
 {
 	WINPR_UNUSED(instance);
 	IrukaContext* ic = (IrukaContext*)context;
+	free_cursor_images(ic);
 	free(ic->local_text);
 	free(ic->remote_text);
 	DeleteCriticalSection(&ic->clip_lock);
@@ -519,6 +656,48 @@ char* iruka_rdp_take_remote_text(rdpContext* context)
 void iruka_rdp_free_text(char* text)
 {
 	free(text);
+}
+
+/*
+ * Take the oldest cursor shape not yet taken (NULL if none): its id, size and hotspot, and
+ * width * height * 4 bytes of RGBA. Release the pixels with iruka_rdp_free_cursor_image.
+ */
+uint8_t* iruka_rdp_take_cursor_image(rdpContext* context, uint32_t* id, uint32_t* width,
+                                     uint32_t* height, uint32_t* hot_x, uint32_t* hot_y)
+{
+	IrukaContext* ic = (IrukaContext*)context;
+	CursorImage* img = ic->cursor_images;
+	if (!img)
+		return NULL;
+	ic->cursor_images = img->next;
+	*id = img->id;
+	*width = img->width;
+	*height = img->height;
+	*hot_x = img->hot_x;
+	*hot_y = img->hot_y;
+	uint8_t* rgba = img->rgba;
+	free(img);
+	return rgba;
+}
+
+void iruka_rdp_free_cursor_image(uint8_t* rgba)
+{
+	free(rgba);
+}
+
+/*
+ * The cursor the server wants shown, if it changed since the last call (returns 1 then).
+ * 0 is the local default arrow, 1 means hidden, anything else is an id from
+ * iruka_rdp_take_cursor_image (images are always queued before their id is selected).
+ */
+int iruka_rdp_take_cursor(rdpContext* context, uint32_t* id)
+{
+	IrukaContext* ic = (IrukaContext*)context;
+	if (!ic->cursor_changed)
+		return 0;
+	ic->cursor_changed = FALSE;
+	*id = ic->cursor_id;
+	return 1;
 }
 
 /* Description of the most recent error (in English) */

@@ -1,7 +1,9 @@
 import { invoke, Channel } from "@tauri-apps/api/core";
 import { hostKeyTracker, VIEW_TOGGLE_KEY } from "./hostKey";
 import {
+  MAX_CURSOR_SHAPES,
   SCANCODES,
+  remoteCursorStyle,
   toRemoteCoords,
   type RdpConnectParams,
   type RdpEvent,
@@ -106,8 +108,26 @@ export async function createRdpSession(
     Object.assign(perf, { frames: 0, kb: 0, handleMs: 0, maxLag: 0, maxHandle: 0 });
   }, 2000);
 
+  // Cursor shape: the remote sends each shape once (cursorImage) and then selects one by
+  // id (cursor); the canvas's CSS cursor follows (see "Pointer" in freerdp_bridge.c).
+  const cursors = new Map<number, string>();
+  let cursorId: number | null = 0;
+  const applyCursor = () => {
+    canvas.style.cursor =
+      cursorId === null ? "none" : cursorId === 0 ? "default" : (cursors.get(cursorId) ?? "default");
+  };
+
   onEvent.onmessage = (msg) => {
-    if (msg.type === "resize") {
+    if (msg.type === "cursorImage") {
+      cursors.set(msg.id, remoteCursorStyle(msg));
+      if (cursors.size > MAX_CURSOR_SHAPES) {
+        cursors.delete(cursors.keys().next().value!);
+      }
+      if (msg.id === cursorId) applyCursor();
+    } else if (msg.type === "cursor") {
+      cursorId = msg.id;
+      applyCursor();
+    } else if (msg.type === "resize") {
       canvas.width = msg.width;
       canvas.height = msg.height;
       applyPixelSize(canvas);
@@ -118,6 +138,8 @@ export async function createRdpSession(
       cb.markDirty(id);
     } else {
       clearInterval(perfTimer);
+      cursorId = 0;
+      applyCursor();
       status.style.display = "";
       status.textContent = msg.error
         ? `Connection error (${msg.backend}): ${msg.reason}`

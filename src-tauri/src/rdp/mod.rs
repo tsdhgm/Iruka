@@ -20,6 +20,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use tauri::ipc::{Channel, InvokeResponseBody};
 
@@ -43,6 +44,31 @@ pub enum RdpEvent {
         error: bool,
         backend: &'static str,
     },
+    /// A cursor shape from the server (sent once per shape; `Cursor` then selects it by id).
+    /// `rgba` is base64 of width * height * 4 bytes, R, G, B, A.
+    #[serde(rename_all = "camelCase")]
+    CursorImage {
+        id: u32,
+        width: u32,
+        height: u32,
+        hot_x: u32,
+        hot_y: u32,
+        rgba: String,
+    },
+    /// Which cursor to show: None hides it, Some(0) is the local default arrow, any other
+    /// id refers to an earlier `CursorImage`.
+    Cursor { id: Option<u32> },
+}
+
+/// A cursor shape received from the server, as the backend hands it to [`FrameSink::cursor_image`].
+pub struct CursorImage {
+    pub id: u32,
+    pub width: u32,
+    pub height: u32,
+    pub hot_x: u32,
+    pub hot_y: u32,
+    /// width * height * 4 bytes, R, G, B, A
+    pub rgba: Vec<u8>,
 }
 
 /// Input from the frontend. Coordinates are pixels on the remote screen.
@@ -279,6 +305,24 @@ impl FrameSink {
     /// Text was copied on the remote side (put on the local clipboard if this session is active).
     pub fn clipboard_from_remote(&self, text: &str) {
         clipboard::from_remote(self.id, text);
+    }
+
+    /// The server sent a new cursor shape. The frontend keeps it under its id.
+    pub fn cursor_image(&self, img: CursorImage) {
+        let rgba = base64::engine::general_purpose::STANDARD.encode(&img.rgba);
+        let _ = self.events.send(RdpEvent::CursorImage {
+            id: img.id,
+            width: img.width,
+            height: img.height,
+            hot_x: img.hot_x,
+            hot_y: img.hot_y,
+            rgba,
+        });
+    }
+
+    /// The server selected a cursor (see [`RdpEvent::Cursor`] for the meaning of `id`).
+    pub fn cursor(&self, id: Option<u32>) {
+        let _ = self.events.send(RdpEvent::Cursor { id });
     }
 
     /// This region of the screen changed.

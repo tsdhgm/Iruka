@@ -2,7 +2,13 @@
 
 export type RdpEvent =
   | { type: "resize"; width: number; height: number }
-  | { type: "closed"; reason: string; error: boolean; backend: string };
+  | { type: "closed"; reason: string; error: boolean; backend: string }
+  | { type: "cursorImage"; id: number; width: number; height: number; hotX: number; hotY: number; rgba: string }
+  /** null hides the cursor, 0 is the local default arrow, any other id was sent as a cursorImage */
+  | { type: "cursor"; id: number | null };
+
+/** The most cursor shapes a session keeps; the oldest is dropped beyond that (the server resends it when needed). */
+export const MAX_CURSOR_SHAPES = 64;
 
 export type RdpInput =
   | { type: "mouseMove"; x: number; y: number }
@@ -168,6 +174,35 @@ export const SCANCODES: Record<string, number> = {
   MetaRight: 0xe05c,
   ContextMenu: 0xe05d,
 };
+
+/**
+ * Build the CSS `cursor` value for a shape sent by the remote (base64 RGBA + hotspot).
+ * The canvas shows one remote pixel per physical pixel, while a CSS cursor image is in
+ * CSS pixels, so the image is scaled down by the device pixel ratio to keep the cursor
+ * the size the remote intended.
+ */
+export function remoteCursorStyle(img: Extract<RdpEvent, { type: "cursorImage" }>): string {
+  const bin = atob(img.rgba);
+  const rgba = new Uint8ClampedArray(bin.length);
+  for (let i = 0; i < bin.length; i++) rgba[i] = bin.charCodeAt(i);
+  const full = document.createElement("canvas");
+  full.width = img.width;
+  full.height = img.height;
+  full.getContext("2d")!.putImageData(new ImageData(rgba, img.width, img.height), 0, 0);
+  const dpr = window.devicePixelRatio || 1;
+  let out = full;
+  if (dpr !== 1) {
+    out = document.createElement("canvas");
+    out.width = Math.max(1, Math.round(img.width / dpr));
+    out.height = Math.max(1, Math.round(img.height / dpr));
+    const ctx = out.getContext("2d")!;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(full, 0, 0, out.width, out.height);
+  }
+  const hotX = Math.min(out.width - 1, Math.round(img.hotX / dpr));
+  const hotY = Math.min(out.height - 1, Math.round(img.hotY / dpr));
+  return `url(${out.toDataURL("image/png")}) ${hotX} ${hotY}, default`;
+}
 
 /** Convert client coordinates on the displayed canvas to pixel coordinates on the remote screen. */
 export function toRemoteCoords(

@@ -101,13 +101,17 @@ WebView はリモートの画面をセッションの `<canvas>` にしか持っ
 
 テキストのみ、表示中のセッションのみ。`clipboard.rs` はプロセスの生存中ずっと 1 つの `arboard::Clipboard` を持ち（X11 では持ち主のオブジェクトが生きている間だけ他のアプリが中身を読める）、`ACTIVE` のセッション ID を持つ。`rdp_set_active`（フォーカスが変わるとフロントが呼ぶ）が ID を記録し、ローカルのテキストを `Command::ClipboardLocal` でそのセッションに渡す。`FrameSink::clipboard_from_remote` は、コピーしたセッションがアクティブなときだけローカルのクリップボードに書く。改行はリモート向けには CRLF、Windows 以外のローカル向けには LF にそろえる。C の橋渡しでは `iruka_on_channel_connected` で cliprdr をつなぐ。サーバーの Format List が来たら `CF_UNICODETEXT` を要求し、応答を `remote_text` に置いて Rust のループに取りに来させ、サーバーからのデータ要求には `local_text` で答える。
 
+### カーソルの形
+
+RDP ではカーソルは画面の画像に含まれない。サーバーは形をポインター更新として送り、ユーザーの動きに合わせて（キャッシュからも）1 つを選ぶ。C の橋渡しは `graphics_register_pointer` でポインタークラス（`iruka_pointer_*`）を登録する。`New` は `freerdp_image_copy_from_pointer_data` で形を RGBA に変換し、新しい ID を付けて待ち行列（`cursor_images`）に入れる。`Set` / `SetNull` / `SetDefault` は選択を記録する（`cursor_id`。ID 0 と 1 はローカルの既定と非表示）。Rust のループはポーリングのたびに待ち行列を `RdpEvent::CursorImage`（base64 の RGBA とホットスポット）として、選択を `RdpEvent::Cursor` として流す。フロント（`rdpSession.ts`）は形を PNG の data URL で `MAX_CURSOR_SHAPES` 個まで持ち、canvas の CSS `cursor` に設定する。`rdp.ts` の `remoteCursorStyle` は画像をデバイスピクセル比で縮小する。canvas はリモートの画素を物理ピクセルで等倍に出すが、CSS のカーソル画像は CSS ピクセルだからである。WebKit は 128×128 CSS ピクセルより大きいカーソル画像を無視する（橋渡しは 256×256 超を捨てる）。Windows でそこに達するのは「マウスポインターのサイズ」をかなり大きくしたときだけで、その場合はローカルの矢印になる。IronRDP はカーソルのイベントを送らないので、既定の矢印のまま。
+
 ## 2. スレッドと FFI の境界
 
 FreeRDP セッション 1 本に関わるスレッド:
 
 | スレッド | そこで動くもの |
 |---|---|
-| セッションスレッド（`rdp_connect` が起こす） | `RdpBackend::run`: ポーリングのループ、すべての `iruka_rdp_*` 呼び出し、`FrameSink::flush`（画素のコピー） |
+| セッションスレッド（`rdp_connect` が起こす） | `RdpBackend::run`: ポーリングのループ、すべての `iruka_rdp_*` 呼び出し、`FrameSink::flush`（画素のコピー）、ポインターのコールバック（`iruka_pointer_*`。メインチャネルで届き `iruka_rdp_poll` の中で処理される） |
 | 送信スレッド（`FrameSink::new` が起こす） | WebView への `Channel::send` |
 | FreeRDP の静的チャネルのスレッド | cliprdr のコールバック（橋渡しの `clip_*`） |
 | メモリの記録（`memory::start`） | `sysinfo` の更新、モデルの更新、ファイル保存 |

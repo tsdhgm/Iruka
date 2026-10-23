@@ -55,6 +55,7 @@ A quick check on 2026-10-13 found no problems. Still to be checked more carefull
 
 ## Done
 
+- [x] 2026-10-23: the cursor over the remote screen takes the remote's shape (FreeRDP pointer updates → CSS cursor; docs/code-notes.md "Cursor shape").
 - [x] 2026-10-16: Linux packages: `.deb` (`scripts/make-deb.sh`, depends on Ubuntu's FreeRDP 3) and a self-contained tarball (`scripts/make-tarball.sh`: RPATH `$ORIGIN/lib`, FreeRDP 3 libraries in `lib/`, `check-deps.sh`).
 - [x] 2026-10-16: Windows portable zip for the user's own use (docs/windows-client.md, "Portable zip").
 - [x] 2026-10-16: Windows client against a Windows target: FreeRDP (NLA, audio, microphone, clipboard) and IronRDP; right Alt toggle, fullscreen and the drop-down toolbar work (docs/windows-client.md).
