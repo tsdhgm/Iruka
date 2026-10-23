@@ -113,6 +113,49 @@ and the Rust session management would largely carry over; what would be rewritte
 (all of the HTML/TypeScript), and the Windows build would then depend on GTK's Windows port or a
 second UI. Recorded as an option, not a plan.
 
+**Is GTK Linux-only, so a GTK-based Iruka would need a different implementation on Windows?**
+GTK is not Linux-only: it runs on Windows and macOS (GIMP and Inkscape ship Windows builds on it).
+But Windows support is second-class. The look does not become Windows-like (theme, font rendering,
+HiDPI quirks); the GTK runtime (dozens of DLLs) must be shipped with the app and built in an MSYS2
+environment; and Linux mechanisms such as Wayland or RealtimeKit do not exist there, so Windows
+needs its own adjustments instead. A GTK + cairo Iruka would therefore choose between riding GTK's
+Windows port and keeping a separate UI for Windows (WebView2, say). Tauri avoided that fork by
+handing the UI to the platform web view. For comparison, FreeRDP's own clients are written
+separately for X11 (xfreerdp), Wayland and Windows (wfreerdp); the only shared one is the SDL
+client (sdl-freerdp), and SDL, a thinner drawing layer than GTK, is another portability option.
+
+**Is Remmina Linux-only because it uses GTK directly?** No; GTK would run on Windows. Remmina is
+Linux-only by design and purpose: it leans on the Linux desktop stack (libsecret for passwords,
+Avahi for discovery, libssh, SPICE and VNC plugins, X11/Wayland keyboard and clipboard handling),
+and its goal is a client *from* a Linux desktop, where Windows already has mstsc. A FreeBSD port
+exists; attempts at Windows builds have been made, but there is no official one. So "uses GTK
+directly" does not mean "Linux-only"; it means "Windows costs extra effort", and Remmina had no
+reason to pay it.
+
+**Does GTK differ between Linux and Windows/macOS at the implementation level, and would
+"real-time" features need a different approach on Windows?** The GTK API is the same everywhere;
+the layer below it (the GDK backend: X11 and Wayland on Linux, Win32 on Windows, Quartz on macOS)
+is a separate implementation per OS, and that is where the differences live: drawing (on Linux GTK
+rides Wayland and GPU compositing; GTK3 on Windows draws with cairo in software and blits through
+GDI, with almost no GPU acceleration), input (IME, keyboard layouts, mouse capture, drag and
+drop), HiDPI, theming and file dialogs, and distribution. "Real-time" splits into two meanings:
+
+1. *Scheduling real-time*, the subject of this page, is not a GTK feature at all. It was WebKitGTK
+   using Linux's RealtimeKit to raise its own threads' priority. GTK itself uses no real-time
+   threads, Windows has neither RealtimeKit nor `RLIMIT_RTTIME`, and WebView2 does nothing of the
+   kind, so the problem does not exist on Windows and nothing needs replacing there. An RDP client
+   does not need real-time priority.
+2. *Throughput*, drawing 4K frames without stalling, is genuinely needed and does differ per OS.
+   4K at 30 fps moves about 1 GB of pixels per second, so the copy-and-present path matters. GTK +
+   cairo on Linux handles it on the CPU (Remmina is the proof); GTK on Windows works the same way
+   with less headroom because of the GDI blit. Serious Windows output uses GDI or Direct3D directly,
+   as FreeRDP's wfreerdp does, or a layer such as SDL that presents frames as GPU textures on both
+   systems, which is why sdl-freerdp is one code base for Linux and Windows.
+
+So "GTK differs at the implementation level" is true, mostly in the drawing path and distribution.
+The real-time issue behind this page is Linux-specific and would not travel to Windows; what
+Windows would need designed separately is the frame presentation path, not thread priorities.
+
 ## 5. Decision
 
 Per the project rule, problems outside Iruka are recorded, not worked around (owner's decision,

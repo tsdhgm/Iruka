@@ -61,6 +61,17 @@ SIGKILL と、Windows で目立ったメモリの多さはフレーム経路に 
 
 **GTK と cairo で直接描いてもサムネイルは作れる？** 作れる。サムネイルはフレームバッファーを縮小して小さな描画領域に描くだけで、cairo の拡縮と描画で済む。Remmina もウィンドウの拡縮を同じ方法でやっている。端末は VTE 部品（GNOME 端末のもの）で置き換えられる。FreeRDP の C ブリッジと Rust のセッション管理はおおむね流用でき、書き直すのは UI 層（HTML/TypeScript 全部）。Windows 版は GTK の Windows 移植に頼るか、別の UI を持つことになる。計画ではなく選択肢として記録する。
 
+**GTK は Linux 専用で、GTK 版の Iruka は Windows で別の実装が要る？** GTK は Linux 専用ではなく、Windows と macOS でも動く（GIMP や Inkscape の Windows 版が GTK）。ただし Windows 対応は二級。見た目が Windows らしくならない（テーマ、フォント描画、HiDPI の癖）、GTK のランタイム（数十の DLL）を同梱して MSYS2 環境でビルドする必要がある、Wayland や RealtimeKit のような Linux の仕組みは存在せず Windows 固有の調整が別に要る。したがって GTK + cairo の Iruka は、GTK の Windows 移植に乗るか、Windows だけ別の UI（たとえば WebView2）を持つかを選ぶことになる。Tauri は UI を OS の Web ビューに任せることでこの分岐を避けていた。参考に、FreeRDP 本体のクライアントは X11 用（xfreerdp）、Wayland 用、Windows 用（wfreerdp）が別々に書かれ、唯一の共通実装は SDL 版（sdl-freerdp）。GTK より薄い描画層である SDL も移植性の選択肢になる。
+
+**Remmina が Linux だけなのは GTK を直接使うから？** 違う。GTK は Windows でも動く。Remmina が Linux だけなのは設計と目的による。Linux のデスクトップ基盤に深く依存し（パスワード保存は libsecret、ホスト発見は Avahi、libssh、SPICE と VNC のプラグイン、X11/Wayland のキーボードとクリップボードの扱い）、目的が「Linux デスクトップ*から*つなぐクライアント」で、Windows には mstsc が最初からある。FreeBSD 版はあり、Windows でのビルドを試みた例もあるが、公式版はない。「GTK を直接使う = Linux 専用」ではなく「GTK を直接使うと Windows 対応に手間がかかる」が正確で、Remmina にはその手間をかける理由がなかった。
+
+**GTK は Linux と Windows/macOS で実装レベルに差がある？ リアルタイム性能が要る機能は Windows で別の実現方法が要る？** GTK の API は全 OS で同じだが、その下の層（GDK のバックエンド。Linux は X11 と Wayland、Windows は Win32、macOS は Quartz）が OS ごとに別実装で、差はそこにある。描画（Linux では Wayland と GPU 合成に乗れるが、Windows の GTK3 は cairo のソフトウェア描画を GDI で転送し GPU 加速はほぼ効かない）、入力（IME、キーボード配列、マウスのキャプチャ、ドラッグ&ドロップ）、高 DPI、テーマ、ファイルダイアログ、配布。「リアルタイム」は 2 つの意味に分かれる。
+
+1. *スケジューリングの意味のリアルタイム*（このページの主題）は GTK の機能ではない。WebKitGTK が Linux の RealtimeKit で自分のスレッドの優先度を上げた結果。GTK 自体はリアルタイムスレッドを使わず、Windows には RealtimeKit も `RLIMIT_RTTIME` もなく、WebView2 もそういうことをしないので、Windows にはこの問題が存在せず、置き換えるものもない。RDP クライアントにリアルタイム優先度は要らない。
+2. *スループット*（4K フレームを滞りなく描くこと）は本当に必要で、OS ごとに事情が違う。4K を 30 fps で描くと 1 秒あたり約 1 GB のピクセルを動かすので、コピーして画面に出す経路が効く。Linux の GTK + cairo は CPU でこなせる（Remmina が証拠）。Windows の GTK も同じ方法で動くが、GDI 転送の分だけ余裕が減る。Windows で本気で出すなら、FreeRDP の wfreerdp のように GDI や Direct3D を直接使うか、SDL のように両 OS で GPU のテクスチャとしてフレームを出す層を挟む。sdl-freerdp が Linux と Windows で同じコードなのはそのため。
+
+まとめると「GTK の実装レベルに差がある」は正しく、主に描画の経路と配布で出る。このページの原因だった「リアルタイム」は Linux 固有で Windows には持ち込まれない。Windows で別途設計が要るのはスレッドの優先度ではなく、フレームを画面に出す経路。
+
 ## 5. 決定
 
 プロジェクトの決めごとどおり、Iruka の外側の問題は記録するだけでコードでは回避しない（作者の判断、2026-10-23）。決めごとを緩める日が来たときの回避策の候補は KNOWN_ISSUES_JA.md と TODO_JA.md にある: メモリ計測スレッドから自プロセスの `SCHED_RR` スレッドを `SCHED_OTHER` に戻す（WebKit はビューが見えるようになると再昇格させるので繰り返す）。上限そのものは上げられない。RealtimeKit が 200 ms で頭打ちにし、プロセスはハード上限を下げることしかできない。一時的な gdb の起動口は削除済み。bpftrace スクリプトは Ubuntu 機の `~/.local/state/iruka/who-kills-iruka.bt` に残している。
