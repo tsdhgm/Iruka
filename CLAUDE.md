@@ -44,7 +44,11 @@ KNOWN_ISSUES.md and TODO.md.
   found with gdb + bpftrace: WebKitGTK makes its IPC `ReceiveQueue` threads real-time via RealtimeKit
   with `RLIMIT_RTTIME` 200 ms, and the kernel kills the process when one runs that long without
   blocking (KNOWN_ISSUES.md; full story and the Remmina design comparison in docs/realtime-kill.md).
-  Owner's decision: recorded only, no workaround in code; the candidate stays in TODO.md.
+  Owner's decision: recorded only, no workaround in code; the candidate stays in TODO.md. The
+  no-code workaround (start with `DBUS_SYSTEM_BUS_ADDRESS=unix:path=/nonexistent`, so WebKit cannot
+  reach RealtimeKit) is verified in real use with OBS (no kill, but slower response); on the Ubuntu
+  box it lives outside the repo as `~/.local/bin/iruka-no-realtime` plus a second dock entry
+  "Iruka (no realtime)". The owner uses it only for OBS recordings.
 - The deb from `scripts/make-deb.sh` is installed on the Ubuntu box (`/usr/bin/iruka`, dolphin
   icon verified; rebuilt and reinstalled 2026-10-23 with the cursor feature, via `sudo dpkg -i`
   because the version is still 0.1.0 and `apt install` does not replace a same-version package);
