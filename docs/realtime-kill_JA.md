@@ -85,6 +85,28 @@ SIGKILL と、Windows で目立ったメモリの多さはフレーム経路に 
 
 Iruka の遅延は目に見えて変わらない。リアルタイム化の狙いは、ブラウザーが音声や動画を再生するときに IPC の反応をミリ秒単位で安定させること。受信スレッドが普通の優先度なら他の普通のスレッドと公平に CPU を分け合うだけで、フレームが数ミリ秒遅れうる程度。Remmina のフレーム経路には優先度の仕掛けが何もなく、それで問題ない。つまり `RLIMIT_RTTIME` の設定は発生条件の一つで、それがなければ RealtimeKit が断る結果としてリアルタイムスレッドが存在せず、カーネルが kill するものもない。
 
+**メモリ計測モジュールに降格の処理を入れずに、起動オプションで最初から `SCHED_OTHER` のままにできる？** できる。しかも Iruka を一切変えずに済む。WebKitGTK は RealtimeKit に D-Bus の*システムバス*経由で頼むので、プロセスの起動時にシステムバスの場所を存在しないパスに向けておくと依頼が届かず、スレッドは普通のまま、`RLIMIT_RTTIME` も設定されない（WebKit はこの設定を RealtimeKit への依頼の途中でしか行わない）。2026-10-23 に `DBUS_SYSTEM_BUS_ADDRESS=unix:path=/nonexistent` を付けて `/usr/bin/iruka` を起動して確認した。
+
+| | 通常起動 | 環境変数あり |
+|---|---|---|
+| `SCHED_RR` のスレッド | `ReceiveQueue` 2 本 | なし |
+| `Max realtime timeout` | 160 ms / 200 ms | unlimited |
+| rtkit-daemon のログ | 昇格 2 件 | なし |
+| 標準エラーの警告 | | なし |
+
+ドックからこの方法で起動するには、deb の desktop エントリをユーザー側で上書きする（戻すときはこのファイルを消す）。
+
+```sh
+sed 's|^Exec=iruka$|Exec=env DBUS_SYSTEM_BUS_ADDRESS=unix:path=/nonexistent iruka|' \
+  /usr/share/applications/Iruka.desktop > ~/.local/share/applications/Iruka.desktop
+```
+
+注意点: Iruka がほかにシステムバスを使う場面は見当たらない（音声は PipeWire のソケット、RDP はただの TCP、GTK の設定はセッションバス）が、確認したのは起動だけで、RDP セッションと音声を開いた状態は試していないので、普段の使い方で確かめること。Iruka 自身にこのための起動オプションはない（`--no-realtime` を付けるなら、GTK の初期化前に同じ環境変数を設定する数行）。除外した代替案: WebKit に無効化の環境変数はない。polkit で RealtimeKit を拒否するとユーザー全体（PipeWire も）に効く。systemd の `RestrictRealtime` は rtkit 経由の昇格を止められない（rtkit-daemon が自分のプロセスからスレッドのポリシーを変えるため）。
+
+**D-Bus とは何か。** Linux のデスクトップでプロセス同士が通信するためのメッセージバス。プログラムは決まった名前の下に*オブジェクト*と*インターフェース*と*メソッド*を公開し、ほかのプログラムはそのメソッドを呼んだりシグナルを受け取ったりする。相手ごとに独自のソケットプロトコルを作らずに済む。バスは 2 本ある。*システムバス*は 1 台に 1 本、起動時に立ち上がり、NetworkManager、UPower、udisks、RealtimeKit といったシステムサービスのためのもので、誰が何を呼べるかはポリシーファイルと polkit が決める。*セッションバス*はログインセッションごとに 1 本で、通知、ポータル、設定、クリップボード管理といったデスクトップの用事に使う。プロセスは環境変数 `DBUS_SESSION_BUS_ADDRESS` と `DBUS_SYSTEM_BUS_ADDRESS` でバスの場所を知る（後者の既定は `/run/dbus/system_bus_socket`）。だからこの変数を存在しないパスに向けると、そのプロセスとその子からだけバスが見えなくなる。この話では、WebKit がシステムバス上の名前 `org.freedesktop.RealtimeKit1` のオブジェクト `/org/freedesktop/RealtimeKit1` に対してメソッド `MakeThreadRealtimeWithPID` を呼んでいる。
+
+**RealtimeKit とは何か。** 普通のユーザーのプロセスのスレッドに、頼まれればリアルタイムスケジューリングを与える小さなシステムサービス（`rtkit-daemon`。root で動き `CAP_SYS_NICE` を持つ）。これがないと、root か `RLIMIT_RTPRIO` を 0 より大きくしてもらったユーザーしか `SCHED_RR` や `SCHED_FIFO` を使えない。音声のために存在する。PulseAudio、いまは PipeWire と WirePlumber が、機械が忙しくても音が途切れないように音声スレッドの昇格を頼む。暴走したリアルタイムスレッドは機械全体を固められるので、rtkit は条件付きでしか応じない。polkit が呼び出し元を許すこと（ローカルで操作中のユーザーなら許される）、呼び出し元のプロセスが `RLIMIT_RTTIME` を rtkit の上限 200 ms 以下にあらかじめ設定していること（リアルタイムスレッドがそれだけブロックせずに走ったらカーネルがプロセスを kill するように）、優先度に上限があること、ユーザーあたりのリアルタイムスレッド数とプロセス数に上限があること、そしてカナリアスレッドがシステムを見張り、カナリアが時間内にスケジュールされなくなったら rtkit が昇格させたスレッドを全部降格させること。WebKitGTK は IPC 受信スレッドのために同じサービスを使っていて、リアルタイムなど何も頼んでいない Iruka が 200 ms の上限と kill を背負うことになったのはそのため。
+
 ## 5. 決定
 
 プロジェクトの決めごとどおり、Iruka の外側の問題は記録するだけでコードでは回避しない（作者の判断、2026-10-23）。決めごとを緩める日が来たときの回避策の候補は KNOWN_ISSUES_JA.md と TODO_JA.md にある: メモリ計測スレッドから自プロセスの `SCHED_RR` スレッドを `SCHED_OTHER` に戻す（WebKit はビューが見えるようになると再昇格させるので繰り返す）。上限そのものは上げられない。RealtimeKit が 200 ms で頭打ちにし、プロセスはハード上限を下げることしかできない。一時的な gdb の起動口は削除済み。bpftrace スクリプトは Ubuntu 機の `~/.local/state/iruka/who-kills-iruka.bt` に残している。

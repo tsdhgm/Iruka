@@ -182,6 +182,63 @@ frame may arrive a few milliseconds later; Remmina's frame path has no priority 
 fine. So yes: the `RLIMIT_RTTIME` setting is one of the conditions, and without it, because
 RealtimeKit would then refuse, there is no real-time thread and nothing for the kernel to kill.
 
+**Could a launch option keep the threads at `SCHED_OTHER` from the start, without the demotion
+code in the memory sampler?** Yes, and without changing Iruka at all: WebKitGTK reaches RealtimeKit
+over the D-Bus *system bus*, so if the process is started with the system bus pointed at a path
+that does not exist, the request never arrives, the threads stay ordinary, and `RLIMIT_RTTIME` is
+never set (WebKit only sets it in the middle of the RealtimeKit request). Verified on 2026-10-23 by
+starting `/usr/bin/iruka` with `DBUS_SYSTEM_BUS_ADDRESS=unix:path=/nonexistent`:
+
+| | normal start | with the variable |
+|---|---|---|
+| `SCHED_RR` threads | two `ReceiveQueue` | none |
+| `Max realtime timeout` | 160 ms / 200 ms | unlimited |
+| rtkit-daemon log | two promotions | none |
+| warnings on stderr | | none |
+
+To start that way from the dock, override the deb's desktop entry for the user (delete the file
+to go back):
+
+```sh
+sed 's|^Exec=iruka$|Exec=env DBUS_SYSTEM_BUS_ADDRESS=unix:path=/nonexistent iruka|' \
+  /usr/share/applications/Iruka.desktop > ~/.local/share/applications/Iruka.desktop
+```
+
+Caveats: nothing else in Iruka is known to use the system bus (audio goes through PipeWire's
+socket, RDP is plain TCP, GTK settings use the session bus), but the check covered only start-up,
+not an open RDP session with audio, so it should be tried in normal use. Iruka has no option of its
+own for this (`--no-realtime` would be a few lines setting the same variable before GTK starts).
+Rejected alternatives: WebKit has no environment switch for it; a polkit rule denying RealtimeKit
+would hit the whole user (PipeWire included); systemd's `RestrictRealtime` does not stop promotion
+through rtkit, because rtkit-daemon changes the thread's policy from its own process.
+
+**What is D-Bus?** The message bus Linux desktops use for communication between processes. A
+program offers *objects* with *interfaces* and *methods* under a well-known name, and other
+programs call those methods or listen for signals, instead of each pair inventing its own socket
+protocol. There are two buses. The *system bus* is one per machine, started at boot, for system
+services such as NetworkManager, UPower, udisks and RealtimeKit; who may call what is controlled by
+policy files and polkit. The *session bus* is one per login session, for desktop matters:
+notifications, the portals, settings, the clipboard manager. A process finds a bus through the
+environment variables `DBUS_SESSION_BUS_ADDRESS` and `DBUS_SYSTEM_BUS_ADDRESS` (the latter defaults
+to `/run/dbus/system_bus_socket`), which is why pointing the variable at a non-existent path hides
+the bus from that one process and its children. In this story, WebKit calls the method
+`MakeThreadRealtimeWithPID` on the object `/org/freedesktop/RealtimeKit1` of the name
+`org.freedesktop.RealtimeKit1` on the system bus.
+
+**What is RealtimeKit?** A small system service (`rtkit-daemon`, running as root with the
+`CAP_SYS_NICE` capability) that hands real-time scheduling to threads of ordinary user processes
+on request. Without it only root, or users given `RLIMIT_RTPRIO` above zero, could use `SCHED_RR`
+or `SCHED_FIFO` at all. It exists because audio needs it: PulseAudio, and now PipeWire and
+WirePlumber, ask it for their audio threads so that sound does not stutter when the machine is
+busy. Because a runaway real-time thread can freeze the whole machine, rtkit only agrees under
+conditions: polkit must allow the caller (an active local user does); the calling process must
+already have set `RLIMIT_RTTIME` to at most rtkit's maximum of 200 ms, so that the kernel will
+kill the process if a real-time thread runs that long without blocking; the priority is capped;
+the number of real-time threads and processes per user is limited; and a canary thread watches
+the system, demoting every thread rtkit promoted if the canary stops being scheduled in time.
+WebKitGTK uses the same service for its IPC receive threads, which is how Iruka, which never asked
+for real-time anything, ended up with the 200 ms limit and the kill.
+
 ## 5. Decision
 
 Per the project rule, problems outside Iruka are recorded, not worked around (owner's decision,
