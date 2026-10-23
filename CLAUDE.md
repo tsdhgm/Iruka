@@ -30,7 +30,9 @@ KNOWN_ISSUES.md and TODO.md.
   `scripts/make-tarball.sh` (release binary with RPATH `$ORIGIN/lib`, FreeRDP 3 libraries in `lib/`,
   `check-deps.sh` with a soname -> package table, desktop-entry script). Release binaries are stripped
   (`[profile.release] strip = true`). Only GNOME (Wayland) is tested; KDE is in TODO.md.
-- **Next (set 2026-10-16 at the end of the session): memory comparison.** Measure the Linux client
+- **2026-10-23: the cursor over the remote screen follows the remote's shape** (FreeRDP pointer
+  updates → CSS cursor; docs/code-notes.md "Cursor shape"). Verified on a Windows target.
+- **Next (set 2026-10-16): memory comparison.** Measure the Linux client
   the way the Windows session did (`iruka_mem` `used_mb` samples in the log: idle, one 3840×2160
   FreeRDP session, after closing it) and compare with the Windows figures (about 1.6 GB `used_mb`
   for one 4K session, not returned after closing; see docs/windows-client-log.md). Record the
