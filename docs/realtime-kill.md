@@ -156,6 +156,32 @@ So "GTK differs at the implementation level" is true, mostly in the drawing path
 The real-time issue behind this page is Linux-specific and would not travel to Windows; what
 Windows would need designed separately is the frame presentation path, not thread priorities.
 
+**WebKitGTK asking RealtimeKit for `RLIMIT_RTTIME` is one of the conditions, then. Without that
+setting, would Iruka only get slower, never killed?** Nearly right, with the two steps separated:
+
+1. WebKitGTK sets `RLIMIT_RTTIME` (hard 200 ms, soft 160 ms) on its own process itself, with
+   `setrlimit`. It is not something it asks RealtimeKit for; it is the precondition RealtimeKit
+   demands before it will help.
+2. Only then does it ask RealtimeKit to put the two `ReceiveQueue` threads on `SCHED_RR` priority 5.
+   Without step 1, RealtimeKit refuses.
+
+The kernel kills only when both hold: the thread is real-time *and* `RLIMIT_RTTIME` is finite. The
+limit does nothing to ordinary threads, so removing either half removes the kill:
+
+- Without step 1, RealtimeKit refuses step 2, the threads stay ordinary, and there is neither a
+  limit nor a kill.
+- Step 2 without step 1 (only possible with privileges) would avoid the kill but bring back the
+  danger the limit exists for: a runaway real-time thread freezing the machine.
+- Leaving step 1 in place but putting the threads back to `SCHED_OTHER` also ends the kill, which
+  is why the candidate workaround in TODO.md (demote the threads) would work.
+
+Iruka's latency would not change in any noticeable way. The real-time promotion exists so that a
+browser playing audio or video keeps its IPC response steady to within milliseconds. With the
+receive thread at normal priority it shares the CPU fairly with the other ordinary threads, and a
+frame may arrive a few milliseconds later; Remmina's frame path has no priority trick at all and is
+fine. So yes: the `RLIMIT_RTTIME` setting is one of the conditions, and without it, because
+RealtimeKit would then refuse, there is no real-time thread and nothing for the kernel to kill.
+
 ## 5. Decision
 
 Per the project rule, problems outside Iruka are recorded, not worked around (owner's decision,
