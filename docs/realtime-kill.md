@@ -212,6 +212,16 @@ Rejected alternatives: WebKit has no environment switch for it; a polkit rule de
 would hit the whole user (PipeWire included); systemd's `RestrictRealtime` does not stop promotion
 through rtkit, because rtkit-daemon changes the thread's policy from its own process.
 
+Result in real use (2026-10-23): started this way, Iruka ran alongside OBS capturing the 4K display
+without being killed, where the normal start was killed within minutes. Iruka was noticeably slower
+to respond while OBS ran; the check did not separate the two possible causes (OBS's own capture
+and encoding load against the ordinary-priority IPC threads), and audio and clipboard were not
+tried. The owner uses this start only for OBS recordings. A second dock entry instead of the
+override is also possible: a script `~/.local/bin/iruka-no-realtime` that sets the variable and
+execs `/usr/bin/iruka`, and a `~/.local/share/applications/iruka-no-realtime.desktop` with
+`Name=Iruka (no realtime)`, `Icon=iruka` and *no* `StartupWMClass`, so that the running window
+(app id `iruka`) always attaches to the deb's "Iruka" entry and the new one stays a plain launcher.
+
 **What is D-Bus?** The message bus Linux desktops use for communication between processes. A
 program offers *objects* with *interfaces* and *methods* under a well-known name, and other
 programs call those methods or listen for signals, instead of each pair inventing its own socket
