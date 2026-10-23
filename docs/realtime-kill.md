@@ -239,6 +239,24 @@ the system, demoting every thread rtkit promoted if the canary stops being sched
 WebKitGTK uses the same service for its IPC receive threads, which is how Iruka, which never asked
 for real-time anything, ended up with the 200 ms limit and the kill.
 
+**"Bus" brings a hardware bus to mind. Is D-Bus's "system bus" a Linux-specific term?** It is not
+hardware; "bus" here is a software metaphor. A hardware bus is one shared line with many parts
+attached, exchanging addressed messages, and D-Bus applies the same picture to processes: it is
+a *message bus*. The thing itself is a daemon (`dbus-daemon` or `dbus-broker`) listening on a Unix
+socket such as `/run/dbus/system_bus_socket`, which routes each message to the process that owns
+the destination name.
+
+"System bus" and "session bus" are official terms of the D-Bus specification published by
+freedesktop.org, which defines two standard instances of the message bus: one for the whole
+system and one per login session. The tools use the same words (`dbus-send --system` /
+`--session`, `busctl --system` / `--user`). They are D-Bus terms rather than general Linux terms:
+D-Bus is a user-space service, not a kernel feature (an attempt to move it into the kernel,
+kdbus, was not merged), and it is standard in Linux and BSD desktops (GNOME, KDE, the systemd
+ecosystem). Ports exist for Windows and macOS and GTK applications may use them there, but those
+operating systems have their own mechanisms for the same job: COM and RPC on Windows, XPC and
+Mach ports on macOS, Binder on Android. So "the D-Bus system bus" reads as "the Linux desktop's
+inter-process channel for system services".
+
 ## 5. Decision
 
 Per the project rule, problems outside Iruka are recorded, not worked around (owner's decision,
