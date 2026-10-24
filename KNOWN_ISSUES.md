@@ -9,6 +9,7 @@ Known bugs and limitations. Problems whose cause lies outside Iruka (FreeRDP or 
 - **Status**: not addressed (parked as a Known Bug on 2026-10-09)
 - **Symptom**: the Win key, Win+Space, Alt+Tab and similar are handled by the local desktop instead of the remote. Same whether the target is Windows or Ubuntu (GNOME Remote Desktop).
   Print Screen (and Alt+Print, Shift+Print) too: GNOME takes it for its screenshot UI, so screenshots cannot be taken on the remote with the key (noticed 2026-10-24). Iruka's scancode table does have `PrintScreen`; since 2026-10-24 the toolbar has a Print Screen button (⎙) that presses the key on the remote instead (the owner preferred it to a keyboard grab, which has side effects on the local desktop). Ctrl+Print is not grabbed locally and reaches the remote, where Windows treats it like Print.
+  Owner's practice (2026-10-24): the button is for the occasional screenshot; a series of them, e.g. for a manual, is taken with Remmina (keyboard grab) or at the machine itself.
 - **Cause**: the local GNOME grabs these keys first as system shortcuts. It is not a FreeRDP limitation. Remmina and mstsc avoid it by grabbing the keyboard exclusively.
 - **If it is to be fixed**:
   - Linux: a GTK keyboard grab, or the Wayland keyboard-shortcuts-inhibit protocol (GTK 3's Wayland backend implements it; GNOME asks the user once and Super+Esc restores the shortcuts).
