@@ -83,7 +83,7 @@ KNOWN_ISSUES.md and TODO.md.
   password argument to FreeRDP. Do not propose removing them.
 - **IronRDP** is a fallback only; do not invest in it unless asked.
 - **Memory budget**: 20+ PCs, each with an SSH console and an RDP session, on a 16 GB (maybe 8 GB)
-  dedicated monitoring box. Keep per-session memory in mind for any frame-path change.
+  dedicated monitoring box; the owner's Windows client box will have 32 GB (2026-10-24). Keep per-session memory in mind for any frame-path change.
 
 ## Building and running
 

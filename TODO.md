@@ -23,6 +23,14 @@ back. The Windows client is mandatory, macOS desirable. The pieces, in order:
   cannot come back (unless the user runs `tmux`/`screen` there). Keys via `ssh-agent` rather than
   stored passwords.
 - [ ] Save on exit automatically ("last workset"), besides named worksets.
+- [ ] Out-of-memory handling at restore (owner, 2026-10-24, to be designed later): before
+  reconnecting, estimate the memory the workset needs (the `iruka_mem` sampler already measures
+  bytes per remote pixel per platform: about 550 MB per 3840×2160 session on Linux, about 1.2 GB on
+  Windows) and compare with the available memory (`sysinfo` is already a dependency). If it does
+  not fit: warn in a dialog, or restore only as many sessions as fit and leave the rest as
+  placeholders. Windows has no OOM killer: an allocation failure aborts the process (or the box
+  swaps first), so checking before is the only workable place. The owner's Windows client box
+  will have 32 GB.
 
 ## To verify after the 2026-10-13 refactor (App.tsx split, English UI)
 
