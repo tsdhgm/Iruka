@@ -4,13 +4,15 @@
 
 Known bugs and limitations. Problems whose cause lies outside Iruka (FreeRDP or the OS) are recorded here rather than worked around.
 
-## The Win key and Alt+Tab do not reach the remote
+## The Win key, Alt+Tab and Print Screen do not reach the remote
 
 - **Status**: not addressed (parked as a Known Bug on 2026-10-09)
 - **Symptom**: the Win key, Win+Space, Alt+Tab and similar are handled by the local desktop instead of the remote. Same whether the target is Windows or Ubuntu (GNOME Remote Desktop).
+  Print Screen (and Alt+Print, Shift+Print) too: GNOME takes it for its screenshot UI, so screenshots cannot be taken on the remote with the key (noticed 2026-10-24). Iruka's scancode table does have `PrintScreen`.
 - **Cause**: the local GNOME grabs these keys first as system shortcuts. It is not a FreeRDP limitation. Remmina and mstsc avoid it by grabbing the keyboard exclusively.
 - **If it is to be fixed**:
-  - Linux: a GTK keyboard grab, or the Wayland keyboard-shortcuts-inhibit protocol.
+  - Linux: a GTK keyboard grab, or the Wayland keyboard-shortcuts-inhibit protocol (GTK 3's Wayland backend implements it; GNOME asks the user once and Super+Esc restores the shortcuts).
+  - **Workaround without code for Print Screen**: move GNOME's screenshot shortcuts to other keys, then Print reaches the remote: `gsettings set org.gnome.shell.keybindings show-screenshot-ui "['<Ctrl>Print']"`, likewise `screenshot-window` (`<Alt>Print` → `<Ctrl><Alt>Print`) and `screenshot` (`<Shift>Print` → `<Ctrl><Shift>Print`); `gsettings reset` undoes it. The Win key has no such workaround (Win+Shift+S still needs Win).
   - Windows: a low-level keyboard hook (`WH_KEYBOARD_LL`), the same approach as mstsc.
 
 ## Option+V paste does not work on a Mac (macrdp)

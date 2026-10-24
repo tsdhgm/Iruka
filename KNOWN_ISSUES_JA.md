@@ -4,13 +4,15 @@
 
 既知の不具合と制限事項。原因が Iruka の外（FreeRDP や OS）にあるものは、回避せずにここへ記録する。
 
-## Win キーや Alt+Tab がリモートに届かない
+## Win キーや Alt+Tab、Print Screen がリモートに届かない
 
 - **状態**: 未対応（2026-10-09 に Known Bug として保留）
 - **症状**: Win キー、Win+Space、Alt+Tab などが、リモートではなくローカルのデスクトップで処理される。Windows と Ubuntu（GNOME Remote Desktop）のどちらに接続していても同じ。
+  Print Screen（Alt+Print、Shift+Print も）も同じで、GNOME がスクリーンショット UI のために取るので、キーでリモートの画面を撮れない（2026-10-24 に気づいた）。Iruka の変換表には `PrintScreen` が入っている。
 - **原因**: ローカルの GNOME が、システムのショートカットとして先にキーを取ってしまう。FreeRDP の制限ではない。Remmina や mstsc は、キーボードを独占する仕組みでこれを避けている。
 - **対応するなら**:
-  - Linux：GTK のキーボードの独占、または Wayland の keyboard-shortcuts-inhibit プロトコル。
+  - Linux：GTK のキーボードの独占、または Wayland の keyboard-shortcuts-inhibit プロトコル（GTK 3 の Wayland バックエンドが実装している。GNOME は初回にユーザーに確認し、Super+Esc でショートカットを戻せる）。
+  - **Print Screen のコードを変えない回避策**: GNOME のスクリーンショットのショートカットを別のキーに移すと、Print がリモートに届く: `gsettings set org.gnome.shell.keybindings show-screenshot-ui "['<Ctrl>Print']"`、同様に `screenshot-window`（`<Alt>Print` → `<Ctrl><Alt>Print`）と `screenshot`（`<Shift>Print` → `<Ctrl><Shift>Print`）。`gsettings reset` で戻る。Win キーにはこの手の回避策はない（Win+Shift+S も Win が要る）。
   - Windows：低レベルキーボードフック（`WH_KEYBOARD_LL`）。mstsc と同じ方式。
 
 ## Mac（macrdp）で Option+V のペーストが効かない
