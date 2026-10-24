@@ -3,7 +3,15 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import "@xterm/xterm/css/xterm.css";
 import "./App.css";
-import { resolutionSize, type MemoryBudget, type MemoryCheck, type RdpConnectParams, type RdpConnectRequest } from "./rdp";
+import {
+  resolutionSize,
+  SCANCODES,
+  type MemoryBudget,
+  type MemoryCheck,
+  type RdpConnectParams,
+  type RdpConnectRequest,
+  type RdpInput,
+} from "./rdp";
 import { drawThumb, type SessionCallbacks, type SessionHandle, type SessionInfo } from "./session";
 import { createPtySession } from "./ptySession";
 import { applyPixelSize, createRdpSession, isScaledDisplay, setScaledDisplay } from "./rdpSession";
@@ -559,6 +567,23 @@ function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  /**
+   * Toolbar "Print Screen": press and release the key on the remote. The local desktop grabs
+   * Print (and Win, Alt+Tab; KNOWN_ISSUES.md), so it cannot be typed. Clicking the button
+   * took the focus from the canvas; give it back so the remote gets the next keys again.
+   */
+  const sendPrintScreen = useCallback(
+    (id: number) => {
+      const events: RdpInput[] = [
+        { type: "key", scancode: SCANCODES.PrintScreen, down: true },
+        { type: "key", scancode: SCANCODES.PrintScreen, down: false },
+      ];
+      invoke("rdp_input", { id, events }).catch(() => {});
+      showSession(id);
+    },
+    [showSession],
+  );
+
   /** Toolbar "Scaled": fit the RDP screens into the view (all sessions) or show them 1:1. */
   const toggleScaled = useCallback((on: boolean) => {
     setScaledDisplay(on);
@@ -887,6 +912,7 @@ function App() {
             onTogglePinned={() => setToolbarPinned((v) => !v)}
             onToggleFullscreen={toggleFullscreen}
             onToggleScaled={toggleScaled}
+            onPrintScreen={sendPrintScreen}
             onClose={closeSession}
           />
         )}

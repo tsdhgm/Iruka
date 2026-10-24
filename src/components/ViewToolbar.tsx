@@ -16,6 +16,7 @@ export function ViewToolbar({
   onTogglePinned,
   onToggleFullscreen,
   onToggleScaled,
+  onPrintScreen,
   onClose,
 }: {
   view: "single" | "grid";
@@ -31,6 +32,8 @@ export function ViewToolbar({
   onTogglePinned: () => void;
   onToggleFullscreen: (on: boolean) => void;
   onToggleScaled: (on: boolean) => void;
+  /** Send a Print Screen key press to this RDP session (the local desktop takes the key itself). */
+  onPrintScreen: (id: number) => void;
   onClose: (id: number) => void;
 }) {
   return (
@@ -66,6 +69,14 @@ export function ViewToolbar({
         >
           📌
         </button>
+        {view === "single" && activeSession?.kind === "rdp" && (
+          <button
+            title="Send Print Screen to the remote (the local desktop keeps the key itself); the screenshot lands in the remote's clipboard"
+            onClick={() => onPrintScreen(activeSession.id)}
+          >
+            ⎙
+          </button>
+        )}
         <button
           className={scaled ? "on" : ""}
           title={scaled ? "Scaled: the whole remote screen fitted into the view (click for 1:1)" : "Scaled: fit the whole remote screen into the view"}

@@ -8,7 +8,7 @@
 
 - **状態**: 未対応（2026-10-09 に Known Bug として保留）
 - **症状**: Win キー、Win+Space、Alt+Tab などが、リモートではなくローカルのデスクトップで処理される。Windows と Ubuntu（GNOME Remote Desktop）のどちらに接続していても同じ。
-  Print Screen（Alt+Print、Shift+Print も）も同じで、GNOME がスクリーンショット UI のために取るので、キーでリモートの画面を撮れない（2026-10-24 に気づいた）。Iruka の変換表には `PrintScreen` が入っている。
+  Print Screen（Alt+Print、Shift+Print も）も同じで、GNOME がスクリーンショット UI のために取るので、キーでリモートの画面を撮れない（2026-10-24 に気づいた）。Iruka の変換表には `PrintScreen` が入っている。2026-10-24 からツールバーに Print Screen ボタン（⎙）があり、代わりにリモートでキーを押す（キーボードの独占はローカルのデスクトップに副作用があるので、作者はボタンを選んだ）。Ctrl+Print はローカルに取られずリモートに届き、Windows はこれを Print と同じに扱う。
 - **原因**: ローカルの GNOME が、システムのショートカットとして先にキーを取ってしまう。FreeRDP の制限ではない。Remmina や mstsc は、キーボードを独占する仕組みでこれを避けている。
 - **対応するなら**:
   - Linux：GTK のキーボードの独占、または Wayland の keyboard-shortcuts-inhibit プロトコル（GTK 3 の Wayland バックエンドが実装している。GNOME は初回にユーザーに確認し、Super+Esc でショートカットを戻せる）。
