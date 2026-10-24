@@ -179,10 +179,10 @@ function App() {
    * away, the same way keystrokes are; the PTY buffers it until the shell reads it.
    */
   const openShell = useCallback(
-    async (title?: string, initialInput?: string, profileId?: string) => {
+    async (title?: string, initialInput?: string, profileId?: string, autoPassword?: string) => {
       const main = mainRef.current;
       if (!main) return;
-      const created = await createPtySession(main, sessionCallbacks);
+      const created = await createPtySession(main, sessionCallbacks, autoPassword);
       if (!created) return;
       const { id, handle } = created;
       if (initialInput) invoke("write_session", { id, data: initialInput }).catch(() => {});
@@ -209,18 +209,39 @@ function App() {
   const openConsole = useCallback(() => openShell(), [openShell]);
 
   /**
-   * Open a console and type `ssh [-p PORT] [USER@]HOST` into it. Host-key and password
-   * prompts are then answered by the user in the terminal. Values that are not plain
-   * tokens are ignored (the forms refuse them before getting here).
+   * Open a console and type `ssh [-p PORT] [USER@]HOST` into it. The host-key prompt is
+   * answered by the user in the terminal; so is the password prompt, unless `password` is
+   * given, which is then typed at the first prompt. Values that are not plain tokens are
+   * ignored (the forms refuse them before getting here).
    */
   const openSsh = useCallback(
-    (target: SshTarget, profileId?: string) => {
+    (target: SshTarget, profileId?: string, password?: string) => {
       const command = buildSshCommand(target);
       if (!command) return;
-      return openShell(target.name || `ssh ${target.host}`, `${command}\r`, profileId);
+      return openShell(target.name || `ssh ${target.host}`, `${command}\r`, profileId, password || undefined);
     },
     [openShell],
   );
+
+  /**
+   * Apply a form's "Save password" choice for a saved connection: store the typed password,
+   * or fall back to the stored one when the field was left empty, or forget it when the box
+   * is off. Returns the password to connect with.
+   */
+  const settlePassword = useCallback(async (stored: Profile, typed: string): Promise<string> => {
+    if (stored.savePassword) {
+      if (typed) {
+        const error = await storePassword(stored.id, typed);
+        if (error) alert(`The password was not saved in the credential store: ${error}`);
+        return typed;
+      }
+      // Empty field with "Save password" on: use the stored one.
+      return (await loadPassword(stored.id)) ?? "";
+    }
+    // "Save password" is off (or was just turned off): make sure nothing stays stored.
+    forgetPassword(stored.id);
+    return typed;
+  }, []);
 
   const openRdp = useCallback(
     async (request: RdpConnectRequest): Promise<number | null> => {
@@ -304,33 +325,29 @@ function App() {
     async (params: RdpConnectParams, profile: RdpProfile | null) => {
       setForm(null);
       const stored = profile ? saveProfile(profile) : null;
-      let password = params.password;
-      if (stored?.kind === "rdp") {
-        if (stored.savePassword) {
-          if (password) {
-            const error = await storePassword(stored.id, password);
-            if (error) alert(`The password was not saved in the credential store: ${error}`);
-          } else {
-            // Empty field with "Save password" on: use the stored one.
-            password = (await loadPassword(stored.id)) ?? "";
-          }
-        } else {
-          // "Save password" is off (or was just turned off): make sure nothing stays stored.
-          forgetPassword(stored.id);
-        }
-      }
+      const password = stored ? await settlePassword(stored, params.password) : params.password;
       connectWithChecks({ ...params, password, title: stored?.name, profileId: stored?.id }, {});
     },
-    [connectWithChecks, saveProfile],
+    [connectWithChecks, saveProfile, settlePassword],
   );
 
   const submitSshForm = useCallback(
-    (target: SshTarget, profile: SshProfile | null) => {
+    async (target: SshTarget, profile: SshProfile | null, typedPassword: string) => {
       setForm(null);
       const stored = profile ? saveProfile(profile) : null;
-      openSsh(target, stored?.id);
+      const password = stored ? await settlePassword(stored, typedPassword) : typedPassword;
+      openSsh(target, stored?.id, password);
     },
-    [openSsh, saveProfile],
+    [openSsh, saveProfile, settlePassword],
+  );
+
+  /** "Save" on the SSH form: keep the entry (and the password, when asked) without connecting. */
+  const saveSshForm = useCallback(
+    async (profile: SshProfile, typedPassword: string) => {
+      setForm(null);
+      await settlePassword(saveProfile(profile), typedPassword);
+    },
+    [saveProfile, settlePassword],
   );
 
   /** Edit a saved connection, or (when `connect`) connect to it. */
@@ -338,7 +355,8 @@ function App() {
     async (profile: Profile, connect: boolean) => {
       if (profile.kind === "ssh" && connect) {
         setForm(null);
-        openSsh(profile, profile.id);
+        const password = profile.savePassword ? await loadPassword(profile.id) : null;
+        openSsh(profile, profile.id, password ?? undefined);
         return;
       }
       if (profile.kind === "rdp" && connect && profile.savePassword) {
@@ -453,7 +471,9 @@ function App() {
         changeGridCols(workset.gridCols);
         for (const p of items) {
           if (p.kind === "ssh") {
-            await openSsh(p, p.id);
+            // Without a stored password the console still opens; ssh asks in the terminal.
+            const password = p.savePassword ? await loadPassword(p.id) : null;
+            await openSsh(p, p.id, password ?? undefined);
             report.restored.push(p.name);
             continue;
           }
@@ -668,10 +688,7 @@ function App() {
             key={form.initial?.id ?? "new"}
             initial={form.initial}
             onConnect={submitSshForm}
-            onSave={(p) => {
-              saveProfile(p);
-              setForm(null);
-            }}
+            onSave={saveSshForm}
             onCancel={() => setForm(null)}
           />
         )}

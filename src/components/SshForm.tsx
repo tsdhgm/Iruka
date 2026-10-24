@@ -12,14 +12,17 @@ interface SshFormValues {
   host: string;
   username: string;
   port: string;
+  password: string;
+  savePassword: boolean;
 }
 
 const TOKEN_ERROR = "Host, user and port must be plain tokens (no spaces or shell characters).";
 
 /**
- * The SSH connect form in the sidebar. It only collects the target; the console
- * does the rest (the ssh command is typed into a local shell). With `initial`
- * it edits a saved profile and keeps its id.
+ * The SSH connect form in the sidebar. It collects the target and, optionally, the
+ * password; the console does the rest (the ssh command is typed into a local shell and
+ * the password, when given, is typed at ssh's prompt). With `initial` it edits a saved
+ * profile and keeps its id.
  */
 export function SshForm({
   initial,
@@ -28,9 +31,12 @@ export function SshForm({
   onCancel,
 }: {
   initial?: SshProfile;
-  /** Connect to `target`; `profile` is the saved entry to upsert (null when no name was given). */
-  onConnect: (target: SshTarget, profile: SshProfile | null) => void;
-  onSave: (profile: SshProfile) => void;
+  /**
+   * Connect to `target`; `profile` is the saved entry to upsert (null when no name was given).
+   * `password` is what was typed (empty when the field was left empty).
+   */
+  onConnect: (target: SshTarget, profile: SshProfile | null, password: string) => void;
+  onSave: (profile: SshProfile, password: string) => void;
   onCancel: () => void;
 }) {
   const [form, setForm] = useState<SshFormValues>({
@@ -38,8 +44,11 @@ export function SshForm({
     host: initial?.host ?? "",
     username: initial?.username ?? "",
     port: initial?.port !== undefined ? String(initial.port) : "",
+    password: "",
+    savePassword: initial?.savePassword ?? false,
   });
   const [error, setError] = useState<string | null>(null);
+  const hasStoredPassword = !!initial?.savePassword;
 
   /** Validate the fields; returns the target or null (with the error shown inline). */
   const readTarget = (): SshTarget | null => {
@@ -77,6 +86,7 @@ export function SshForm({
     host: target.host,
     username: target.username,
     port: target.port,
+    savePassword: form.savePassword,
   });
 
   const connect = () => {
@@ -84,13 +94,16 @@ export function SshForm({
     if (!target) return;
     // Every connection is remembered (named after the host when no name is given).
     const name = form.name.trim() || (target.username ? `${target.username}@${target.host}` : target.host);
-    onConnect({ ...target, name }, toProfile(target, name));
+    onConnect({ ...target, name }, toProfile(target, name), form.password);
   };
 
   const save = () => {
     const target = readTarget();
     if (!target) return;
-    onSave(toProfile(target, form.name.trim() || (target.username ? `${target.username}@${target.host}` : target.host)));
+    onSave(
+      toProfile(target, form.name.trim() || (target.username ? `${target.username}@${target.host}` : target.host)),
+      form.password,
+    );
   };
 
   return (
@@ -125,6 +138,22 @@ export function SshForm({
         value={form.port}
         onChange={(e) => setForm({ ...form, port: e.target.value })}
       />
+      <input
+        type="password"
+        placeholder={hasStoredPassword ? "Password (saved; leave empty to use it)" : "Password (optional, typed at ssh's prompt)"}
+        value={form.password}
+        onChange={(e) => setForm({ ...form, password: e.target.value })}
+      />
+      <div className="rdp-form-checks">
+        <label title="Keep the password in the OS credential store (GNOME Keyring / KWallet, Windows Credential Manager, macOS Keychain) and type it at ssh's password prompt, so this connection can be restored without typing it. Anyone using this desktop session can connect as you. SSH keys are the better way when you can set them up.">
+          <input
+            type="checkbox"
+            checked={form.savePassword}
+            onChange={(e) => setForm({ ...form, savePassword: e.target.checked })}
+          />
+          Save password
+        </label>
+      </div>
       {error && <div className="rdp-form-error">{error}</div>}
       <div className="rdp-form-row">
         <button type="submit">Connect</button>

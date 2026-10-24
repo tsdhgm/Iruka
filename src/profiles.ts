@@ -12,6 +12,8 @@ export interface SshProfile {
   host: string;
   username?: string;
   port?: number;
+  /** The password is kept in the OS credential store (credentials.ts) under this profile's id. */
+  savePassword?: boolean;
 }
 
 export interface RdpProfile {

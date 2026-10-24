@@ -22,14 +22,49 @@ const TERM_THEME = {
   selectionBackground: "#2b3a4d",
 };
 
+/** How long after the console starts a password prompt is still answered automatically. */
+const AUTO_PASSWORD_WINDOW_MS = 60_000;
+
+/**
+ * Watches the console output for a password prompt and types `password` once, the way the
+ * user would. Meant for the `ssh` command typed into a fresh console: the first prompt that
+ * ends in "password:" within the first minute is ssh's own ("user@host's password:",
+ * "Password:" for keyboard-interactive). Nothing is typed a second time, so a wrong
+ * password is left for the user to deal with, and key passphrases and host-key questions
+ * are never answered.
+ */
+function passwordPromptAnswerer(password: string, type: (text: string) => void) {
+  const decoder = new TextDecoder();
+  const started = Date.now();
+  let tail = "";
+  let done = false;
+  return (bytes: Uint8Array) => {
+    if (done) return;
+    if (Date.now() - started > AUTO_PASSWORD_WINDOW_MS) {
+      done = true;
+      return;
+    }
+    // Keep the last few hundred characters, without escape sequences, so a prompt split
+    // across two chunks is still seen.
+    // eslint-disable-next-line no-control-regex
+    tail = (tail + decoder.decode(bytes, { stream: true })).replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, "").slice(-300);
+    if (/password:\s*$/i.test(tail)) {
+      done = true;
+      type(`${password}\r`);
+    }
+  };
+}
+
 /**
  * Opens an xterm.js console in `main`, spawns the PTY on the Rust side and wires
  * the two together. Returns null (after alerting the user) when the PTY could not
- * be spawned; the DOM is cleaned up in that case.
+ * be spawned; the DOM is cleaned up in that case. With `autoPassword`, the first
+ * password prompt is answered with it (see passwordPromptAnswerer).
  */
 export async function createPtySession(
   main: HTMLDivElement,
   cb: SessionCallbacks,
+  autoPassword?: string,
 ): Promise<{ id: number; handle: SessionHandle } | null> {
   const container = document.createElement("div");
   container.className = "term-container";
@@ -81,11 +116,18 @@ export async function createPtySession(
     return null;
   }
 
+  const answerPrompt = autoPassword
+    ? passwordPromptAnswerer(autoPassword, (text) => {
+        invoke("write_session", { id, data: text }).catch(() => {});
+      })
+    : null;
   onEvent.onmessage = (msg) => {
     cb.markDirty(id);
     if (msg.type === "output") {
       cb.markActivity(id);
-      term.write(b64ToBytes(msg.data));
+      const bytes = b64ToBytes(msg.data);
+      term.write(bytes);
+      answerPrompt?.(bytes);
     } else {
       cb.updateSession(id, { status: "exited", exitCode: msg.code });
       term.write(

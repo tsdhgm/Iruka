@@ -92,7 +92,7 @@ A workset (`src/worksets.ts`) is a list of profile ids in sidebar order plus the
 
 ### PTY sessions (consoles)
 
-`pty.rs` uses `portable-pty`. `spawn_session` starts the requested program (or `$SHELL`, falling back to `bash`) with `TERM=xterm-256color` in the home directory, and spawns two threads: one streams output to the WebView as base64 over a `Channel<PtyEvent>`, the other waits for the child and sends `Exit`. The frontend renders with xterm.js and derives the "running / idle / exited" tile status from output timing.
+`pty.rs` uses `portable-pty`. `spawn_session` starts the requested program (or `$SHELL`, falling back to `bash`) with `TERM=xterm-256color` in the home directory, and spawns two threads: one streams output to the WebView as base64 over a `Channel<PtyEvent>`, the other waits for the child and sends `Exit`. The frontend renders with xterm.js and derives the "running / idle / exited" tile status from output timing. An SSH console is a plain console with `ssh …\r` written to the PTY right after spawn; with a saved or typed password, `passwordPromptAnswerer` in `ptySession.ts` watches the output (escape sequences stripped, last 300 characters kept) and writes the password once at the first prompt ending in `password:` within 60 s, then stops for good, so a rejected password, a key passphrase or the host-key question are never answered by it.
 
 ### Memory model
 

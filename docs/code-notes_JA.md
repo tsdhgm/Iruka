@@ -92,7 +92,7 @@ WebView はリモートの画面をセッションの `<canvas>` にしか持っ
 
 ### PTY セッション（コンソール）
 
-`pty.rs` は `portable-pty` を使う。`spawn_session` は指定のプログラム（なければ `$SHELL`、それもなければ `bash`）を `TERM=xterm-256color` でホームディレクトリから起動し、スレッドを 2 本起こす。1 本は出力を base64 にして `Channel<PtyEvent>` で WebView に流し、もう 1 本は子プロセスの終了を待って `Exit` を送る。フロントは xterm.js で描画し、出力のタイミングから「Running / Idle / Exited」のタイル表示を決める。
+`pty.rs` は `portable-pty` を使う。`spawn_session` は指定のプログラム（なければ `$SHELL`、それもなければ `bash`）を `TERM=xterm-256color` でホームディレクトリから起動し、スレッドを 2 本起こす。1 本は出力を base64 にして `Channel<PtyEvent>` で WebView に流し、もう 1 本は子プロセスの終了を待って `Exit` を送る。フロントは xterm.js で描画し、出力のタイミングから「Running / Idle / Exited」のタイル表示を決める。 SSH のコンソールは、spawn 直後に `ssh …\r` を PTY に書き込んだだけの普通のコンソール。保存または入力したパスワードがあるときは、`ptySession.ts` の `passwordPromptAnswerer` が出力を監視し（エスケープシーケンスを除き、末尾 300 文字を保持）、60 秒以内に出た `password:` で終わる最初のプロンプトに一度だけパスワードを書き込んで、以後は何もしない。そのため、拒否されたパスワードの再入力、鍵のパスフレーズ、ホスト鍵の質問には答えない。
 
 ### メモリモデル
 
