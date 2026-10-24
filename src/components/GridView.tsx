@@ -40,8 +40,6 @@ export function GridView({
   dirtyRef,
   lastActivityRef,
   onSelect,
-  fullscreen,
-  onToggleFullscreen,
 }: {
   sessions: SessionInfo[];
   activeId: number | null;
@@ -51,8 +49,6 @@ export function GridView({
   dirtyRef: RefObject<Set<number>>;
   lastActivityRef: RefObject<Map<number, number>>;
   onSelect: (id: number) => void;
-  fullscreen: boolean;
-  onToggleFullscreen: (on: boolean) => void;
 }) {
   // Keyboard selection: the tile that Enter would open. Starts on the active session.
   const [focused, setFocused] = useState(() => {
@@ -67,27 +63,15 @@ export function GridView({
     setFocused((i) => (count === 0 ? 0 : Math.min(i, count - 1)));
   }, [count]);
 
-  // Arrow keys and Tab / Shift+Tab move the selection, Enter opens it; Escape leaves fullscreen and
-  // F11 toggles it. Only the grid may take these keys: in the single view they belong to the session.
-  // Ignored while typing in a form field.
-  const latest = useRef({ sessions, gridCols, focused, onSelect, fullscreen, onToggleFullscreen });
-  latest.current = { sessions, gridCols, focused, onSelect, fullscreen, onToggleFullscreen };
+  // Arrow keys and Tab / Shift+Tab move the selection, Enter opens it. Ignored while typing in a form field.
+  const latest = useRef({ sessions, gridCols, focused, onSelect });
+  latest.current = { sessions, gridCols, focused, onSelect };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target;
       if (t instanceof HTMLElement && ["INPUT", "SELECT", "TEXTAREA"].includes(t.tagName)) return;
       if (e.altKey || e.ctrlKey || e.metaKey) return;
-      const { sessions, gridCols, focused, onSelect, fullscreen, onToggleFullscreen } = latest.current;
-      if (e.key === "Escape" && fullscreen) {
-        e.preventDefault();
-        onToggleFullscreen(false);
-        return;
-      }
-      if (e.key === "F11") {
-        e.preventDefault();
-        onToggleFullscreen(!fullscreen);
-        return;
-      }
+      const { sessions, gridCols, focused, onSelect } = latest.current;
       const n = sessions.length;
       if (n === 0) return;
       let next = focused;

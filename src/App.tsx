@@ -533,6 +533,30 @@ function App() {
     if (id !== null) showSession(id);
   }, [showSession]);
 
+  // F11 toggles full screen and Escape leaves it, whenever the keyboard focus is not in a
+  // session (a session stops the events it handles, so they never get here): in the grid, or
+  // after clicking the sidebar or the empty area. In a session those keys belong to the remote.
+  const fullscreenRef = useRef(fullscreen);
+  fullscreenRef.current = fullscreen;
+  const toggleFullscreenRef = useRef(toggleFullscreen);
+  toggleFullscreenRef.current = toggleFullscreen;
+  useEffect(() => {
+    const inField = (t: EventTarget | null) =>
+      t instanceof HTMLElement && ["INPUT", "SELECT", "TEXTAREA"].includes(t.tagName);
+    const onKey = (e: KeyboardEvent) => {
+      if (inField(e.target) || e.altKey || e.ctrlKey || e.metaKey) return;
+      if (e.key === "F11") {
+        e.preventDefault();
+        toggleFullscreenRef.current(!fullscreenRef.current);
+      } else if (e.key === "Escape" && fullscreenRef.current) {
+        e.preventDefault();
+        toggleFullscreenRef.current(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const closeSession = useCallback((id: number) => {
     if (activeIdRef.current === id) toggleFullscreen(false);
     const handle = handlesRef.current.get(id);
@@ -836,8 +860,6 @@ function App() {
               setView("single");
               focusSession(id);
             }}
-            fullscreen={fullscreen}
-            onToggleFullscreen={toggleFullscreen}
           />
         )}
         {sessions.length > 0 && (
