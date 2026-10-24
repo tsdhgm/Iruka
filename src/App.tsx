@@ -819,6 +819,8 @@ function App() {
               setView("single");
               focusSession(id);
             }}
+            fullscreen={fullscreen}
+            onToggleFullscreen={toggleFullscreen}
           />
         )}
         {sessions.length > 0 && (
