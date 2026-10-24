@@ -7,7 +7,9 @@ current hand-off, because Claude Code's per-machine memory does not travel with 
 
 A Tauri 2 + React/TypeScript + Rust desktop app that watches many PCs at once: SSH consoles
 (xterm.js over a local PTY) and RDP desktops (FreeRDP 3 through a C bridge, IronRDP as fallback)
-as live thumbnails. See README.md, docs/code-notes.md (architecture and known weak spots),
+as live thumbnails. **End goal (owner, 2026-10-24): worksets**, i.e. save the set of open sessions
+and restore them all after a restart (TODO.md "Goal: worksets"; needs the OS-keyring credential
+store). Windows client mandatory, macOS desirable. See README.md, docs/code-notes.md (architecture and known weak spots),
 KNOWN_ISSUES.md and TODO.md.
 
 ## Current hand-off (keep this section up to date at the end of each session)

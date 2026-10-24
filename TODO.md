@@ -4,6 +4,26 @@
 
 Open tasks and things still to verify. Bugs that live outside Iruka (FreeRDP, the OS) are recorded in [KNOWN_ISSUES.md](KNOWN_ISSUES.md), not here. Design-level weak spots are described in [docs/code-notes.md](docs/code-notes.md).
 
+## Goal: worksets (stated by the owner 2026-10-24)
+
+The end state Iruka is heading for: several RDP sessions (and SSH consoles, if feasible) are open;
+"save workset" records the current state; after a restart, "restore workset" brings every session
+back. The Windows client is mandatory, macOS desirable. The pieces, in order:
+
+- [ ] Workset = the set of open sessions with their profiles and layout (grid columns, order, which
+  one is shown, view mode). Saved connections (`src/profiles.ts`, `iruka.profiles`) already hold
+  everything except the password and the layout; a workset is a list of profile ids plus layout.
+- [ ] Credentials in the OS keyring (the item under "Before a 1.0 release"): without it a restore
+  stops at 20 password prompts. The Rust `keyring` crate covers Secret Service (Linux), Credential
+  Manager (Windows) and Keychain (macOS) in one API. Opt-in per saved connection, default off.
+- [ ] Restore: reconnect the sessions in order (staggered, not all at once: 20 FreeRDP connects
+  plus decoder set-up in parallel would spike memory and CPU); show progress and keep failed ones
+  as reconnectable placeholders.
+- [ ] SSH restore: reopen the console and type the `ssh` line again; the shell state on the remote
+  cannot come back (unless the user runs `tmux`/`screen` there). Keys via `ssh-agent` rather than
+  stored passwords.
+- [ ] Save on exit automatically ("last workset"), besides named worksets.
+
 ## To verify after the 2026-10-13 refactor (App.tsx split, English UI)
 
 A quick check on 2026-10-13 found no problems. Still to be checked more carefully:
