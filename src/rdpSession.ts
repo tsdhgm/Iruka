@@ -11,9 +11,35 @@ import {
 } from "./rdp";
 import type { SessionCallbacks, SessionHandle } from "./session";
 
-/** Show one remote pixel as one physical pixel (cancel out the OS display scale). */
+/**
+ * "Scaled" display: the whole remote screen fitted into the viewport (aspect kept, scaled
+ * both down and up) instead of 1:1 with scrollbars. One setting for all RDP sessions,
+ * remembered in localStorage; the toolbar toggles it and re-applies the size to every canvas.
+ */
+let scaledDisplay = localStorage.getItem("iruka.scaled") === "1";
+export function isScaledDisplay(): boolean {
+  return scaledDisplay;
+}
+export function setScaledDisplay(on: boolean) {
+  scaledDisplay = on;
+  localStorage.setItem("iruka.scaled", on ? "1" : "0");
+}
+
+/**
+ * Size the canvas on screen: one remote pixel per physical pixel (cancelling out the OS
+ * display scale), or, with the scaled display on, fitted into its scroller. Input mapping
+ * (toRemoteCoords) works from the on-screen size, so it follows automatically; only the
+ * remote's cursor shapes stay at their own pixel size.
+ */
 export function applyPixelSize(canvas: HTMLCanvasElement) {
   const dpr = window.devicePixelRatio || 1;
+  const viewport = canvas.parentElement;
+  if (scaledDisplay && viewport && viewport.clientWidth > 0 && viewport.clientHeight > 0) {
+    const scale = Math.min(viewport.clientWidth / canvas.width, viewport.clientHeight / canvas.height);
+    canvas.style.width = `${Math.floor(canvas.width * scale)}px`;
+    canvas.style.height = `${Math.floor(canvas.height * scale)}px`;
+    return;
+  }
   canvas.style.width = `${canvas.width / dpr}px`;
   canvas.style.height = `${canvas.height / dpr}px`;
 }

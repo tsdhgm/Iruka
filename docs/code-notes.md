@@ -78,7 +78,7 @@ The WebView keeps the remote screen only in the session's `<canvas>`; the backen
 
 ### Input
 
-The frontend converts `KeyboardEvent.code` to PC/AT Set 1 scancodes with the `SCANCODES` table in `src/rdp.ts` (extended keys are `0xE0xx`), so the layout is decided by the remote. Mouse coordinates are mapped to remote pixels by `toRemoteCoords`. Events are batched into `rdp_input` calls as `RdpInput` values (`MouseMove`, `MouseButton`, `Wheel`, `Key`, `ReleaseAll`); `ReleaseAll` is sent on blur to release modifier keys, since FreeRDP does not track key state.
+The frontend converts `KeyboardEvent.code` to PC/AT Set 1 scancodes with the `SCANCODES` table in `src/rdp.ts` (extended keys are `0xE0xx`), so the layout is decided by the remote. Mouse coordinates are mapped to remote pixels by `toRemoteCoords` from the canvas's on-screen size, which is why the "Scaled" display (`applyPixelSize` in `src/rdpSession.ts` fitting the canvas into its scroller instead of 1:1) needs no input changes; the canvas bitmap stays at the remote's size and the browser scales it when compositing, so it costs no memory. Events are batched into `rdp_input` calls as `RdpInput` values (`MouseMove`, `MouseButton`, `Wheel`, `Key`, `ReleaseAll`); `ReleaseAll` is sent on blur to release modifier keys, since FreeRDP does not track key state.
 
 ### Frontend layout
 

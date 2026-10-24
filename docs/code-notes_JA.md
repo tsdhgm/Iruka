@@ -78,7 +78,7 @@ WebView はリモートの画面をセッションの `<canvas>` にしか持っ
 
 ### 入力
 
-フロントは `KeyboardEvent.code` を `src/rdp.ts` の `SCANCODES` 表で PC/AT Set 1 のスキャンコードに変換する（拡張キーは `0xE0xx`）。配列はリモート側が決める。マウス座標は `toRemoteCoords` でリモートのピクセルに写す。イベントは `RdpInput`（`MouseMove`, `MouseButton`, `Wheel`, `Key`, `ReleaseAll`）としてまとめて `rdp_input` で送る。FreeRDP はキーの押下状態を管理しないので、フォーカスが外れたら `ReleaseAll` で修飾キーを離す。
+フロントは `KeyboardEvent.code` を `src/rdp.ts` の `SCANCODES` 表で PC/AT Set 1 のスキャンコードに変換する（拡張キーは `0xE0xx`）。配列はリモート側が決める。マウス座標は `toRemoteCoords` が、キャンバスの画面上のサイズを基準にリモートのピクセルに写す。そのため「Scaled（拡縮表示）」（`src/rdpSession.ts` の `applyPixelSize` が等倍ではなくスクローラーに収まるサイズにする）でも入力側の変更は要らない。キャンバスのビットマップはリモートのサイズのままで、ブラウザーが合成時に拡縮するので、メモリも増えない。イベントは `RdpInput`（`MouseMove`, `MouseButton`, `Wheel`, `Key`, `ReleaseAll`）としてまとめて `rdp_input` で送る。FreeRDP はキーの押下状態を管理しないので、フォーカスが外れたら `ReleaseAll` で修飾キーを離す。
 
 ### フロントの構成
 

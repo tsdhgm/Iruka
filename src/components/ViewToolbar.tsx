@@ -10,10 +10,12 @@ export function ViewToolbar({
   gridCols,
   pinned,
   fullscreen,
+  scaled,
   onToggleView,
   onChangeGridCols,
   onTogglePinned,
   onToggleFullscreen,
+  onToggleScaled,
   onClose,
 }: {
   view: "single" | "grid";
@@ -22,10 +24,13 @@ export function ViewToolbar({
   gridCols: number;
   pinned: boolean;
   fullscreen: boolean;
+  /** RDP screens fitted into the view instead of 1:1 (all sessions). */
+  scaled: boolean;
   onToggleView: () => void;
   onChangeGridCols: (cols: number) => void;
   onTogglePinned: () => void;
   onToggleFullscreen: (on: boolean) => void;
+  onToggleScaled: (on: boolean) => void;
   onClose: (id: number) => void;
 }) {
   return (
@@ -60,6 +65,13 @@ export function ViewToolbar({
           onClick={onTogglePinned}
         >
           📌
+        </button>
+        <button
+          className={scaled ? "on" : ""}
+          title={scaled ? "Scaled: the whole remote screen fitted into the view (click for 1:1)" : "Scaled: fit the whole remote screen into the view"}
+          onClick={() => onToggleScaled(!scaled)}
+        >
+          {scaled ? "1:1" : "⤢"}
         </button>
         <button
           title={fullscreen ? "Exit fullscreen" : "Fullscreen"}

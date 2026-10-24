@@ -6,7 +6,7 @@ import "./App.css";
 import { resolutionSize, type MemoryBudget, type MemoryCheck, type RdpConnectParams, type RdpConnectRequest } from "./rdp";
 import { drawThumb, type SessionCallbacks, type SessionHandle, type SessionInfo } from "./session";
 import { createPtySession } from "./ptySession";
-import { applyPixelSize, createRdpSession } from "./rdpSession";
+import { applyPixelSize, createRdpSession, isScaledDisplay, setScaledDisplay } from "./rdpSession";
 import { useWindowViewToggleKey } from "./hostKey";
 import {
   buildSshCommand,
@@ -85,6 +85,7 @@ function App() {
   const pendingRef = useRef<Map<number, () => void>>(new Map());
   const [fullscreen, setFullscreen] = useState(false);
   const [toolbarPinned, setToolbarPinned] = useState(false);
+  const [scaled, setScaled] = useState(isScaledDisplay);
   // Right pane: one session shown large (single) or all sessions as tiles (grid).
   const [view, setView] = useState<"single" | "grid">("single");
   const viewRef = useRef<"single" | "grid">("single");
@@ -127,6 +128,7 @@ function App() {
           // While something other than RDP is shown, do not bring remote copies into the local clipboard.
           invoke("rdp_set_active", { id: null }).catch(() => {});
         } else {
+          applyPixelSize(handle.canvas); // the viewport may have changed while it was hidden
           handle.canvas.focus();
           // The canvas was hidden; WebKit may have dropped its contents, so ask for a full frame.
           invoke("rdp_refresh", { id }).catch(() => {});
@@ -557,6 +559,15 @@ function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  /** Toolbar "Scaled": fit the RDP screens into the view (all sessions) or show them 1:1. */
+  const toggleScaled = useCallback((on: boolean) => {
+    setScaledDisplay(on);
+    setScaled(on);
+    for (const h of handlesRef.current.values()) {
+      if (h.kind === "rdp") applyPixelSize(h.canvas);
+    }
+  }, []);
+
   const closeSession = useCallback((id: number) => {
     if (activeIdRef.current === id) toggleFullscreen(false);
     const handle = handlesRef.current.get(id);
@@ -632,7 +643,7 @@ function App() {
       if (id === null) return;
       const handle = handlesRef.current.get(id);
       if (handle?.kind === "pty") handle.fit.fit();
-      // If the display scale changed (e.g. the window moved to another monitor), re-apply the 1:1 size.
+      // If the display scale or the viewport changed (another monitor, fullscreen, sidebar), re-apply the size.
       for (const h of handlesRef.current.values()) {
         if (h.kind === "rdp") applyPixelSize(h.canvas);
       }
@@ -870,10 +881,12 @@ function App() {
             gridCols={gridCols}
             pinned={toolbarPinned}
             fullscreen={fullscreen}
+            scaled={scaled}
             onToggleView={toggleView}
             onChangeGridCols={changeGridCols}
             onTogglePinned={() => setToolbarPinned((v) => !v)}
             onToggleFullscreen={toggleFullscreen}
+            onToggleScaled={toggleScaled}
             onClose={closeSession}
           />
         )}
