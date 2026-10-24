@@ -544,17 +544,19 @@ function App() {
   }, [showSession]);
 
   // F11 toggles full screen and Escape leaves it, whenever the keyboard focus is not in a
-  // session (a session stops the events it handles, so they never get here): in the grid, or
-  // after clicking the sidebar or the empty area. In a session those keys belong to the remote.
+  // session: in the grid, or after clicking the sidebar or the empty area. In a session those
+  // keys belong to the remote; the RDP canvas lets its key events bubble (only the view-toggle
+  // key is stopped there), so they are told apart by where they come from.
   const fullscreenRef = useRef(fullscreen);
   fullscreenRef.current = fullscreen;
   const toggleFullscreenRef = useRef(toggleFullscreen);
   toggleFullscreenRef.current = toggleFullscreen;
   useEffect(() => {
-    const inField = (t: EventTarget | null) =>
-      t instanceof HTMLElement && ["INPUT", "SELECT", "TEXTAREA"].includes(t.tagName);
+    const inFieldOrSession = (t: EventTarget | null) =>
+      t instanceof HTMLElement &&
+      (["INPUT", "SELECT", "TEXTAREA"].includes(t.tagName) || t.closest(".rdp-container, .term-container") !== null);
     const onKey = (e: KeyboardEvent) => {
-      if (inField(e.target) || e.altKey || e.ctrlKey || e.metaKey) return;
+      if (inFieldOrSession(e.target) || e.altKey || e.ctrlKey || e.metaKey) return;
       if (e.key === "F11") {
         e.preventDefault();
         toggleFullscreenRef.current(!fullscreenRef.current);
