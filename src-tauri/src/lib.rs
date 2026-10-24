@@ -1,6 +1,7 @@
 use std::sync::atomic::AtomicU32;
 
 mod clipboard;
+mod credentials;
 mod memory;
 mod pty;
 mod rdp;
@@ -80,7 +81,11 @@ pub fn run() {
             rdp::rdp_perf_log,
             rdp::rdp_set_active,
             rdp::rdp_is_self,
-            memory::rdp_memory_check
+            memory::rdp_memory_check,
+            memory::rdp_memory_budget,
+            credentials::credential_set,
+            credentials::credential_get,
+            credentials::credential_delete
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -7,6 +7,8 @@ export type SessionStatus = "connecting" | "running" | "exited";
 export interface SessionInfo {
   id: number;
   kind: "pty" | "rdp";
+  /** The saved connection this session came from; plain consoles have none. */
+  profileId?: string;
   title: string;
   status: SessionStatus;
   exitCode: number | null;

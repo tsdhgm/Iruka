@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import "@xterm/xterm/css/xterm.css";
 import "./App.css";
-import type { MemoryCheck, RdpConnectParams, RdpConnectRequest } from "./rdp";
+import { resolutionSize, type MemoryBudget, type MemoryCheck, type RdpConnectParams, type RdpConnectRequest } from "./rdp";
 import { drawThumb, type SessionCallbacks, type SessionHandle, type SessionInfo } from "./session";
 import { createPtySession } from "./ptySession";
 import { applyPixelSize, createRdpSession } from "./rdpSession";
@@ -11,6 +11,7 @@ import { useWindowViewToggleKey } from "./hostKey";
 import {
   buildSshCommand,
   loadProfiles,
+  rdpParamsFromProfile,
   removeProfile,
   upsertProfile,
   type Profile,
@@ -18,12 +19,27 @@ import {
   type SshProfile,
   type SshTarget,
 } from "./profiles";
+import { forgetPassword, loadPassword, storePassword } from "./credentials";
+import {
+  loadLastWorkset,
+  loadWorksets,
+  newWorksetId,
+  removeWorkset,
+  saveLastWorkset,
+  upsertWorkset,
+  type Workset,
+} from "./worksets";
 import { ActivityBadge } from "./components/ActivityBadge";
 import { ConnectWarningModal, type ConnectWarning } from "./components/ConnectWarning";
 import { GridView, GRID_MAX_COLS, useMainAreaWidth } from "./components/GridView";
 import { RdpForm } from "./components/RdpForm";
+import { RestoreReportModal, type RestoreReport } from "./components/RestoreReport";
 import { SshForm } from "./components/SshForm";
 import { ViewToolbar } from "./components/ViewToolbar";
+import { WorksetSection } from "./components/WorksetSection";
+
+/** How long a restored RDP session may take to connect before the next one is started. */
+const RESTORE_CONNECT_TIMEOUT_MS = 20_000;
 
 const THUMB_W = 196;
 const THUMB_H = 110;
@@ -59,6 +75,14 @@ function App() {
   const [profiles, setProfiles] = useState<Profile[]>(loadProfiles);
   // Pre-connect confirmation (connecting to this machine, not enough free memory); holds the pending connection.
   const [connectWarning, setConnectWarning] = useState<ConnectWarning | null>(null);
+  // Worksets (see worksets.ts): named sets of saved connections, plus the set open most recently.
+  const [worksets, setWorksets] = useState<Workset[]>(loadWorksets);
+  const [lastWorkset, setLastWorkset] = useState<Workset | null>(loadLastWorkset);
+  // Name of the workset being restored (one at a time), and the report shown when it is done.
+  const [restoring, setRestoring] = useState<string | null>(null);
+  const [restoreReport, setRestoreReport] = useState<RestoreReport | null>(null);
+  // While restoring: sessions whose first "running" / "exited" status is awaited before the next connect.
+  const pendingRef = useRef<Map<number, () => void>>(new Map());
   const [fullscreen, setFullscreen] = useState(false);
   const [toolbarPinned, setToolbarPinned] = useState(false);
   // Right pane: one session shown large (single) or all sessions as tiles (grid).
@@ -124,6 +148,13 @@ function App() {
       setSessions((prev) =>
         prev.map((s) => (s.id === id ? { ...s, ...patch } : s)),
       );
+      if (patch.status === "running" || patch.status === "exited") {
+        const resolve = pendingRef.current.get(id);
+        if (resolve) {
+          pendingRef.current.delete(id);
+          resolve();
+        }
+      }
     },
     [],
   );
@@ -148,7 +179,7 @@ function App() {
    * away, the same way keystrokes are; the PTY buffers it until the shell reads it.
    */
   const openShell = useCallback(
-    async (title?: string, initialInput?: string) => {
+    async (title?: string, initialInput?: string, profileId?: string) => {
       const main = mainRef.current;
       if (!main) return;
       const created = await createPtySession(main, sessionCallbacks);
@@ -163,6 +194,7 @@ function App() {
         {
           id,
           kind: "pty",
+          profileId,
           title: title ?? `console ${id + 1}`,
           status: "running",
           exitCode: null,
@@ -182,22 +214,22 @@ function App() {
    * tokens are ignored (the forms refuse them before getting here).
    */
   const openSsh = useCallback(
-    (target: SshTarget) => {
+    (target: SshTarget, profileId?: string) => {
       const command = buildSshCommand(target);
       if (!command) return;
-      return openShell(target.name || `ssh ${target.host}`, `${command}\r`);
+      return openShell(target.name || `ssh ${target.host}`, `${command}\r`, profileId);
     },
     [openShell],
   );
 
   const openRdp = useCallback(
-    async (request: RdpConnectRequest) => {
+    async (request: RdpConnectRequest): Promise<number | null> => {
       const main = mainRef.current;
-      if (!main) return;
-      // The title is for the session list only; `rdp_connect` gets exactly RdpConnectParams.
-      const { title, ...params } = request;
+      if (!main) return null;
+      // The title and profile id are for the session list only; `rdp_connect` gets exactly RdpConnectParams.
+      const { title, profileId, ...params } = request;
       const created = await createRdpSession(main, params, sessionCallbacks);
-      if (!created) return;
+      if (!created) return null;
       const { id, handle } = created;
 
       handlesRef.current.set(id, handle);
@@ -207,6 +239,7 @@ function App() {
         {
           id,
           kind: "rdp",
+          profileId,
           title: title ?? params.host,
           status: "connecting",
           exitCode: null,
@@ -214,6 +247,7 @@ function App() {
         },
       ]);
       focusSession(id);
+      return id;
     },
     [focusSession, sessionCallbacks],
   );
@@ -254,19 +288,38 @@ function App() {
     [openRdp],
   );
 
-  const saveProfile = useCallback((profile: Profile) => {
-    setProfiles(upsertProfile(profile));
+  /** Store the profile; returns it as stored (the id may be an existing entry's). */
+  const saveProfile = useCallback((profile: Profile): Profile => {
+    const { profiles, stored } = upsertProfile(profile);
+    setProfiles(profiles);
+    return stored;
   }, []);
 
   const deleteProfile = useCallback((id: string) => {
     setProfiles(removeProfile(id));
+    forgetPassword(id);
   }, []);
 
   const submitRdpForm = useCallback(
-    (params: RdpConnectParams, profile: RdpProfile | null) => {
+    async (params: RdpConnectParams, profile: RdpProfile | null) => {
       setForm(null);
-      if (profile) saveProfile(profile);
-      connectWithChecks({ ...params, title: profile?.name }, {});
+      const stored = profile ? saveProfile(profile) : null;
+      let password = params.password;
+      if (stored?.kind === "rdp") {
+        if (stored.savePassword) {
+          if (password) {
+            const error = await storePassword(stored.id, password);
+            if (error) alert(`The password was not saved in the credential store: ${error}`);
+          } else {
+            // Empty field with "Save password" on: use the stored one.
+            password = (await loadPassword(stored.id)) ?? "";
+          }
+        } else {
+          // "Save password" is off (or was just turned off): make sure nothing stays stored.
+          forgetPassword(stored.id);
+        }
+      }
+      connectWithChecks({ ...params, password, title: stored?.name, profileId: stored?.id }, {});
     },
     [connectWithChecks, saveProfile],
   );
@@ -274,24 +327,165 @@ function App() {
   const submitSshForm = useCallback(
     (target: SshTarget, profile: SshProfile | null) => {
       setForm(null);
-      if (profile) saveProfile(profile);
-      openSsh(target);
+      const stored = profile ? saveProfile(profile) : null;
+      openSsh(target, stored?.id);
     },
     [openSsh, saveProfile],
   );
 
   /** Edit a saved connection, or (when `connect`) connect to it. */
   const openProfile = useCallback(
-    (profile: Profile, connect: boolean) => {
+    async (profile: Profile, connect: boolean) => {
       if (profile.kind === "ssh" && connect) {
         setForm(null);
-        openSsh(profile);
-      } else {
-        // An RDP connection always goes through the form: the password is typed there.
-        setForm(profile.kind === "rdp" ? { kind: "rdp", initial: profile } : { kind: "ssh", initial: profile });
+        openSsh(profile, profile.id);
+        return;
+      }
+      if (profile.kind === "rdp" && connect && profile.savePassword) {
+        // With a stored password the connection starts right away; otherwise the form asks for it.
+        const password = await loadPassword(profile.id);
+        if (password !== null) {
+          setForm(null);
+          connectWithChecks(
+            { ...rdpParamsFromProfile(profile, password), title: profile.name, profileId: profile.id },
+            {},
+          );
+          return;
+        }
+      }
+      setForm(profile.kind === "rdp" ? { kind: "rdp", initial: profile } : { kind: "ssh", initial: profile });
+    },
+    [connectWithChecks, openSsh],
+  );
+
+  const changeGridCols = useCallback((cols: number) => {
+    setGridCols(cols);
+    localStorage.setItem("iruka.gridCols", String(cols));
+    for (const sid of handlesRef.current.keys()) dirtyRef.current.add(sid);
+  }, []);
+
+  /** The open sessions that came from saved connections, as a workset (layout included). */
+  const currentWorkset = useCallback(
+    (name: string, id: string): Workset => ({
+      id,
+      name,
+      savedAt: new Date().toISOString(),
+      view,
+      gridCols,
+      profileIds: sessions.flatMap((s) => (s.profileId ? [s.profileId] : [])),
+    }),
+    [sessions, view, gridCols],
+  );
+
+  const saveWorkset = useCallback(
+    (name: string) => {
+      setWorksets(upsertWorkset(currentWorkset(name, newWorksetId())));
+    },
+    [currentWorkset],
+  );
+
+  const deleteWorkset = useCallback((id: string) => {
+    setWorksets(removeWorkset(id));
+  }, []);
+
+  // Remember the set of sessions open right now (saved connections only) as "Last open sessions".
+  useEffect(() => {
+    if (!sessions.some((s) => s.profileId)) return;
+    const timer = setTimeout(() => {
+      const ws = currentWorkset("Last open sessions", "last");
+      saveLastWorkset(ws);
+      setLastWorkset(ws);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [sessions, currentWorkset]);
+
+  /**
+   * Bring a workset back: the sessions are started one after another (a restored RDP
+   * session gets up to RESTORE_CONNECT_TIMEOUT_MS to connect before the next one starts),
+   * and only as many RDP sessions as the estimated memory allows, in the saved order.
+   * The rest, and the ones without a stored password, are listed in the report.
+   */
+  const restoreWorkset = useCallback(
+    async (workset: Workset) => {
+      if (restoring !== null) return;
+      setRestoring(workset.name);
+      setForm(null);
+      const report: RestoreReport = {
+        workset: workset.name,
+        restored: [],
+        skippedMemory: [],
+        skippedNoPassword: [],
+        missing: 0,
+        availableBytes: null,
+        learned: false,
+      };
+      try {
+        const byId = new Map(profiles.map((p) => [p.id, p]));
+        const items: Profile[] = [];
+        for (const id of workset.profileIds) {
+          const p = byId.get(id);
+          if (p) items.push(p);
+          else report.missing++;
+        }
+        // Which RDP sessions fit: add up the estimates in order, stop including at the first that does not.
+        const rdpItems = items.filter((p): p is RdpProfile => p.kind === "rdp");
+        const fits = new Set<string>(rdpItems.map((p) => p.id));
+        if (rdpItems.length > 0) {
+          try {
+            const sizes = rdpItems.map((p) => {
+              const { width, height } = resolutionSize(p.resolution);
+              return [width, height] as [number, number];
+            });
+            const budget = await invoke<MemoryBudget>("rdp_memory_budget", { sizes });
+            report.availableBytes = budget.availableBytes;
+            report.learned = budget.learned;
+            let used = 0;
+            rdpItems.forEach((p, i) => {
+              const need = budget.estimatedBytes[i] ?? 0;
+              if (used + need <= budget.availableBytes) used += need;
+              else fits.delete(p.id);
+            });
+          } catch {
+            // Without an estimate, restore everything.
+          }
+        }
+        setView(workset.view);
+        changeGridCols(workset.gridCols);
+        for (const p of items) {
+          if (p.kind === "ssh") {
+            await openSsh(p, p.id);
+            report.restored.push(p.name);
+            continue;
+          }
+          if (!fits.has(p.id)) {
+            report.skippedMemory.push(p.name);
+            continue;
+          }
+          const password = p.savePassword ? await loadPassword(p.id) : null;
+          if (password === null) {
+            report.skippedNoPassword.push(p.name);
+            continue;
+          }
+          const id = await openRdp({ ...rdpParamsFromProfile(p, password), title: p.name, profileId: p.id });
+          if (id === null) continue;
+          report.restored.push(p.name);
+          await new Promise<void>((resolve) => {
+            const timer = setTimeout(() => {
+              pendingRef.current.delete(id);
+              resolve();
+            }, RESTORE_CONNECT_TIMEOUT_MS);
+            pendingRef.current.set(id, () => {
+              clearTimeout(timer);
+              resolve();
+            });
+          });
+        }
+      } finally {
+        setRestoring(null);
+        setRestoreReport(report);
       }
     },
-    [openSsh],
+    [restoring, profiles, openSsh, openRdp, changeGridCols],
   );
 
   const proceedDespiteWarning = useCallback(
@@ -383,12 +577,6 @@ function App() {
 
   // View-toggle key while no session has focus (e.g. in the grid view).
   useWindowViewToggleKey(toggleViewRef);
-
-  const changeGridCols = useCallback((cols: number) => {
-    setGridCols(cols);
-    localStorage.setItem("iruka.gridCols", String(cols));
-    for (const sid of handlesRef.current.keys()) dirtyRef.current.add(sid);
-  }, []);
 
   useEffect(() => {
     drawZoom();
@@ -538,6 +726,17 @@ function App() {
               ))}
             </div>
           )}
+          {(profiles.length > 0 || worksets.length > 0 || lastWorkset) && (
+            <WorksetSection
+              worksets={worksets}
+              last={lastWorkset}
+              canSave={sessions.some((s) => s.profileId)}
+              restoring={restoring}
+              onSave={saveWorkset}
+              onRestore={restoreWorkset}
+              onDelete={deleteWorkset}
+            />
+          )}
           {sessions.map((s) => (
             <div
               key={s.id}
@@ -638,6 +837,7 @@ function App() {
           />
         )}
       </div>
+      {restoreReport && <RestoreReportModal report={restoreReport} onClose={() => setRestoreReport(null)} />}
       {connectWarning && (
         <ConnectWarningModal
           warning={connectWarning}

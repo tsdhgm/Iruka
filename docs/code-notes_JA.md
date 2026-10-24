@@ -26,7 +26,8 @@ App.tsx, src/components, hostKey.ts  lib.rs: Tauri コマンド、ログフィ�
 
 - コンソール: `spawn_session`, `write_session`, `resize_session`, `kill_session`（`pty.rs`）
 - RDP: `rdp_connect`, `rdp_input`, `rdp_close`, `rdp_set_active`, `rdp_is_self`, `rdp_perf_log`（`rdp/mod.rs`）
-- メモリ: `rdp_memory_check`（`memory.rs`）
+- メモリ: `rdp_memory_check`, `rdp_memory_budget`（`memory.rs`）
+- 資格情報: `credential_set`, `credential_get`, `credential_delete`（`credentials.rs`）
 
 コンソールと RDP のセッション ID は 1 つの空間を共有する（`lib.rs` の `NEXT_SESSION_ID`、`AtomicU32`）。フロントが 1 つの一覧で扱うため。
 
@@ -82,6 +83,12 @@ WebView はリモートの画面をセッションの `<canvas>` にしか持っ
 ### フロントの構成
 
 `App.tsx` がセッションの状態を持ち、フォーム、一覧表示、ツールバー、モーダル、ホストキーの追跡は `src/components` と `src/hostKey.ts` にある。セッションごとの配線（RDP の画面データの復号、コンソールの xterm.js）は `src/rdpSession.ts` と `src/ptySession.ts`。ホストキーの追跡は「右 Alt 単独で一覧を切り替え、右 Alt + キーは普通の Alt」の規則を実現するもので、別のキーが続くかどうかわかるまで押下を保留する。
+
+### 資格情報とワークセット
+
+保存した接続（`src/profiles.ts`、`localStorage` の `iruka.profiles`）はパスワード以外の全部を持つ。`savePassword` が付いていると、パスワードは `keyring` クレート経由で OS の資格情報ストアにある（`credentials.rs`: Linux は zbus 経由の Secret Service、Windows は資格情報マネージャー、macOS はキーチェーン。サービス名 `dev.tosihide.iruka`、ユーザー = プロファイル id。接続の名前を変えてもパスワードは残り、ストアの中にホスト名は出ない）。3 つのコマンドはストアの呼び出しをブロッキングスレッドで行う（`tauri::async_runtime::spawn_blocking`）。フロント（`src/credentials.ts`）はストアがない・読めない場合を「パスワードなし」として扱い、フォームに戻す。`upsertProfile` は保存されたエントリを返す。同じホストに二度接続すると既存の id が使われ、資格情報もその id に従う必要があるため。
+
+ワークセット（`src/worksets.ts`）は、サイドバーの順のプロファイル id の一覧と、表示モードと列数。各 `SessionInfo` は元になった `profileId` を持つので、いま開いている集合を取り出せる。「Last open sessions」は、プロファイル由来のセッションが 1 本以上開いている間、変化の 1 秒後に書かれる。`App.tsx` の `restoreWorkset` は RDP の全項目の見積もりを `rdp_memory_budget` に一度に頼み、順に足して収まらないものを外し、残りを順番に起動する。RDP は最初の `running` / `exited` 状態（`pendingRef`、`updateSession` から解決）か 20 秒を待つので、FreeRDP の接続 20 本が同時に初期化することはない。報告のモーダルに、何を何の理由で外したかを列挙する。
 
 ### PTY セッション（コンソール）
 
@@ -151,7 +158,7 @@ IronRDP バックエンドに FFI はない。セッションスレッドで、`
 
 **(b) メモリ見積もりの定数は実測値。** `BASE_SESSION_BYTES`（1 セッションの固定分 150 MB）と `BASE_BYTES_PER_PIXEL`（66 B/px）は、2026-10-09 に Iruka 全体で計測した値から来ている。FreeRDP は 1080p で約 290 MB、4K で `/gfx:small-cache` 込みで約 610〜780 MB、IronRDP は 4K で約 325 MB。学習するのは全体の倍率だけ（観測値の 95 パーセンタイル × 1.2）で、固定分と画素分の比は決め打ち。1080p セッションの heaptrack の内訳は [KNOWN_ISSUES_JA.md](../KNOWN_ISSUES_JA.md) にあり、そのうち約 18 B/px が FreeRDP の使わない 2 組目の codec によることも説明している。数字は FreeRDP のバージョンや WebView で変わる。確定した事実ではなく出発点として扱うこと。
 
-**(c) 認証情報と証明書。** パスワードはプロセス内の argv の `/p:` として FreeRDP に渡す（`freerdp.rs`）。プロセスを起動しないのでプロセス一覧には出ないが、FreeRDP はコマンドラインのパスワードについて警告を出し、文字列は引数の一部としてメモリに残る。予定している直し方は、argv から解析させるのをやめ、C の橋渡しで設定 API の `FreeRDP_Password` に直接入れること。どちらのバックエンドもサーバー証明書を検証しない（FreeRDP は `/cert:ignore`、`ironrdp.rs` は `NoCertificateVerification`）。mstsc で毎回「続行」を押すのと同じで、信頼できる LAN では問題ないが、それ以外では不適切。証明書のピン留めも初回確認もない。
+**(c) 認証情報と証明書。** 保存したパスワードは接続の直前に OS の資格情報ストアから読み、そのあと パスワードはプロセス内の argv の `/p:` として FreeRDP に渡す（`freerdp.rs`）。プロセスを起動しないのでプロセス一覧には出ないが、FreeRDP はコマンドラインのパスワードについて警告を出し、文字列は引数の一部としてメモリに残る。予定している直し方は、argv から解析させるのをやめ、C の橋渡しで設定 API の `FreeRDP_Password` に直接入れること。どちらのバックエンドもサーバー証明書を検証しない（FreeRDP は `/cert:ignore`、`ironrdp.rs` は `NoCertificateVerification`）。mstsc で毎回「続行」を押すのと同じで、信頼できる LAN では問題ないが、それ以外では不適切。証明書のピン留めも初回確認もない。
 
 **(d) デバッグログが既定で有効。** `lib.rs` の `tracing` の既定フィルターは `warn,ironrdp_connector=debug,ironrdp_blocking=debug,iruka_lib=debug,iruka_perf=debug,iruka_mem=debug` で、`IRUKA_LOG`（`EnvFilter`）で上書きできる。`iruka_perf` はキューに入れた・送ったフレームすべてのサイズと時間、キー入力を記録し、`iruka_mem` は 3 秒ごとにメモリの記録を出す。調整中はこれでよいが、うるさいので、公開前にはオプトイン（既定は `warn` のみ、デバッグ用ターゲットは `IRUKA_LOG` で有効化）にするべき。
 

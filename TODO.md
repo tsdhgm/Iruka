@@ -10,27 +10,24 @@ The end state Iruka is heading for: several RDP sessions (and SSH consoles, if f
 "save workset" records the current state; after a restart, "restore workset" brings every session
 back. The Windows client is mandatory, macOS desirable. The pieces, in order:
 
-- [ ] Workset = the set of open sessions with their profiles and layout (grid columns, order, which
-  one is shown, view mode). Saved connections (`src/profiles.ts`, `iruka.profiles`) already hold
-  everything except the password and the layout; a workset is a list of profile ids plus layout.
-- [ ] Credentials in the OS keyring (the item under "Before a 1.0 release"): without it a restore
-  stops at 20 password prompts. The Rust `keyring` crate covers Secret Service (Linux), Credential
-  Manager (Windows) and Keychain (macOS) in one API. Opt-in per saved connection, default off.
-- [ ] Restore: reconnect the sessions in order (staggered, not all at once: 20 FreeRDP connects
-  plus decoder set-up in parallel would spike memory and CPU); show progress and keep failed ones
-  as reconnectable placeholders.
-- [ ] SSH restore: reopen the console and type the `ssh` line again; the shell state on the remote
-  cannot come back (unless the user runs `tmux`/`screen` there). Keys via `ssh-agent` rather than
-  stored passwords.
-- [ ] Save on exit automatically ("last workset"), besides named worksets.
-- [ ] Out-of-memory handling at restore (owner, 2026-10-24, to be designed later): before
-  reconnecting, estimate the memory the workset needs (the `iruka_mem` sampler already measures
-  bytes per remote pixel per platform: about 550 MB per 3840×2160 session on Linux, about 1.2 GB on
-  Windows) and compare with the available memory (`sysinfo` is already a dependency). If it does
-  not fit: warn in a dialog, or restore only as many sessions as fit and leave the rest as
-  placeholders. Windows has no OOM killer: an allocation failure aborts the process (or the box
-  swaps first), so checking before is the only workable place. The owner's Windows client box
-  will have 32 GB.
+- [x] (2026-10-24) Worksets: saved connections in sidebar order plus view and grid columns
+  (`src/worksets.ts`); "Last open sessions" is written automatically; the "Worksets" sidebar
+  section saves and restores (README "Saved connections", docs/code-notes.md "Credentials and worksets").
+- [x] (2026-10-24) Passwords in the OS credential store through the `keyring` crate (Secret Service
+  on Linux, Credential Manager on Windows, Keychain on macOS), opt-in per RDP connection ("Save
+  password"), default off.
+- [x] (2026-10-24) Restore in order, one session at a time (an RDP session is awaited up to 20 s);
+  only as many RDP sessions as the memory estimate allows (`rdp_memory_budget`), the rest listed in
+  the report. SSH is restored by retyping the `ssh` line (the remote shell state does not come back).
+- [ ] Verify the worksets in real use: restore after a restart with several RDP sessions and an
+  SSH console; the "memory would run short" path (`IRUKA_FAKE_AVAILABLE_MB` in a dev build); the
+  Windows client (Credential Manager; the memory model has not learned Windows figures yet, so the
+  first estimates use the Linux-based default and may let too many sessions through).
+- [ ] Sessions skipped at restore (memory, no password) and sessions that failed to connect are only
+  listed in the report; give them placeholders in the session list that reconnect on click.
+- [ ] A dialog before restoring (all / only what fits / cancel) instead of deciding silently, if the
+  owner wants the choice; today the premise is "only what fits".
+- [ ] SSH: prefer `ssh-agent` keys; Iruka stores no SSH passwords.
 
 ## To verify after the 2026-10-13 refactor (App.tsx split, English UI)
 
@@ -84,9 +81,10 @@ A quick check on 2026-10-13 found no problems. Still to be checked more carefull
     - The Microsoft Store.
 - [ ] Console profiles: let the user pick the shell per console (PowerShell, cmd, WSL, bash, …). Today it is `$SHELL`, else `powershell.exe` on Windows and `bash` elsewhere.
 - [ ] Automated UI tests; Rust unit tests exist only for small helpers.
-- [ ] Store passwords of saved connections in the OS keyring, the way Remmina's "secret" plugin does: Secret Service (GNOME Keyring / KWallet) on Linux, Credential Manager on Windows, Keychain on macOS. Plan: the Rust `keyring` crate behind two Tauri commands (get/set by profile id); the frontend profile store keeps holding no password. Until then passwords are typed on every connection.
 
 ## Done
+
+- 2026-10-24: passwords of saved RDP connections in the OS credential store (`keyring` crate, opt-in "Save password"); worksets (save the open sessions and layout, restore them in order and only as many RDP sessions as the memory estimate allows, "Last open sessions" written automatically).
 
 - [x] 2026-10-23: memory comparison with the Windows client (docs/code-notes.md "Memory model"): one 3840×2160 session costs about 550 MB on Linux, about 1.2 GB on Windows.
 - [x] 2026-10-23: the cursor over the remote screen takes the remote's shape (FreeRDP pointer updates → CSS cursor; docs/code-notes.md "Cursor shape").

@@ -26,7 +26,8 @@ App.tsx, src/components, hostKey.ts  lib.rs: Tauri commands, log filter
 
 - consoles: `spawn_session`, `write_session`, `resize_session`, `kill_session` (`pty.rs`)
 - RDP: `rdp_connect`, `rdp_input`, `rdp_close`, `rdp_set_active`, `rdp_is_self`, `rdp_perf_log` (`rdp/mod.rs`)
-- memory: `rdp_memory_check` (`memory.rs`)
+- memory: `rdp_memory_check`, `rdp_memory_budget` (`memory.rs`)
+- credentials: `credential_set`, `credential_get`, `credential_delete` (`credentials.rs`)
 
 Console and RDP sessions share one id space: `NEXT_SESSION_ID` (an `AtomicU32` in `lib.rs`), so the frontend can keep them in a single list.
 
@@ -82,6 +83,12 @@ The frontend converts `KeyboardEvent.code` to PC/AT Set 1 scancodes with the `SC
 ### Frontend layout
 
 `App.tsx` holds session state; forms, grid view, toolbar, modals and the host-key tracker live in `src/components` and `src/hostKey.ts`, and the per-session wiring (frame decoding for RDP, xterm.js for consoles) is in `src/rdpSession.ts` and `src/ptySession.ts`. The host-key tracker implements the "right Alt alone toggles the grid, right Alt + key is a normal Alt" rule: it holds the key-down until it knows whether another key follows.
+
+### Credentials and worksets
+
+Saved connections (`src/profiles.ts`, `localStorage` `iruka.profiles`) carry everything but the password. With `savePassword` on, the password is in the OS credential store through the `keyring` crate (`credentials.rs`: Secret Service via zbus on Linux, Credential Manager on Windows, Keychain on macOS; service `dev.tosihide.iruka`, user = the profile id, so renaming a connection keeps its password and nothing in the store names a host). The three commands run the store calls on a blocking thread (`tauri::async_runtime::spawn_blocking`); the frontend (`src/credentials.ts`) treats a missing or unavailable store as "no password" and falls back to the form. `upsertProfile` returns the entry as stored, because connecting twice to the same host reuses the existing id and the credential must follow that id.
+
+A workset (`src/worksets.ts`) is a list of profile ids in sidebar order plus the view and grid columns; each `SessionInfo` carries the `profileId` it came from so the current set can be captured. "Last open sessions" is written one second after any change while at least one profile-backed session is open. `restoreWorkset` in `App.tsx` asks `rdp_memory_budget` for the estimates of all RDP items at once, adds them up in order and drops the ones that do not fit, then starts the sessions sequentially: an RDP session is awaited until its first `running` / `exited` status (`pendingRef`, resolved from `updateSession`) or 20 s, so that 20 FreeRDP connects do not initialise at the same time. The report modal lists what was skipped and why.
 
 ### PTY sessions (consoles)
 
@@ -151,7 +158,7 @@ Written for contributors, not as a sales pitch. These are things that work but a
 
 **(b) The memory estimate constants are empirical.** `BASE_SESSION_BYTES` (150 MB fixed per session) and `BASE_BYTES_PER_PIXEL` (66 B/px) come from measurements on 2026-10-09 of Iruka as a whole: FreeRDP at 1080p about 290 MB, at 4K about 610–780 MB with `/gfx:small-cache`; IronRDP at 4K about 325 MB. Only the overall scale is learned (95th percentile of observations, times 1.2); the fixed-to-per-pixel ratio is baked in. The heaptrack breakdown of a 1080p session is in [KNOWN_ISSUES.md](../KNOWN_ISSUES.md), under "FreeRDP allocates decode buffers it never uses", which also explains why about 18 B/px of it is FreeRDP allocating a second, unused codec set. Numbers will drift with FreeRDP versions and with the WebView; treat them as starting points, not facts.
 
-**(c) Credentials and certificates.** The password goes to FreeRDP as `/p:` in the in-process argv (`freerdp.rs`). It never appears in the process list because no process is spawned, but FreeRDP logs a warning about passwords on the command line, and the string sits in memory as part of the argument vector. The planned fix is to set `FreeRDP_Password` through the settings API in the C bridge instead of parsing it from argv. Both backends skip server certificate verification (`/cert:ignore` for FreeRDP; a `NoCertificateVerification` verifier in `ironrdp.rs`), which is the equivalent of always clicking "continue" in mstsc. Fine on a trusted LAN, not fine elsewhere; there is no certificate pinning or first-use prompt.
+**(c) Credentials and certificates.** A stored password is read from the OS credential store right before connecting and then goes to FreeRDP as `/p:` in the in-process argv (`freerdp.rs`). It never appears in the process list because no process is spawned, but FreeRDP logs a warning about passwords on the command line, and the string sits in memory as part of the argument vector. The planned fix is to set `FreeRDP_Password` through the settings API in the C bridge instead of parsing it from argv. Both backends skip server certificate verification (`/cert:ignore` for FreeRDP; a `NoCertificateVerification` verifier in `ironrdp.rs`), which is the equivalent of always clicking "continue" in mstsc. Fine on a trusted LAN, not fine elsewhere; there is no certificate pinning or first-use prompt.
 
 **(d) Debug logging is on by default.** The default `tracing` filter in `lib.rs` is `warn,ironrdp_connector=debug,ironrdp_blocking=debug,iruka_lib=debug,iruka_perf=debug,iruka_mem=debug`, overridable with `IRUKA_LOG` (an `EnvFilter`). `iruka_perf` logs every queued and sent frame with sizes and timings plus key events; `iruka_mem` logs a memory sample every 3 s. This is intentional while the project is still being tuned, but it is noisy and should become opt-in (a `warn`-only default, with the debug targets enabled through `IRUKA_LOG`) before a release.
 

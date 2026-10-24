@@ -2,6 +2,8 @@ import { useState } from "react";
 import {
   RDP_BACKENDS,
   RDP_RESOLUTIONS,
+  localDesktopSize,
+  resolutionSize,
   type RdpBackendKind,
   type RdpConnectParams,
   type RdpResolution,
@@ -19,28 +21,8 @@ interface RdpFormValues {
   smallCache: boolean;
   clipboard: boolean;
   resolution: RdpResolution;
-}
-
-/**
- * Requested remote resolution = the local monitor's physical resolution (same as a
- * full-screen mstsc connection). In full screen it fits exactly at 1:1; in a window
- * the overflow is reached by scrolling. Screen-sharing servers (GNOME Remote Desktop)
- * announce their own screen size, so the actual size follows the server's resize event.
- */
-function localDesktopSize(): { width: number; height: number } {
-  const dpr = window.devicePixelRatio || 1;
-  // Keep within the range RDP allows (200-8192) and make the width even.
-  const clamp = (v: number) => Math.max(200, Math.min(8192, Math.round(v)));
-  return {
-    width: clamp(window.screen.width * dpr) & ~1,
-    height: clamp(window.screen.height * dpr),
-  };
-}
-
-function resolutionSize(r: RdpResolution): { width: number; height: number } {
-  if (r === "local") return localDesktopSize();
-  const [width, height] = r.split("x").map(Number);
-  return { width, height };
+  /** Keep the password in the OS credential store (see profiles.ts). Off for new connections. */
+  savePassword: boolean;
 }
 
 function resolutionLabel(r: RdpResolution): string {
@@ -65,6 +47,7 @@ function loadRdpForm(): RdpFormValues {
       smallCache: saved.smallCache ?? true,
       clipboard: saved.clipboard ?? true,
       resolution: saved.resolution ?? "local",
+      savePassword: false,
     };
   } catch {
     return {
@@ -78,11 +61,12 @@ function loadRdpForm(): RdpFormValues {
       smallCache: true,
       clipboard: true,
       resolution: "local",
+      savePassword: false,
     };
   }
 }
 
-/** Form values taken from a saved connection (the password is always typed). */
+/** Form values taken from a saved connection (the password field starts empty even when one is stored). */
 function fromProfile(profile: RdpProfile): RdpFormValues {
   return {
     name: profile.name,
@@ -95,6 +79,7 @@ function fromProfile(profile: RdpProfile): RdpFormValues {
     smallCache: profile.smallCache,
     clipboard: profile.clipboard,
     resolution: profile.resolution,
+    savePassword: profile.savePassword ?? false,
   };
 }
 
@@ -132,7 +117,11 @@ export function RdpForm({
     smallCache: rdpForm.smallCache,
     clipboard: rdpForm.clipboard,
     resolution: rdpForm.resolution,
+    savePassword: rdpForm.savePassword,
   });
+
+  /** A stored password can stand in for an empty field (the app fetches it on connect). */
+  const hasStoredPassword = !!initial?.savePassword;
 
   const saveProfile = () => {
     if (!rdpForm.host.trim()) return;
@@ -202,13 +191,23 @@ export function RdpForm({
       />
       <input
         type="password"
-        placeholder="Password"
+        placeholder={hasStoredPassword ? "Password (saved; leave empty to use it)" : "Password"}
         value={rdpForm.password}
         autoFocus={!!initial}
         onChange={(e) =>
           setRdpForm({ ...rdpForm, password: e.target.value })
         }
       />
+      <div className="rdp-form-checks">
+        <label title="Keep the password in the OS credential store (GNOME Keyring / KWallet, Windows Credential Manager, macOS Keychain), so this connection can be restored without typing it. Anyone using this desktop session can connect as you.">
+          <input
+            type="checkbox"
+            checked={rdpForm.savePassword}
+            onChange={(e) => setRdpForm({ ...rdpForm, savePassword: e.target.checked })}
+          />
+          Save password
+        </label>
+      </div>
       <select
         title="Resolution (larger uses more memory)"
         value={rdpForm.resolution}

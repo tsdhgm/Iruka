@@ -744,3 +744,54 @@ body {
 .modal-buttons button.danger:hover {
   background: #6e3239;
 }
+
+/* Worksets section in the sidebar */
+.workset-save {
+  display: flex;
+  gap: 6px;
+  padding: 2px 0 4px;
+}
+
+.workset-save input {
+  flex: 1;
+  background: #151b26;
+  border: 1px solid #263143;
+  border-radius: 6px;
+  color: #d6dde8;
+  padding: 5px 8px;
+  font-size: 12px;
+  outline: none;
+  min-width: 0;
+}
+
+.workset-save input:focus {
+  border-color: #3d6c8f;
+}
+
+.workset-save button {
+  background: #1f5f7a;
+  border: none;
+  border-radius: 6px;
+  color: #e6f3f8;
+  font-size: 12px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.workset-save button:disabled,
+.workset-save input:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.workset-status,
+.workset-hint {
+  font-size: 11px;
+  color: #5c6775;
+  padding: 2px 2px 4px;
+}
+
+.profile-card.disabled {
+  opacity: 0.6;
+  cursor: default;
+}

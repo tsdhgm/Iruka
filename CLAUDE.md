@@ -58,6 +58,12 @@ KNOWN_ISSUES.md and TODO.md.
   sudo). **Found by accident: a second start of Iruka kills the running one** (Tauri setup panic via
   GtkApplication activate; KNOWN_ISSUES.md, fix candidates in TODO.md). Never start a test Iruka
   while the owner's instance runs: `pgrep -x iruka` first.
+- **2026-10-24: passwords in the OS credential store and worksets implemented** (`keyring` 4 crate,
+  `src-tauri/src/credentials.rs`; `src/worksets.ts`, `WorksetSection`, `RestoreReportModal`;
+  `rdp_memory_budget`). Restore starts sessions one at a time and only as many RDP sessions as the
+  memory estimate allows (owner's premise). Verified: cargo tests incl. a real GNOME Keyring round
+  trip, tsc, vite build, dev app starts. **Not yet tried in the UI by the owner**; the deb is not
+  rebuilt. Open follow-ups in TODO.md "Goal: worksets".
 - The deb from `scripts/make-deb.sh` is installed on the Ubuntu box (`/usr/bin/iruka`, dolphin
   icon verified; rebuilt and reinstalled 2026-10-23 with the cursor feature, via `sudo dpkg -i`
   because the version is still 0.1.0 and `apt install` does not replace a same-version package);

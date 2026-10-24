@@ -1,7 +1,9 @@
 // Saved connections ("profiles"), like Remmina's connection list. They live in
-// localStorage; a password is never stored, it is typed at every connection.
+// localStorage and never hold a password: with "Save password" on, the password is in
+// the OS credential store under the profile id (credentials.ts); otherwise it is typed
+// at every connection.
 
-import type { RdpBackendKind, RdpResolution } from "./rdp";
+import { resolutionSize, type RdpBackendKind, type RdpConnectParams, type RdpResolution } from "./rdp";
 
 export interface SshProfile {
   id: string;
@@ -25,6 +27,8 @@ export interface RdpProfile {
   smallCache: boolean;
   clipboard: boolean;
   resolution: RdpResolution;
+  /** The password is kept in the OS credential store (credentials.ts) under this profile's id. */
+  savePassword?: boolean;
 }
 
 export type Profile = SshProfile | RdpProfile;
@@ -75,16 +79,43 @@ function sameTarget(a: Profile, b: Profile): boolean {
 
 /**
  * Replace the profile with the same id, or else one that points at the same target
- * (connecting twice to a host must not create two entries), or append it. Returns the new list.
+ * (connecting twice to a host must not create two entries), or append it. Returns the
+ * new list and the entry as stored (its id may be the existing entry's, not `profile.id`).
  */
-export function upsertProfile(profile: Profile): Profile[] {
+export function upsertProfile(profile: Profile): { profiles: Profile[]; stored: Profile } {
   const profiles = loadProfiles();
   let index = profiles.findIndex((p) => p.id === profile.id);
   if (index < 0) index = profiles.findIndex((p) => sameTarget(p, profile));
-  if (index >= 0) profiles[index] = { ...profile, id: profiles[index].id };
-  else profiles.push(profile);
+  let stored: Profile;
+  if (index >= 0) {
+    stored = { ...profile, id: profiles[index].id };
+    profiles[index] = stored;
+  } else {
+    stored = profile;
+    profiles.push(profile);
+  }
   saveProfiles(profiles);
-  return profiles;
+  return { profiles, stored };
+}
+
+/** The connection parameters of a saved RDP connection (the password comes from the caller). */
+export function rdpParamsFromProfile(profile: RdpProfile, password: string): RdpConnectParams {
+  const [hostPart, portPart] = profile.host.trim().split(":");
+  const { width, height } = resolutionSize(profile.resolution);
+  return {
+    host: hostPart,
+    port: portPart ? Number(portPart) : null,
+    username: profile.username,
+    password,
+    domain: null,
+    width,
+    height,
+    backend: profile.backend,
+    audio: profile.audio,
+    microphone: profile.microphone,
+    smallCache: profile.smallCache,
+    clipboard: profile.clipboard,
+  };
 }
 
 /** Remove the profile with this id (no-op when absent). Returns the new list. */

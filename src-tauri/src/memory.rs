@@ -210,12 +210,10 @@ pub struct MemoryCheck {
     learned: bool,
 }
 
-/// Estimated memory for a new RDP connection (width x height), and the available memory
-#[tauri::command]
-pub fn rdp_memory_check(width: u32, height: u32) -> MemoryCheck {
+/// Memory the OS reports as available right now
+fn available_memory() -> u64 {
     let mut sys = System::new();
     sys.refresh_memory();
-    let model = MODEL.lock().unwrap();
     #[cfg_attr(not(debug_assertions), allow(unused_mut))]
     let mut available_bytes = sys.available_memory();
     // For testing during development: IRUKA_FAKE_AVAILABLE_MB makes the available memory look smaller
@@ -223,9 +221,44 @@ pub fn rdp_memory_check(width: u32, height: u32) -> MemoryCheck {
     if let Some(mb) = std::env::var("IRUKA_FAKE_AVAILABLE_MB").ok().and_then(|v| v.parse::<u64>().ok()) {
         available_bytes = mb * 1_048_576;
     }
+    available_bytes
+}
+
+/// Estimated memory for a new RDP connection (width x height), and the available memory
+#[tauri::command]
+pub fn rdp_memory_check(width: u32, height: u32) -> MemoryCheck {
+    let available_bytes = available_memory();
+    let model = MODEL.lock().unwrap();
     MemoryCheck {
         available_bytes,
         estimated_bytes: model.estimate(width, height),
+        scale: model.scale(),
+        learned: model.learned(),
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryBudget {
+    /// Memory the OS reports as available right now
+    available_bytes: u64,
+    /// Expected requirement of each requested connection, in the order given (with the safety margin)
+    estimated_bytes: Vec<u64>,
+    /// Scale factor applied to the standard formula (1 before learning)
+    scale: f64,
+    /// Whether the learned value was used (false means the initial value)
+    learned: bool,
+}
+
+/// Estimates for several connections at once (used when a workset is restored: the
+/// frontend adds them up in order and stops at the first one that does not fit).
+#[tauri::command]
+pub fn rdp_memory_budget(sizes: Vec<(u32, u32)>) -> MemoryBudget {
+    let available_bytes = available_memory();
+    let model = MODEL.lock().unwrap();
+    MemoryBudget {
+        available_bytes,
+        estimated_bytes: sizes.iter().map(|&(w, h)| model.estimate(w, h)).collect(),
         scale: model.scale(),
         learned: model.learned(),
     }

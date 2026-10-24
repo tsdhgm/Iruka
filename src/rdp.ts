@@ -46,6 +46,8 @@ export interface RdpConnectParams {
  */
 export interface RdpConnectRequest extends RdpConnectParams {
   title?: string;
+  /** The saved connection this session came from (worksets are made of these ids). */
+  profileId?: string;
 }
 
 /** Result of the pre-connect memory check (MemoryCheck in memory.rs on the Rust side). */
@@ -56,10 +58,40 @@ export interface MemoryCheck {
   learned: boolean;
 }
 
+/** Result of the memory estimate for several connections at once (MemoryBudget in memory.rs). */
+export interface MemoryBudget {
+  availableBytes: number;
+  estimatedBytes: number[];
+  scale: number;
+  learned: boolean;
+}
+
 /** Resolution choices. "local" is the physical resolution of the local monitor. */
 export type RdpResolution = "local" | "2560x1440" | "1920x1080";
 
 export const RDP_RESOLUTIONS: RdpResolution[] = ["local", "2560x1440", "1920x1080"];
+
+/**
+ * Requested remote resolution = the local monitor's physical resolution (same as a
+ * full-screen mstsc connection). In full screen it fits exactly at 1:1; in a window
+ * the overflow is reached by scrolling. Screen-sharing servers (GNOME Remote Desktop)
+ * announce their own screen size, so the actual size follows the server's resize event.
+ */
+export function localDesktopSize(): { width: number; height: number } {
+  const dpr = window.devicePixelRatio || 1;
+  // Keep within the range RDP allows (200-8192) and make the width even.
+  const clamp = (v: number) => Math.max(200, Math.min(8192, Math.round(v)));
+  return {
+    width: clamp(window.screen.width * dpr) & ~1,
+    height: clamp(window.screen.height * dpr),
+  };
+}
+
+export function resolutionSize(r: RdpResolution): { width: number; height: number } {
+  if (r === "local") return localDesktopSize();
+  const [width, height] = r.split("x").map(Number);
+  return { width, height };
+}
 
 // KeyboardEvent.code → PC/AT scancode (Set 1). Extended keys are 0xE0xx.
 // Physical key positions are sent, so the layout (JIS/US) follows the remote side's setting.
