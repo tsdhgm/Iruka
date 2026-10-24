@@ -19,15 +19,16 @@ back. The Windows client is mandatory, macOS desirable. The pieces, in order:
 - [x] (2026-10-24) Restore in order, one session at a time (an RDP session is awaited up to 20 s);
   only as many RDP sessions as the memory estimate allows (`rdp_memory_budget`), the rest listed in
   the report. SSH is restored by retyping the `ssh` line (the remote shell state does not come back).
-- [ ] Verify the worksets in real use: restore after a restart with several RDP sessions and an
-  SSH console; the "memory would run short" path (`IRUKA_FAKE_AVAILABLE_MB` in a dev build); the
+- [ ] Verify the worksets in real use (Linux: in daily use since 2026-10-24 with 6 RDP + 5 SSH, no
+  problem reported yet): the "memory would run short" path (`IRUKA_FAKE_AVAILABLE_MB` in a dev build); the
   Windows client (Credential Manager; the memory model has not learned Windows figures yet, so the
   first estimates use the Linux-based default and may let too many sessions through).
 - [ ] Sessions skipped at restore (memory, no password) and sessions that failed to connect are only
   listed in the report; give them placeholders in the session list that reconnect on click.
 - [ ] A dialog before restoring (all / only what fits / cancel) instead of deciding silently, if the
   owner wants the choice; today the premise is "only what fits".
-- [ ] SSH: prefer `ssh-agent` keys; Iruka stores no SSH passwords.
+- [x] (2026-10-24) SSH "Save password": the password is in the credential store and typed once at ssh's `password:` prompt (`passwordPromptAnswerer`); keys through `ssh-agent` remain the better way and need nothing from Iruka.
+- [ ] Worksets: remember the full-screen state too, and restore it (owner's F11-after-restore question, 2026-10-24).
 
 ## To verify after the 2026-10-13 refactor (App.tsx split, English UI)
 

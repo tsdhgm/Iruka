@@ -62,11 +62,22 @@ KNOWN_ISSUES.md and TODO.md.
   `src-tauri/src/credentials.rs`; `src/worksets.ts`, `WorksetSection`, `RestoreReportModal`;
   `rdp_memory_budget`). Restore starts sessions one at a time and only as many RDP sessions as the
   memory estimate allows (owner's premise). Verified: cargo tests incl. a real GNOME Keyring round
-  trip, tsc, vite build, dev app starts. **Not yet tried in the UI by the owner**; the deb is not
-  rebuilt. Open follow-ups in TODO.md "Goal: worksets".
-- The deb from `scripts/make-deb.sh` is installed on the Ubuntu box (`/usr/bin/iruka`, dolphin
-  icon verified; rebuilt and reinstalled 2026-10-23 with the cursor feature, via `sudo dpkg -i`
-  because the version is still 0.1.0 and `apt install` does not replace a same-version package);
+  trip, tsc, vite build. **In use by the owner since 2026-10-24** (6 RDP + 5 SSH, saved and
+  restored). Open follow-ups in TODO.md "Goal: worksets".
+- **2026-10-24 (evening), new Ubuntu box** (hostname `linux-ssd`, 60 GB RAM, 16 CPUs; the repo lives
+  on shared storage, the home directory was carried over). Dev environment reinstalled: rustup
+  stable, Tauri `-dev` packages, `freerdp3-dev`, `patchelf`. Features added the same evening, all
+  pushed: SSH "Save password" (typed once at ssh's `password:` prompt, `passwordPromptAnswerer` in
+  `src/ptySession.ts`); toolbar "Scaled" (fit the RDP screen, `iruka.scaled`); toolbar Print Screen
+  button (⎙; the local GNOME keeps the key, KNOWN_ISSUES.md, owner declined a keyboard grab);
+  F11 / Esc toggle full screen when the focus is outside a session. The owner runs the repository's
+  release build with `run.sh` while testing; the deb is also installed and the two dock entries are
+  restored; the `iruka-kill-watch` service is **not** installed on this box (needs the owner's sudo).
+  With 16 CPUs glibc allows 128 malloc arenas: 143 arena-sized mappings, 1.3 GB resident, were seen
+  with 6 RDP sessions (3.2 GB main process), the same mechanism as the kept-memory item.
+- The deb from `scripts/make-deb.sh` is installed on the Ubuntu box (`/usr/bin/iruka`; installed
+  2026-10-24 on the new box with `apt install`; on a box that already has it, reinstalling the same
+  version 0.1.0 needs `sudo dpkg -i`, since `apt install` does not replace a same-version package);
   the dev desktop entry was removed since the deb's entry also matches dev builds.
 - Tested so far: clients on Ubuntu 26.04 LTS and Windows 11 24H2; targets Windows 11 Pro, Ubuntu
   GNOME Remote Desktop, Apple Silicon Mac running clintcan/macrdp.
