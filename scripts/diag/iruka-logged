@@ -1,0 +1,26 @@
+#!/bin/sh
+# Run the installed Iruka and record how it ended, so that an unexpected exit from the dock is
+# not lost: one line per run in ~/.local/state/iruka/exit.log and in the user journal
+# (journalctl --user -t iruka-exit). An exit status above 128 means the process died from a
+# signal: 137 = SIGKILL (the RLIMIT_RTTIME kill looks like this, see docs/realtime-kill.md in the
+# Iruka repository, so does the OOM killer), 134 = SIGABRT, 139 = SIGSEGV. Any argument is
+# passed on to iruka.
+log=${XDG_STATE_HOME:-$HOME/.local/state}/iruka/exit.log
+mkdir -p "$(dirname "$log")"
+case ${DBUS_SYSTEM_BUS_ADDRESS:-} in
+  *nonexistent*) mode="no-realtime" ;;
+  *) mode="normal" ;;
+esac
+start=$(date '+%Y-%m-%d %H:%M:%S')
+/usr/bin/iruka "$@"
+status=$?
+end=$(date '+%Y-%m-%d %H:%M:%S')
+if [ "$status" -gt 128 ]; then
+  how="killed by signal $((status - 128)) (SIG$(kill -l $((status - 128)) 2>/dev/null || echo '?'))"
+else
+  how="exit code $status"
+fi
+line="start=$start end=$end mode=$mode $how"
+echo "$line" >> "$log"
+command -v systemd-cat >/dev/null && echo "$line" | systemd-cat -t iruka-exit -p notice
+exit "$status"

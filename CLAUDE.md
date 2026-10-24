@@ -49,6 +49,13 @@ KNOWN_ISSUES.md and TODO.md.
   reach RealtimeKit) is verified in real use with OBS (no kill, but slower response); on the Ubuntu
   box it lives outside the repo as `~/.local/bin/iruka-no-realtime` plus a second dock entry
   "Iruka (no realtime)". The owner uses it only for OBS recordings.
+- **2026-10-24: Linux diagnostics kit** in `scripts/diag/` (exit-status wrapper `iruka-logged` behind
+  both dock entries, `exit.log` + `journalctl --user -t iruka-exit`; bpftrace `iruka-kill-watch`
+  system service), how-to in docs/linux-diagnostics.md, trial-and-error log in
+  docs/linux-diagnostics-log.md. Installed on the Ubuntu box (the kill-watch service needs the owner's
+  sudo). **Found by accident: a second start of Iruka kills the running one** (Tauri setup panic via
+  GtkApplication activate; KNOWN_ISSUES.md, fix candidates in TODO.md). Never start a test Iruka
+  while the owner's instance runs: `pgrep -x iruka` first.
 - The deb from `scripts/make-deb.sh` is installed on the Ubuntu box (`/usr/bin/iruka`, dolphin
   icon verified; rebuilt and reinstalled 2026-10-23 with the cursor feature, via `sudo dpkg -i`
   because the version is still 0.1.0 and `apt install` does not replace a same-version package);

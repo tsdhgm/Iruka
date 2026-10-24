@@ -1,0 +1,13 @@
+[Unit]
+Description=Log who sends fatal signals (bpftrace), to find out why Iruka disappears
+Documentation=file:/usr/local/lib/iruka/who-kills-iruka.bt
+
+[Service]
+Type=simple
+# -B line: flush every line, otherwise the output sits in a buffer until bpftrace exits.
+ExecStart=/usr/bin/bpftrace -q -B line /usr/local/lib/iruka/who-kills-iruka.bt
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

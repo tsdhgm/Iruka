@@ -2,7 +2,7 @@
 
 # 高負荷時に Iruka が消えた理由と、Remmina が消えない理由（2026-10-23）
 
-一つの調査の記録。仕組みは忘れやすく、調査の途中で出た Iruka の設計についての問いも残す価値があるので、ページにした。短い要約は KNOWN_ISSUES_JA.md（「Linux: 高負荷時…アプリ全体が SIGKILL で消える」）にあり、ここには経緯と質疑応答の全部を書く。
+一つの調査の記録。仕組みは忘れやすく、調査の途中で出た Iruka の設計についての問いも残す価値があるので、ページにした。短い要約は KNOWN_ISSUES_JA.md（「Linux: 高負荷時…アプリ全体が SIGKILL で消える」）にあり、ここには経緯と質疑応答の全部を書く。消えた Iruka の調べ方の一般的な手順と試行錯誤の記録は linux-diagnostics_JA.md と linux-diagnostics-log_JA.md。
 
 環境: Ubuntu 26.04、カーネル 7.0.0-38-generic（HZ=1000）、WebKitGTK 2.52.6、FreeRDP 3.32.1、deb からインストールした Iruka 0.1.0、OBS Studio が PipeWire で 3840×2160 のディスプレイをキャプチャ中。
 

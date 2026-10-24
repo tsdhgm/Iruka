@@ -13,6 +13,10 @@ A quick check on 2026-10-13 found no problems. Still to be checked more carefull
 - [ ] Console badge text "Running" / "Idle 5m" / "Exited" and its timing.
 - [ ] Disconnect messages now read "Disconnected (FreeRDP): …" / "Connection error (FreeRDP): …".
 
+## Linux desktop
+
+- [ ] A second start kills the running Iruka (KNOWN_ISSUES.md, 2026-10-24): add `tauri-plugin-single-instance` (focus the existing window) or turn off `enableGTKAppId`; rebuild the deb and check the dock still matches the window.
+
 ## Mac target (clintcan/macrdp)
 
 - [ ] Microphone redirection.

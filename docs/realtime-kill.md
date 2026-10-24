@@ -4,7 +4,8 @@
 
 A record of one investigation, kept because the mechanism is easy to forget and the questions it
 raised about Iruka's design are worth keeping. The short entry is in KNOWN_ISSUES.md ("Linux: the
-whole app is killed (SIGKILL) under heavy load"); this page has the full story and the Q&A.
+whole app is killed (SIGKILL) under heavy load"); this page has the full story and the Q&A. The general how-to for a vanished Iruka, and the
+trial-and-error log, are in linux-diagnostics.md and linux-diagnostics-log.md.
 
 Environment: Ubuntu 26.04, kernel 7.0.0-38-generic (HZ=1000), WebKitGTK 2.52.6, FreeRDP 3.32.1,
 Iruka 0.1.0 from the deb, OBS Studio capturing the 3840×2160 display through PipeWire.

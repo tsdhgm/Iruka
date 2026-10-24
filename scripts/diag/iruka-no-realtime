@@ -1,0 +1,6 @@
+#!/bin/sh
+# Start the installed Iruka with the D-Bus system bus hidden, so that WebKitGTK cannot ask
+# RealtimeKit to make its IPC threads real-time (which carries a 200 ms RLIMIT_RTTIME and
+# gets the whole process SIGKILLed under load). Background: docs/realtime-kill.md. Iruka itself
+# is not known to need the system bus. The exit status is recorded by iruka-logged.
+DBUS_SYSTEM_BUS_ADDRESS=unix:path=/nonexistent exec "$(dirname "$0")/iruka-logged" "$@"

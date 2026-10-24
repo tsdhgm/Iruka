@@ -13,6 +13,10 @@
 - [ ] コンソールのバッジ「Running」「Idle 5m」「Exited」の文言とタイミング。
 - [ ] 切断時の表示が「Disconnected (FreeRDP): …」「Connection error (FreeRDP): …」になっているか。
 
+## Linux デスクトップ
+
+- [ ] 二度目の起動で動いている Iruka が死ぬ（KNOWN_ISSUES_JA.md、2026-10-24）: `tauri-plugin-single-instance` を入れる（既存の窓を前面に）か `enableGTKAppId` を切る。deb を作り直し、ドックが窓を見つけられることを確認する。
+
 ## Mac（clintcan/macrdp）
 
 - [ ] マイクの転送。
