@@ -678,6 +678,12 @@ body {
   color: #f0b5ba;
 }
 
+/* The link stalled or is being reconnected: a warning, not (yet) an error */
+.rdp-status.warn {
+  border-color: #e5c07b;
+  color: #f3dba3;
+}
+
 /* Pre-connect confirmation dialogs */
 .modal-backdrop {
   position: fixed;

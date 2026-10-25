@@ -42,6 +42,7 @@ Tauri 2 + React + TypeScript. RDP uses FreeRDP 3 (IronRDP is built in as an expe
 
 - **Memory check**: before connecting, the available memory is compared with an estimate of what the session needs; if there is not enough, a "Memory may run short" dialog appears with "Connect anyway" / "Cancel". The estimate is learned from actual usage. A similar dialog, "This is the local machine", appears when the host turns out to be this PC.
 - **Disconnect messages**: when a session ends, the UI shows the reason with the backend name, e.g. "Disconnected (FreeRDP): The server closed the connection" or "Connection error (FreeRDP): Connection failed: …". The backend reasons are "Disconnected", "The server closed the connection", "Connection failed: …" and "Communication error: …".
+- **Link health and reconnect** (FreeRDP): a session is kept through a network hiccup. FreeRDP's TCP acknowledgement timeout is raised from its 9 s to 60 s, and when data sent to the remote goes unanswered for 9 s a warning appears over the screen, "No answer from <host> for N s…", counting up until the link recovers (Linux only; the kernel's TCP state is read). If the connection is lost anyway, Iruka reconnects by itself, up to 10 attempts 5 s apart, showing "Connection lost. Reconnecting to <host> (n of 10)…"; a Windows remote resumes the same session. "Disconnect" works at any point. It gives up, with the usual error message, after the 10 attempts, when the server ended the session itself, or when the credentials are refused (retrying could lock the account).
 
 ### Saved connections
 

@@ -42,6 +42,7 @@ Tauri 2 + React + TypeScript。RDP は FreeRDP 3 を使う（予備として Iro
 
 - **メモリ確認**: 接続する前に空きメモリと必要量の見積もりを比べ、足りなければ「Memory may run short（メモリが足りないかもしれない）」の確認画面を出す（「Connect anyway（それでも接続）」/「Cancel」）。見積もりは、実際の使用量から学習した値を使う。接続先がこの PC 自身だったときも、同じ形の「This is the local machine（これはローカルのマシン）」の確認画面が出る。
 - **切断時のメッセージ**: セッションが終わると、理由が接続方式の名前と一緒に出る。例: 「Disconnected (FreeRDP): The server closed the connection（切断 (FreeRDP): サーバーが接続を閉じた）」「Connection error (FreeRDP): Connection failed: …（接続エラー (FreeRDP): 接続に失敗）」。バックエンドの理由は「Disconnected（切断した）」「The server closed the connection（サーバーが接続を閉じた）」「Connection failed: …（接続に失敗）」「Communication error: …（通信エラー）」の 4 つ。
+- **回線の状態と再接続**（FreeRDP）: ネットワークの一時的な途切れではセッションを保つ。FreeRDP の TCP 応答タイムアウトを既定の 9 秒から 60 秒に延ばし、リモートに送ったデータへの応答が 9 秒ないと画面の上に「No answer from <host> for N s…」の警告が出て、回線が戻るまで秒数が増えていく（Linux のみ。カーネルの TCP の状態を読む）。それでも接続が切れたら Iruka が自分で再接続する。5 秒おきに最大 10 回で、その間は「Connection lost. Reconnecting to <host> (n of 10)…」と出る。Windows のリモートは同じセッションに戻る。どの時点でも「Disconnect」は効く。10 回で駄目だったとき、サーバー自身がセッションを終えたとき、資格情報が拒まれたとき（繰り返すとアカウントがロックされうる）は、いつものエラーメッセージを出して諦める。
 
 ### 接続の保存
 

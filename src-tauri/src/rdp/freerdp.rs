@@ -5,14 +5,28 @@
 
 use std::{
     ffi::{c_char, c_int, CStr, CString},
-    sync::mpsc::{Receiver, TryRecvError},
+    sync::mpsc::{Receiver, RecvTimeoutError, TryRecvError},
+    time::{Duration, Instant},
 };
 
 use anyhow::{bail, Context as _};
 
 use super::{
-    Command, CursorImage, FrameSink, FrameView, RdpBackend, RdpConnectParams, RdpInput, Rect, MAX_DIRTY_RECTS,
+    Command, CursorImage, FrameSink, FrameView, LinkState, RdpBackend, RdpConnectParams, RdpInput, Rect,
+    MAX_DIRTY_RECTS,
 };
+
+/// How long the kernel keeps retransmitting unacknowledged data (and unanswered keep-alive
+/// probes) before it gives the connection up: FreeRDP's `/timeout`, TCP_USER_TIMEOUT. FreeRDP's
+/// own default of 9 s drops a session over Wi-Fi at the first longer hiccup (KNOWN_ISSUES.md).
+const TCP_ACK_TIMEOUT_MS: u32 = 60_000;
+/// A stall this long is shown over the screen (updated every second until it ends).
+const STALL_REPORT_AFTER: Duration = Duration::from_secs(9);
+/// How often the TCP state is read.
+const STALL_CHECK_INTERVAL: Duration = Duration::from_secs(1);
+/// Reconnect attempts after the transport failed, and the pause between two attempts.
+const RECONNECT_ATTEMPTS: u32 = 10;
+const RECONNECT_INTERVAL: Duration = Duration::from_secs(5);
 
 /// Maximum time to wait for events. The input queue and pending frames are also checked at this interval.
 const POLL_TIMEOUT_MS: u32 = 15;
@@ -25,6 +39,9 @@ struct RdpContext {
 extern "C" {
     fn iruka_rdp_new(argc: c_int, argv: *const *const c_char) -> *mut RdpContext;
     fn iruka_rdp_connect(ctx: *mut RdpContext) -> c_int;
+    fn iruka_rdp_reconnect(ctx: *mut RdpContext) -> c_int;
+    fn iruka_rdp_error_is_retryable(ctx: *mut RdpContext) -> c_int;
+    fn iruka_rdp_tcp_stalled(ctx: *mut RdpContext) -> c_int;
     fn iruka_rdp_poll(ctx: *mut RdpContext, timeout_ms: u32) -> c_int;
     fn iruka_rdp_framebuffer(ctx: *mut RdpContext, width: *mut u32, height: *mut u32, stride: *mut u32) -> *const u8;
     fn iruka_rdp_take_dirty(ctx: *mut RdpContext, out: *mut u32, max: c_int) -> c_int;
@@ -80,8 +97,25 @@ impl RdpBackend for FreeRdp {
     ) -> anyhow::Result<String> {
         let session = Session::new(params)?;
         session.connect()?;
-        session.run(commands, sink)
+        loop {
+            let reason = match session.run(commands, sink)? {
+                Outcome::Closed(reason) => return Ok(reason),
+                Outcome::Lost(reason) => reason,
+            };
+            tracing::info!(host = params.host, reason, "connection lost; reconnecting");
+            if !session.reconnect(commands, sink)? {
+                return Ok("Disconnected".into());
+            }
+        }
     }
+}
+
+/// How a session's event loop ended.
+enum Outcome {
+    /// Over for good: closed from the frontend, or ended by the server.
+    Closed(String),
+    /// The transport failed; a reconnect may bring the session back.
+    Lost(String),
 }
 
 /// One FreeRDP session. Only used from the thread that created it.
@@ -109,6 +143,7 @@ impl Session {
             // (see KNOWN_ISSUES.md; details in iruka_pre_connect in freerdp_bridge.c)
             if params.small_cache { "/gfx:small-cache" } else { "/gfx" }.to_owned(),
             "/network:auto".to_owned(),
+            format!("/timeout:{TCP_ACK_TIMEOUT_MS}"),
             // Accept self-signed certificates (the equivalent of "Continue" in mstsc)
             "/cert:ignore".to_owned(),
         ];
@@ -191,9 +226,10 @@ impl Session {
         })
     }
 
-    fn run(&self, commands: &Receiver<Command>, sink: &mut FrameSink) -> anyhow::Result<String> {
+    fn run(&self, commands: &Receiver<Command>, sink: &mut FrameSink) -> anyhow::Result<Outcome> {
         let mut size = (0, 0);
         let mut refresh = false;
+        let mut stall = StallWatch::default();
         loop {
             loop {
                 match commands.try_recv() {
@@ -205,7 +241,7 @@ impl Session {
                         // state of our virtual keyboard, and a Ctrl left pressed here would stick to
                         // every later client of that machine (GNOME merges all keyboards' modifiers).
                         self.send_input(RdpInput::ReleaseAll);
-                        return Ok("Disconnected".into());
+                        return Ok(Outcome::Closed("Disconnected".into()));
                     }
                     Err(TryRecvError::Empty) => break,
                 }
@@ -215,6 +251,14 @@ impl Session {
             // (paint, resize, dirty list) run inside this call on this thread, so no
             // FrameView from a previous iteration is alive while it runs.
             let status = unsafe { iruka_rdp_poll(self.ctx, POLL_TIMEOUT_MS) };
+
+            if status == 1 && stall.due(Instant::now()) {
+                // SAFETY: ctx is the valid context owned by this Session.
+                let stalled = unsafe { iruka_rdp_tcp_stalled(self.ctx) } == 1;
+                if let Some(link) = stall.observe(stalled, Instant::now()) {
+                    sink.link(link);
+                }
+            }
 
             if let Some(text) = self.take_remote_text() {
                 sink.clipboard_from_remote(&text);
@@ -266,10 +310,49 @@ impl Session {
 
             match status {
                 1 => {}
-                0 => return Ok("The server closed the connection".into()),
-                _ => bail!("Communication error: {}", self.last_error()),
+                0 => return Ok(Outcome::Closed("The server closed the connection".into())),
+                _ => {
+                    let reason = format!("Communication error: {}", self.last_error());
+                    // SAFETY: ctx is the valid context owned by this Session.
+                    if unsafe { iruka_rdp_error_is_retryable(self.ctx) } == 1 {
+                        return Ok(Outcome::Lost(reason));
+                    }
+                    bail!("{reason}");
+                }
             }
         }
+    }
+
+    /// Try to get the session back after the transport failed: up to `RECONNECT_ATTEMPTS`
+    /// attempts, `RECONNECT_INTERVAL` apart, the frontend told about each. Returns Ok(false)
+    /// when the session was closed from the frontend meanwhile; an error when the attempts
+    /// are used up or the server refuses in a way that retrying cannot fix.
+    fn reconnect(&self, commands: &Receiver<Command>, sink: &mut FrameSink) -> anyhow::Result<bool> {
+        for attempt in 1..=RECONNECT_ATTEMPTS {
+            sink.link(LinkState::Reconnecting {
+                attempt,
+                attempts: RECONNECT_ATTEMPTS,
+            });
+            if attempt > 1 && !wait_closed_or_timeout(commands, RECONNECT_INTERVAL) {
+                return Ok(false);
+            }
+            // SAFETY: ctx is the valid context owned by this Session, used only on this thread.
+            if unsafe { iruka_rdp_reconnect(self.ctx) } == 1 {
+                tracing::info!(attempt, "reconnected");
+                sink.link(LinkState::Ok);
+                return Ok(true);
+            }
+            let error = self.last_error();
+            tracing::info!(attempt, error, "reconnect attempt failed");
+            // SAFETY: ctx is the valid context owned by this Session.
+            if unsafe { iruka_rdp_error_is_retryable(self.ctx) } != 1 {
+                bail!("Reconnect refused: {error}");
+            }
+        }
+        bail!(
+            "Connection lost; gave up after {RECONNECT_ATTEMPTS} reconnect attempts (last: {})",
+            self.last_error()
+        )
     }
 
     fn set_local_text(&self, text: Option<&str>) {
@@ -385,6 +468,87 @@ impl Session {
                 }
             }
         }
+    }
+}
+
+/// Pause between reconnect attempts, still listening to the frontend. False when the session
+/// was closed (or its command channel dropped) during the pause; input is not deliverable and
+/// is discarded.
+fn wait_closed_or_timeout(commands: &Receiver<Command>, pause: Duration) -> bool {
+    let deadline = Instant::now() + pause;
+    loop {
+        let left = deadline.saturating_duration_since(Instant::now());
+        match commands.recv_timeout(left) {
+            Ok(Command::Close) | Err(RecvTimeoutError::Disconnected) => return false,
+            Ok(_) => {}
+            Err(RecvTimeoutError::Timeout) => return true,
+        }
+    }
+}
+
+/// Watches the TCP state once a second and decides what to tell the frontend: a stall that has
+/// lasted `STALL_REPORT_AFTER` (reported every second with its length), and its end.
+#[derive(Default)]
+struct StallWatch {
+    last_check: Option<Instant>,
+    since: Option<Instant>,
+    reported: bool,
+}
+
+impl StallWatch {
+    fn due(&mut self, now: Instant) -> bool {
+        if self.last_check.is_some_and(|t| now.duration_since(t) < STALL_CHECK_INTERVAL) {
+            return false;
+        }
+        self.last_check = Some(now);
+        true
+    }
+
+    fn observe(&mut self, stalled: bool, now: Instant) -> Option<LinkState> {
+        if !stalled {
+            self.since = None;
+            return std::mem::take(&mut self.reported).then_some(LinkState::Ok);
+        }
+        let length = now.duration_since(*self.since.get_or_insert(now));
+        if length < STALL_REPORT_AFTER {
+            return None;
+        }
+        self.reported = true;
+        Some(LinkState::Stalled {
+            seconds: length.as_secs(),
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn secs(n: u64) -> Duration {
+        Duration::from_secs(n)
+    }
+
+    #[test]
+    fn stall_watch_reports_after_the_threshold_and_once_when_over() {
+        let t0 = Instant::now();
+        let mut w = StallWatch::default();
+        assert!(w.due(t0));
+        assert!(!w.due(t0 + Duration::from_millis(500)), "checked once a second");
+        assert!(w.due(t0 + secs(1)));
+        assert!(w.observe(false, t0).is_none(), "nothing to say while the link is fine");
+        assert!(w.observe(true, t0 + secs(1)).is_none(), "a short stall is not shown");
+        assert!(w.observe(true, t0 + secs(5)).is_none());
+        assert!(matches!(
+            w.observe(true, t0 + secs(10)),
+            Some(LinkState::Stalled { seconds: 9 })
+        ));
+        assert!(matches!(
+            w.observe(true, t0 + secs(11)),
+            Some(LinkState::Stalled { seconds: 10 })
+        ));
+        assert!(matches!(w.observe(false, t0 + secs(12)), Some(LinkState::Ok)));
+        assert!(w.observe(false, t0 + secs(13)).is_none(), "the end is reported once");
+        assert!(w.observe(true, t0 + secs(14)).is_none(), "a new stall starts from zero");
     }
 }
 

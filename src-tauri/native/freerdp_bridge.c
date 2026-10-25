@@ -29,6 +29,11 @@
 #include <freerdp/scancode.h>
 #include <winpr/string.h>
 #include <winpr/user.h>
+#ifdef __linux__
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <sys/socket.h>
+#endif
 
 /* Maximum number of pending dirty rectangles. Beyond this they are collapsed into one rectangle */
 #define MAX_DIRTY 128
@@ -548,6 +553,83 @@ int iruka_rdp_connect(rdpContext* context)
 	if (freerdp_client_start(context) != 0)
 		return 0;
 	return freerdp_connect(context->instance) ? 1 : 0;
+}
+
+/*
+ * Reconnect after the transport failed (same server, credentials and screen size; the gdi and
+ * its framebuffer stay). The last error is reset first so that a failed attempt reports its own
+ * cause. 1: connected again, 0: failed (see iruka_rdp_last_error).
+ */
+int iruka_rdp_reconnect(rdpContext* context)
+{
+	freerdp_set_last_error(context, FREERDP_ERROR_SUCCESS);
+	return freerdp_reconnect(context->instance) ? 1 : 0;
+}
+
+/*
+ * Whether trying the connection again makes sense after a failure. Not when the server ended
+ * the session on purpose (it sent an error info), when the credentials were refused (retrying
+ * could lock the account), or when the attempt was cancelled.
+ */
+int iruka_rdp_error_is_retryable(rdpContext* context)
+{
+	if (freerdp_error_info(context->instance) != 0)
+		return 0;
+	switch (freerdp_get_last_error(context))
+	{
+		case FREERDP_ERROR_AUTHENTICATION_FAILED:
+		case FREERDP_ERROR_INSUFFICIENT_PRIVILEGES:
+		case FREERDP_ERROR_CONNECT_CANCELLED:
+		case FREERDP_ERROR_CONNECT_PASSWORD_EXPIRED:
+		case FREERDP_ERROR_CONNECT_PASSWORD_MUST_CHANGE:
+		case FREERDP_ERROR_CONNECT_ACCOUNT_DISABLED:
+		case FREERDP_ERROR_CONNECT_PASSWORD_CERTAINLY_EXPIRED:
+		case FREERDP_ERROR_CONNECT_CLIENT_REVOKED:
+		case FREERDP_ERROR_CONNECT_LOGON_FAILURE:
+		case FREERDP_ERROR_CONNECT_WRONG_PASSWORD:
+		case FREERDP_ERROR_CONNECT_ACCESS_DENIED:
+		case FREERDP_ERROR_CONNECT_ACCOUNT_RESTRICTION:
+		case FREERDP_ERROR_CONNECT_ACCOUNT_LOCKED_OUT:
+		case FREERDP_ERROR_CONNECT_ACCOUNT_EXPIRED:
+		case FREERDP_ERROR_CONNECT_LOGON_TYPE_NOT_GRANTED:
+		case FREERDP_ERROR_CONNECT_NO_OR_MISSING_CREDENTIALS:
+			return 0;
+		default:
+			return 1;
+	}
+}
+
+/*
+ * Whether the TCP connection is stalled: data we sent is being retransmitted without an
+ * acknowledgement from the remote, or keep-alive probes go unanswered. This is what precedes
+ * the kernel giving the connection up after TcpAckTimeout (FreeRDP sets TCP_USER_TIMEOUT).
+ * 1: stalled, 0: fine, -1: unknown (not Linux, or no TCP socket among the event handles).
+ * The socket is found by asking each event handle for its file descriptor and keeping the one
+ * that answers TCP_INFO; the others are eventfds and refuse.
+ */
+int iruka_rdp_tcp_stalled(rdpContext* context)
+{
+#ifdef __linux__
+	HANDLE handles[MAXIMUM_WAIT_OBJECTS] = { 0 };
+	DWORD count = freerdp_get_event_handles(context, handles, ARRAYSIZE(handles));
+	for (DWORD i = 0; i < count; i++)
+	{
+		int fd = GetEventFileDescriptor(handles[i]);
+		if (fd < 0)
+			continue;
+		struct tcp_info info = { 0 };
+		socklen_t len = sizeof(info);
+		if (getsockopt(fd, IPPROTO_TCP, TCP_INFO, &info, &len) != 0)
+			continue;
+		if (info.tcpi_probes > 0)
+			return 1;
+		return (info.tcpi_unacked > 0 && (info.tcpi_retransmits > 0 || info.tcpi_backoff > 0)) ? 1 : 0;
+	}
+	return -1;
+#else
+	(void)context;
+	return -1;
+#endif
 }
 
 /* Wait up to timeout_ms for events and process them. 1: keep going, 0: disconnected, -1: error */

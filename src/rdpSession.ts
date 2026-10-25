@@ -176,6 +176,27 @@ export async function createRdpSession(
     } else if (msg.type === "cursor") {
       cursorId = msg.id;
       applyCursor();
+    } else if (msg.type === "link") {
+      // The overlay says what the backend knows; the sidebar follows (reconnecting counts as
+      // connecting). Nothing else changes: the screen keeps its last content and input still
+      // reaches the backend, which drops it while the link is down.
+      const link = msg.link;
+      status.classList.remove("error");
+      status.classList.toggle("warn", link.state !== "ok");
+      if (link.state === "ok") {
+        status.style.display = "none";
+        cb.updateSession(id, { status: "running", message: null });
+      } else {
+        status.style.display = "";
+        status.textContent =
+          link.state === "stalled"
+            ? `No answer from ${params.host} for ${link.seconds} s…`
+            : `Connection lost. Reconnecting to ${params.host} (${link.attempt} of ${link.attempts})…`;
+        cb.updateSession(id, {
+          status: link.state === "reconnecting" ? "connecting" : "running",
+          message: status.textContent,
+        });
+      }
     } else if (msg.type === "resize") {
       canvas.width = msg.width;
       canvas.height = msg.height;
@@ -183,6 +204,7 @@ export async function createRdpSession(
       ctx.fillStyle = "#000";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       status.style.display = "none";
+      status.classList.remove("warn");
       cb.updateSession(id, { status: "running", message: null });
       cb.markDirty(id);
     } else {
@@ -193,6 +215,7 @@ export async function createRdpSession(
       status.textContent = msg.error
         ? `Connection error (${msg.backend}): ${msg.reason}`
         : `Disconnected (${msg.backend}): ${msg.reason}`;
+      status.classList.remove("warn");
       status.classList.toggle("error", msg.error);
       cb.updateSession(id, { status: "exited", message: msg.reason });
     }

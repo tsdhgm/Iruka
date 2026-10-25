@@ -102,6 +102,21 @@ pub enum RdpEvent {
     /// Which cursor to show: None hides it, Some(0) is the local default arrow, any other
     /// id refers to an earlier `CursorImage`.
     Cursor { id: Option<u32> },
+    /// The health of the connection, shown over the screen (see [`LinkState`]).
+    Link { link: LinkState },
+}
+
+/// What the frontend shows about the connection while the session stays open.
+#[derive(Clone, Serialize)]
+#[serde(tag = "state", rename_all = "camelCase")]
+pub enum LinkState {
+    /// Back to normal: the overlay goes away.
+    Ok,
+    /// Data sent to the remote has gone unacknowledged for this long (the kernel is
+    /// retransmitting); the session is kept, and either recovers or is lost.
+    Stalled { seconds: u64 },
+    /// The connection was lost; attempt `attempt` of `attempts` is about to start.
+    Reconnecting { attempt: u32, attempts: u32 },
 }
 
 /// A cursor shape received from the server, as the backend hands it to [`FrameSink::cursor_image`].
@@ -367,6 +382,11 @@ impl FrameSink {
     /// The server selected a cursor (see [`RdpEvent::Cursor`] for the meaning of `id`).
     pub fn cursor(&self, id: Option<u32>) {
         let _ = self.events.send(RdpEvent::Cursor { id });
+    }
+
+    /// The connection stalled, is being reconnected, or is fine again.
+    pub fn link(&self, link: LinkState) {
+        let _ = self.events.send(RdpEvent::Link { link });
     }
 
     /// This region of the screen changed.

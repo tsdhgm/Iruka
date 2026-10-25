@@ -5,7 +5,16 @@ export type RdpEvent =
   | { type: "closed"; reason: string; error: boolean; backend: string }
   | { type: "cursorImage"; id: number; width: number; height: number; hotX: number; hotY: number; rgba: string }
   /** null hides the cursor, 0 is the local default arrow, any other id was sent as a cursorImage */
-  | { type: "cursor"; id: number | null };
+  | { type: "cursor"; id: number | null }
+  /** The health of the connection while the session stays open (shown over the screen). */
+  | { type: "link"; link: LinkState };
+
+export type LinkState =
+  | { state: "ok" }
+  /** Data sent to the remote has gone unacknowledged for this long; the session is kept. */
+  | { state: "stalled"; seconds: number }
+  /** The connection was lost; attempt `attempt` of `attempts` is about to start. */
+  | { state: "reconnecting"; attempt: number; attempts: number };
 
 /** The most cursor shapes a session keeps; the oldest is dropped beyond that (the server resends it when needed). */
 export const MAX_CURSOR_SHAPES = 64;

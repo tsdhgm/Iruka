@@ -33,7 +33,7 @@ Iruka が向かう到達点: 複数の RDP セッション（できれば SSH �
 ## 負荷時のフレーム経路（2026-10-25 に判明）
 
 - [x]（2026-10-25）端から端までの背圧（`FrameGate`、`rdp_frame_done`。docs/code-notes_JA.md「端から端までの背圧」）: セッションごとに送信中 1 通、フロントの次の描画の後に応答、5 秒でタイムアウト。以前は、フロントが追いつかないと WebKit の描画プロセスが際限なく育った（16 GB・8 CPU の機で 4K 6 本と動画: 6 分で 11 GB、そのあとカーネルの OOM killer。docs/code-notes_JA.md の弱いところ (h)）。フロントが描き終えたと報告するまで `busy` を保つか、セッションごとの送信中フレーム数に上限を付ける。どちらも矩形のマージの動きは今のまま。（動画より多く送ってきた「何もしていない」リモートは、端末のスピナーが原因だった: KNOWN_ISSUES_JA.md「リモートの端末のスピナー…」。）セッションごとのフレームレート上限があれば、そういうリモートの負荷も抑えられる。
-- [ ] トランスポートの失敗の後に自動で再接続する（KNOWN_ISSUES_JA.md「約 9 秒の停滞で…」）: FreeRDP の `AutoReconnectionEnabled` と、`freerdp_check_event_handles` が失敗したときに橋渡しのループで `client_auto_reconnect_ex()` を呼ぶ。セッション id、キャンバス、フレームの関門は保つ。タイルに「Reconnecting…」を出す。これがないと戻る手段はワークセットの復元だけ。
+- [x]（2026-10-25）トランスポートの失敗の後に自動で再接続する（KNOWN_ISSUES_JA.md「約 9 秒の停滞で…」、docs/code-notes_JA.md「回線の状態と再接続」）: `/timeout:60000`、`TCP_INFO` による 9 秒後の停滞警告、`freerdp_reconnect` を 5 秒おきに最大 10 回、画面の上に「Reconnecting…」。セッション id、キャンバス、フレームの関門は保つ。残り: 停滞の検出は Linux のみ（Windows: `SIO_TCP_INFO`、macOS: `TCP_CONNECTION_INFO`）。回数と間隔は定数で設定ではない。再起動中のリモートには 10 回分の 1 分では足りない。
 - [ ] 接続前のメモリ確認にフロントの待ち行列を織り込むか、少なくとも 4K のセッション数より CPU が少ない機では警告する。
 
 ## Mac（clintcan/macrdp）
