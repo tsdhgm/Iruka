@@ -56,7 +56,7 @@ pub trait RdpBackend: Sync {
 - `damage(rect)` で変化した矩形をためる。`MAX_DIRTY_RECTS`（128）を超えたら全体を囲む 1 つにまとめる。
 - `flush(fb, force)` は、`force` でなければ `FRAME_INTERVAL`（33 ms、約 30 fps）に 1 回までしか動かない。重なる・接する矩形をまとめ（`merge_rects`）、フレームバッファの範囲に切り詰め、各矩形の画素を `FrameView` から 1 つの `Vec<u8>` にコピーし（アルファは 0xff に固定）、キューに入れる。
 - セッションごとに**別の送信スレッド**（`FrameSink::new` で起こす）が、`mpsc` チャネルからメッセージを取り出し、`Channel<InvokeResponseBody>::send(InvokeResponseBody::Raw(..))` で WebView に押し込む。セッションのスレッドは WebView を待たないので、入力の遅延は描画に左右されない。
-- **背圧**: 共有の `busy: Arc<AtomicBool>` をキューに入れるときに立て、送信スレッドが `send` から戻ったら下ろす。立っている間は `flush` は何もせず、変化矩形がたまり続けるので、次の flush では溜まった分を順に送るのではなく、まとめた最新の 1 枚を送る。
+- **背圧**: 共有の `busy: Arc<AtomicBool>` をキューに入れるときに立て、送信スレッドが `send` から戻ったら下ろす。立っている間は `flush` は何もせず、変化矩形がたまり続けるので、次の flush では溜まった分を順に送るのではなく、まとめた最新の 1 枚を送る。**ただしこれは Rust 側だけの背圧**で、`send` は WebView の IPC にメッセージを渡した時点で戻り、JavaScript が描き終えたときではない。フロントが追いつかないときは、滞留が WebKit の描画プロセスの中にできる（弱いところ (h)）。
 - `resize(width, height)` は変化矩形を捨て、メモリモデルにサイズを記録し、`RdpEvent::Resize` を送る。フロントは canvas を新しいサイズで作り直し、バックエンドは画面全体を damage する。
 
 画面データのメッセージはリトルエンディアンのバイナリ。
@@ -170,6 +170,8 @@ IronRDP バックエンドに FFI はない。セッションスレッドで、`
 
 - `memory::tests::learns_scale_from_observations` — 観測値から倍率を学習し、別の解像度に当てはめる
 - `clipboard::tests::newlines_become_crlf_once` — CRLF の正規化は何度やっても同じ
+
+**(h) フレーム経路に端から端までの背圧がなく、負荷が続くと WebKit の描画プロセスがカーネルに殺されるまで育つ。** 2026-10-25 に 16 GB・8 CPU の機で、3840×2160 の FreeRDP セッション 6 本で確認した。リモートの 1 台で YouTube を再生し、別の 1 台の画面が常時書き換わっている状態で、フロントの `lag_ms_max`（フレームが Rust を出てから JS が描くまで）が 0.2 秒から 4 秒に伸び、描画プロセスは 3 分で 0.3 GB から 1 GB に育った（それより前の走行では 6 分で 11 GB になり、`Out of memory: Killed process (WebKitWebProces)` で終わった。そのとき本体も 8.8 GB）。UI のすべて（リモートへのクリック、表示切り替え、全画面の切り替え）が数秒遅れた。負荷を止めると両プロセスとも 30 秒以内にアイドル時のサイズに戻ったので、これは溜まったフレームであってリークではない。上の `busy` フラグは `Channel::send` が戻った時点で下りるが、それは JavaScript がフレームを復号して描くよりずっと前で、待ち行列は WebKit の IPC の中にでき、そこには上限がない。直すには、フロントが描き終えたフレームを知らせ（`rdp_frame_done` コマンドか、すでに送っている perf の報告）、Rust 側がそれまで `busy` を保ち、その間の矩形は今と同じくマージ済みの dirty 集合に畳み込む。安上がりなつなぎは、セッションごとの送信中フレーム数の上限。それまでは README の目安（小さい機では本数か解像度を減らす）が唯一の防御で、接続前のメモリ確認はこの待ち行列を見ていない。
 - `rdp::tests::detects_own_addresses` — `is_local_host` がループバックを自分と判定し、TEST-NET のアドレスを除外する
 
 `src-tauri` で `cargo test` を実行する。FreeRDP、WebView、実際のサーバーに触るものは手で試している。

@@ -43,6 +43,11 @@ A quick check on 2026-10-13 found no problems. Still to be checked more carefull
 
 - [ ] A second start kills the running Iruka (KNOWN_ISSUES.md, 2026-10-24): add `tauri-plugin-single-instance` (focus the existing window) or turn off `enableGTKAppId`; rebuild the deb and check the dock still matches the window.
 
+## Frame path under load (found 2026-10-25, recorded only for now by the owner's decision)
+
+- [ ] End-to-end back-pressure: the WebKit web process grows without bound when the frontend cannot keep up (six 4K sessions with video on a 16 GB / 8 CPU box: 11 GB in six minutes, then the kernel OOM killer; docs/code-notes.md weak spot (h)). Hold `busy` until the frontend reports the frame drawn, or cap in-flight frames per session; both keep the merged-dirty-rect behaviour. Also look at why one idle remote (10.0.1.53) sends more frame data than the one playing video.
+- [ ] Make the memory check before connecting aware of the frontend's queue, or at least warn when the box has fewer CPUs than sessions at 4K.
+
 ## Mac target (clintcan/macrdp)
 
 - [ ] Microphone redirection.
