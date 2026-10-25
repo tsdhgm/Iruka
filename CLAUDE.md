@@ -77,6 +77,20 @@ KNOWN_ISSUES.md and TODO.md.
   restored; the `iruka-kill-watch` service is **not** installed on this box (needs the owner's sudo).
   With 16 CPUs glibc allows 128 malloc arenas: 143 arena-sized mappings, 1.3 GB resident, were seen
   with 6 RDP sessions (3.2 GB main process), the same mechanism as the kept-memory item.
+- **2026-10-25: frame path and link health.** The kernel OOM killer took the WebKit web process on
+  the 16 GB box under load (six 4K sessions, a YouTube video, and a terminal spinner on an "idle"
+  remote: KNOWN_ISSUES.md "A terminal spinner…"); fixed with end-to-end back-pressure (`FrameGate`,
+  `rdp_frame_done`, docs/code-notes.md "Back-pressure, end to end"; commit ea4e801). The owner's
+  first test of that build ended with "The connection transport layer failed" on one session: a
+  Wi-Fi stall longer than FreeRDP's 9 s `TCP_USER_TIMEOUT`, not the gate (KNOWN_ISSUES.md "A session
+  drops with…"). Done the same evening: `/timeout:60000`, a stall warning over the screen after 9 s
+  from `TCP_INFO` (Linux only), automatic reconnect up to 10 times 5 s apart with a message
+  (docs/code-notes.md "Link health and reconnect"; commit 4c0796c). **Not yet exercised on a real
+  link drop**; test recipe: on a remote, `sudo iptables -I INPUT -s <client ip> -j DROP; sleep 20
+  (or 75); sudo iptables -D INPUT -s <client ip> -j DROP`. The back-pressure build itself has had
+  only that one short run (no `frame not acknowledged in time` / `lag_ms_max` numbers yet).
+  **Next (owner, 2026-10-26)**: boot the USB SSD on the Windows machine's hardware, build, verify,
+  test both.
 - The deb from `scripts/make-deb.sh` is installed on the Ubuntu box (`/usr/bin/iruka`; installed
   2026-10-24 on the new box with `apt install`; on a box that already has it, reinstalling the same
   version 0.1.0 needs `sudo dpkg -i`, since `apt install` does not replace a same-version package);
