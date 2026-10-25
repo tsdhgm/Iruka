@@ -54,6 +54,14 @@ Known bugs and limitations. Problems whose cause lies outside Iruka (FreeRDP or 
 - **Workaround without code** (verified 2026-10-23 in real use: no kill while OBS captured the 4K display, but Iruka responds noticeably slower while OBS runs; audio and clipboard not checked): start Iruka with `DBUS_SYSTEM_BUS_ADDRESS=unix:path=/nonexistent`; WebKit then cannot reach RealtimeKit, the threads stay `SCHED_OTHER` and no limit is set. For the dock: copy `/usr/share/applications/Iruka.desktop` to `~/.local/share/applications/` with `Exec=env DBUS_SYSTEM_BUS_ADDRESS=unix:path=/nonexistent iruka`. Details and caveats in docs/realtime-kill.md.
 - **If it is to be fixed**: the limit cannot be raised (RealtimeKit caps it at 200 ms and a process can only lower its hard limit). Options: (1) demote the `ReceiveQueue` threads of the own process back to `SCHED_OTHER` from Iruka (`sched_setscheduler` on the threads in `/proc/self/task` whose policy is `SCHED_RR`; WebKit re-promotes them when a view becomes visible, so repeat it from the existing memory sampler thread), at the cost of slightly higher IPC latency, which Iruka does not need; (2) report upstream to WebKitGTK that the SIGXCPU safety net did not fire; (3) reduce Iruka's IPC volume (fewer or smaller frames), which only moves the threshold.
 
+## A terminal spinner on a remote desktop costs as much as a video
+
+- **Status**: understood 2026-10-25; nothing to fix in Iruka, a usage note.
+- **Symptom**: an "idle" Ubuntu remote (10.0.1.53, GNOME Remote Desktop) sent more screen data than the one playing a YouTube video: about 10 frames per second, each a quarter of a 3840×2160 screen (85 MB/s decoded, 0.9 MB/s on the wire). On a small client box this is what fills the frame queue (docs/code-notes.md weak spot (h)).
+- **Cause**: a terminal window on that remote ran an AI CLI (grok) whose status line redraws in place several times a second. The remote desktop server sends the damaged region at roughly window granularity, so a few changing characters cost the whole terminal window each time. Any spinner, `top`, a ticking clock or a live dashboard does the same (10.0.1.113's clock dashboard: 0.2 to 0.7 MB/s).
+- **How to confirm**: `ss -tin state established '( dport = :3389 )'` twice, 20 s apart, and compare `bytes_received` per host; replacing or minimising the terminal brought 10.0.1.53 to 0 at once.
+- **What to do**: keep such windows minimised (a minimised window generates no damage) or on a workspace that is not shown, or lower that session's resolution. Iruka cannot tell a spinner from a video; a future frame-rate cap per session (TODO.md) would limit the cost but not the waste.
+
 ## FreeRDP allocates decode buffers it never uses
 
 - **Status**: parked as a FreeRDP-side problem (2026-10-09)

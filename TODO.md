@@ -45,7 +45,7 @@ A quick check on 2026-10-13 found no problems. Still to be checked more carefull
 
 ## Frame path under load (found 2026-10-25, recorded only for now by the owner's decision)
 
-- [ ] End-to-end back-pressure: the WebKit web process grows without bound when the frontend cannot keep up (six 4K sessions with video on a 16 GB / 8 CPU box: 11 GB in six minutes, then the kernel OOM killer; docs/code-notes.md weak spot (h)). Hold `busy` until the frontend reports the frame drawn, or cap in-flight frames per session; both keep the merged-dirty-rect behaviour. Also look at why one idle remote (10.0.1.53) sends more frame data than the one playing video.
+- [ ] End-to-end back-pressure: the WebKit web process grows without bound when the frontend cannot keep up (six 4K sessions with video on a 16 GB / 8 CPU box: 11 GB in six minutes, then the kernel OOM killer; docs/code-notes.md weak spot (h)). Hold `busy` until the frontend reports the frame drawn, or cap in-flight frames per session; both keep the merged-dirty-rect behaviour. (The idle remote that sent more than the video turned out to run a terminal spinner: KNOWN_ISSUES.md "A terminal spinner…".) A per-session frame-rate cap would also bound the cost of such remotes.
 - [ ] Make the memory check before connecting aware of the frontend's queue, or at least warn when the box has fewer CPUs than sessions at 4K.
 
 ## Mac target (clintcan/macrdp)
