@@ -11,14 +11,28 @@ vcpkg の FreeRDP 3.32.1 で Ubuntu（GNOME Remote Desktop）に接続できた�
 
 | 何を | どうやって | メモ |
 | --- | --- | --- |
-| Visual Studio 2022 の C++ ツール | 「C++ によるデスクトップ開発」（Build Tools で足りる） | C ブリッジのコンパイルとリンクに MSVC を使う |
+| Visual Studio の C++ ツール | 「C++ によるデスクトップ開発」（Build Tools で足りる） | C ブリッジのコンパイルとリンクに MSVC を使う。最初は 2022、Community 2026（18.11）でも動く（2026-10-26） |
 | WebView2 | Windows 11 には入っている | |
-| Node.js | 22 を使った | |
+| Node.js | 22 と 26 を使った | |
 | Rust | `winget install --id Rustlang.Rustup -e` | ユーザー単位、管理者権限不要。stable `x86_64-pc-windows-msvc` |
 | vcpkg | `git clone https://github.com/microsoft/vcpkg.git` の後 `bootstrap-vcpkg.bat -disableMetrics` | |
 | FreeRDP 3 | `vcpkg install "freerdp[client]:x64-windows" "pkgconf:x64-windows"` | 初回 20 分。FreeRDP 3.32.1 |
 | `ssh.exe` | 最初から入っている（OpenSSH クライアント） | 「+ SSH」で使う |
-| Git | Git for Windows、または WSL の git | |
+| Git | Git for Windows（ネイティブ構成）、または WSL の git（WSL 構成） | |
+
+## 開発の 2 つのやり方
+
+どちらもビルドは Windows ネイティブ。違うのはシェル（と Claude Code）をどこで動かすか。
+
+| | ネイティブ（PowerShell） | WSL から |
+| --- | --- | --- |
+| シェル、Claude Code | PowerShell、Windows 版 Claude Code | WSL の bash、Linux 版 Claude Code |
+| clone | Windows のファイルシステムのどこでも。例: `%USERPROFILE%\Iruka` | Windows のファイルシステム上。例: `%USERPROFILE%\Foundry\Iruka`（WSL からは `/mnt/c/...`） |
+| Git | Git for Windows | WSL の git |
+| ビルドのコマンド | 環境スクリプトを読み込んでから直接実行 | `powershell.exe` 経由。[WSL から開発する](#wsl-から開発する) 参照 |
+
+下の前提、vcpkg、環境スクリプトは共通で、vcpkg は 1 つで両方に使える。同じ clone を両方の構成で
+同時にビルドしないこと（`src-tauri\target` を共有するため）。
 
 ## 環境変数
 
@@ -38,7 +52,10 @@ $env:OPENSSL_MODULES = "$vcpkg\bin"                    # 実行: OpenSSL の leg
 
 ## ビルドと実行
 
+ネイティブの PowerShell で、clone したフォルダーから:
+
 ```powershell
+. $env:USERPROFILE\Foundry\iruka-env.ps1
 npm install
 .\node_modules\.bin\tauri.cmd dev                                            # FreeRDP + IronRDP（既定）
 .\node_modules\.bin\tauri.cmd dev --features ironrdp -- --no-default-features # IronRDP のみ。vcpkg 不要
@@ -47,6 +64,9 @@ npm install
 - cargo のフラグは 2 つ目の `--` の後に書く。`npm run tauri dev -- --no-default-features` は動かない
   （npm がフラグを Tauri CLI に渡し、CLI が受け付けない）。
 - 初回のビルドは約 7 分。2 回目以降は 25〜60 秒。
+- npm 11 以降は esbuild の postinstall スクリプトについて「not yet covered by allowScripts」と警告し、
+  実行しない。問題はない: esbuild の実行ファイルは `@esbuild/win32-x64` パッケージから入り、
+  `npm run build` は動く。
 
 ## ポータブル zip
 
@@ -67,7 +87,7 @@ Windows では起動時に、`legacy.dll` が同じフォルダーにあり `OPE
 
 ## WSL から開発する
 
-WSL 内の Claude Code から Windows のビルドを動かせる:
+WSL 内の Claude Code から Windows のビルドを動かせる（2026-10-16 の構成）:
 
 - ビルドは Windows ネイティブで行う。WSL 内でビルドすると Linux のバイナリになり、WSLg 上で
   動くだけになる。

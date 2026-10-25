@@ -161,3 +161,28 @@ Windows でクライアントとして Iruka を動かすまでの作業を、�
 ### まとめを作成
 
 - [windows-client_JA.md](windows-client_JA.md) を、うまくいった手順のまとめとして書き直した。
+
+## 2026-10-26: ネイティブ PowerShell 構成
+
+### 環境
+
+- 新しく入れた Windows 11 Pro（ビルド 26200）で同じことをした。今回は WSL ではなく、PowerShell で
+  Windows 版 Claude Code を動かす。オーナーが Git for Windows、Node 26.12、rustup（stable MSVC）、
+  Visual Studio Community 2026（18.11）の C++ ワークロードを入れ、`C:\Users\tosihide\Iruka` に clone 済み。
+- 足りなかったもの: vcpkg、FreeRDP、環境スクリプト、`node_modules`。
+
+### 手順
+
+- vcpkg を `C:\Users\tosihide\Foundry\vcpkg` に clone して bootstrap（前回と同じ場所なので、ドキュメントの
+  パスはそのまま。vcpkg ツール 2026-09-26）。
+- `vcpkg install "freerdp[client]:x64-windows" "pkgconf:x64-windows"`: 合計 32 分（Strawberry Perl、NASM、
+  jom は vcpkg が自分で取ってくるので、他に入れるものはない）。FreeRDP は 3.32.2 になった。
+- `C:\Users\tosihide\Foundry\iruka-env.ps1` をドキュメントの内容で作り直した。
+- `npm install`: npm 11 は esbuild の postinstall について「not yet covered by allowScripts」と警告して
+  実行しない。問題なし。`tsc` と `npm run build` は通る。
+- VS 2026 で動く: FreeRDP + IronRDP の `cargo build` が通る（IronRDP のみの初回ビルドは 8.5 分）。
+- `cargo test`: `rdp::tests::detects_own_addresses` が `is_local_host("", 3389)` で失敗。Windows は空の名前を
+  自分のアドレスに解決するので、ホスト欄が空だと「この PC」と判定されていた。
+  `src-tauri/src/rdp/mod.rs` を修正（空のホストはローカルではない）。
+- keyring の往復テスト（`cargo test -- --ignored credentials`）は Windows の資格情報マネージャーで通る。
+- docs/windows-client_JA.md に「開発の 2 つのやり方」（ネイティブ PowerShell と WSL から）を追加。

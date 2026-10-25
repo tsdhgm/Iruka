@@ -20,11 +20,15 @@ KNOWN_ISSUES.md and TODO.md.
   built and verified; the installer is postponed (distribution and signing notes in TODO.md).
   Procedure: docs/windows-client.md; history with the dead ends: docs/windows-client-log.md (keep
   appending to it).
-- **Windows machine setup**: Claude Code runs in WSL and drives the build through `powershell.exe`.
-  Clone at `C:\Users\tosihide\Foundry\Iruka` (remotes `wsl` = the WSL repository, `origin` = GitHub;
-  commit in WSL, then `git pull wsl main` there), vcpkg at `C:\Users\tosihide\Foundry\vcpkg`,
-  environment in `C:\Users\tosihide\Foundry\iruka-env.ps1`, zips in `C:\Users\tosihide\Foundry\dist`.
-  Stop `tauri dev` before touching the Windows clone. See "Developing from WSL" in docs/windows-client.md.
+- **Windows machine setup**: two ways, both building natively (docs/windows-client.md "Two ways to
+  develop"). **Native** (from 2026-10-26): Claude Code for Windows in PowerShell, clone at
+  `C:\Users\tosihide\Iruka` (Git for Windows, remote `origin` = GitHub), VS Community 2026 C++ tools,
+  Node 26. **From WSL** (2026-10-16): Claude Code in WSL drives the build through `powershell.exe`;
+  clone at `C:\Users\tosihide\Foundry\Iruka` (remotes `wsl` = the WSL repository, `origin` = GitHub;
+  commit in WSL, then `git pull wsl main` there); see "Developing from WSL". Shared: vcpkg at
+  `C:\Users\tosihide\Foundry\vcpkg`, environment in `C:\Users\tosihide\Foundry\iruka-env.ps1`
+  (dot-source it before building), zips in `C:\Users\tosihide\Foundry\dist`. Stop `tauri dev` before
+  touching a clone from the other side.
 - **2026-10-16, back on Ubuntu: Linux packages done.** `scripts/make-deb.sh` (deb depending on
   Ubuntu's `libfreerdp-client3-3`; desktop template `src-tauri/linux/iruka.desktop` adds Categories
   and keeps `StartupWMClass=iruka`: the Wayland app id is the binary name, the identifier only

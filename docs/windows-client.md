@@ -11,14 +11,28 @@ The step-by-step history with the dead ends is in [windows-client-log.md](window
 
 | What | How | Notes |
 | --- | --- | --- |
-| Visual Studio 2022 C++ tools | "Desktop development with C++" (Build Tools are enough) | MSVC compiles the C bridge and links |
+| Visual Studio C++ tools | "Desktop development with C++" (Build Tools are enough) | MSVC compiles the C bridge and links; 2022 used first, Community 2026 (18.11) also works (2026-10-26) |
 | WebView2 | preinstalled on Windows 11 | |
-| Node.js | 22 used | |
+| Node.js | 22 and 26 used | |
 | Rust | `winget install --id Rustlang.Rustup -e` | per user, no admin; stable `x86_64-pc-windows-msvc` |
 | vcpkg | `git clone https://github.com/microsoft/vcpkg.git` then `bootstrap-vcpkg.bat -disableMetrics` | |
 | FreeRDP 3 | `vcpkg install "freerdp[client]:x64-windows" "pkgconf:x64-windows"` | 20 min the first time; FreeRDP 3.32.1 |
 | `ssh.exe` | preinstalled (OpenSSH client) | for "+ SSH" |
-| Git | Git for Windows, or WSL's git | |
+| Git | Git for Windows (native setup), or WSL's git (WSL setup) | |
+
+## Two ways to develop
+
+Both build natively on Windows; they differ in where the shell (and Claude Code) runs.
+
+| | Native (PowerShell) | From WSL |
+| --- | --- | --- |
+| Shell, Claude Code | PowerShell, Claude Code for Windows | bash in WSL, Claude Code for Linux |
+| Clone | anywhere on the Windows file system, for example `%USERPROFILE%\Iruka` | on the Windows file system, for example `%USERPROFILE%\Foundry\Iruka` (`/mnt/c/...` from WSL) |
+| Git | Git for Windows | WSL's git |
+| Build commands | run directly after dot-sourcing the environment script | through `powershell.exe`, see [Developing from WSL](#developing-from-wsl) |
+
+The prerequisites, vcpkg and the environment script below are shared; one vcpkg installation serves
+both. Do not let both setups build the same clone at once (they share `src-tauri\target`).
 
 ## Environment
 
@@ -38,7 +52,10 @@ and the OpenSSL / zlib / cJSON DLLs at run time.
 
 ## Build and run
 
+In a native PowerShell, from the clone:
+
 ```powershell
+. $env:USERPROFILE\Foundry\iruka-env.ps1
 npm install
 .\node_modules\.bin\tauri.cmd dev                                            # FreeRDP + IronRDP (default)
 .\node_modules\.bin\tauri.cmd dev --features ironrdp -- --no-default-features # IronRDP only, no vcpkg needed
@@ -47,6 +64,9 @@ npm install
 - Cargo flags go after the second `--`. `npm run tauri dev -- --no-default-features` does not work
   (npm hands the flag to the Tauri CLI, which rejects it).
 - First build about 7 minutes; later builds 25–60 s.
+- npm 11 and later warn that esbuild's postinstall script is "not yet covered by allowScripts" and
+  skip it. Harmless: the esbuild binary comes from the `@esbuild/win32-x64` package, and
+  `npm run build` works.
 
 ## Portable zip
 
@@ -67,7 +87,7 @@ unpacked to another folder, connected to a Windows target, audio played locally)
 
 ## Developing from WSL
 
-Claude Code can run inside WSL and drive the Windows build:
+Claude Code can run inside WSL and drive the Windows build (the 2026-10-16 setup):
 
 - Build natively on Windows: a build inside WSL produces a Linux binary that only runs under WSLg.
 - Keep the clone on the Windows file system (for example `C:\Users\<user>\Foundry\Iruka`, which is

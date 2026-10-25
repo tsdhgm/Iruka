@@ -162,3 +162,30 @@ The cleaned-up procedure is in [windows-client.md](windows-client.md).
 ### Summary written
 
 - [windows-client.md](windows-client.md) rewritten as the procedure that worked.
+
+## 2026-10-26: native PowerShell setup
+
+### Environment
+
+- Same goal on a fresh Windows 11 Pro (build 26200), this time with Claude Code for Windows running
+  in PowerShell instead of WSL. The owner had installed Git for Windows, Node 26.12, rustup (stable
+  MSVC) and Visual Studio Community 2026 (18.11) with the C++ workload, and cloned to
+  `C:\Users\tosihide\Iruka`.
+- Missing: vcpkg, FreeRDP, the environment script, `node_modules`.
+
+### Steps
+
+- vcpkg cloned to `C:\Users\tosihide\Foundry\vcpkg` (same place as before, so the docs' paths stay)
+  and bootstrapped (vcpkg tool 2026-09-26).
+- `vcpkg install "freerdp[client]:x64-windows" "pkgconf:x64-windows"`: 32 min in total (vcpkg
+  fetched its own Strawberry Perl, NASM and jom; nothing else to install). FreeRDP is now 3.32.2.
+- `C:\Users\tosihide\Foundry\iruka-env.ps1` recreated with the docs' contents.
+- `npm install`: npm 11 warns that esbuild's postinstall is "not yet covered by allowScripts" and
+  skips it; harmless, `tsc` and `npm run build` pass.
+- VS 2026 works: `cargo build` with FreeRDP + IronRDP passes (IronRDP-only first build 8.5 min).
+- `cargo test`: `rdp::tests::detects_own_addresses` failed on `is_local_host("", 3389)`. Windows
+  resolves an empty name to the machine's own addresses, so an empty host field would have been
+  reported as "this PC". Fixed in `src-tauri/src/rdp/mod.rs` (empty host is never local).
+- The keyring round trip (`cargo test -- --ignored credentials`) passes against the Windows
+  Credential Manager.
+- docs/windows-client.md: "Two ways to develop" (native PowerShell and from WSL) added.
