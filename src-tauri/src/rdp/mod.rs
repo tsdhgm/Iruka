@@ -551,6 +551,10 @@ pub async fn rdp_is_self(host: String, port: Option<u16>) -> bool {
 
 fn is_local_host(host: &str, port: u16) -> bool {
     use std::net::{ToSocketAddrs, UdpSocket};
+    // Windows resolves an empty name to the local machine's own addresses
+    if host.trim().is_empty() {
+        return false;
+    }
     let Ok(addrs) = (host, port).to_socket_addrs() else {
         return false;
     };
