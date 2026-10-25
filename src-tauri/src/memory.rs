@@ -69,6 +69,9 @@ struct Model {
     /// Lowest usage observed during this run while no RDP session was open
     #[serde(skip)]
     baseline: Option<u64>,
+    /// Usage at the latest sample (0 before the first one)
+    #[serde(skip)]
+    last_used: u64,
 }
 
 impl Model {
@@ -92,6 +95,7 @@ impl Model {
     }
 
     fn record(&mut self, used: u64, sessions: u64, pixels: u64, warmed_up: bool) {
+        self.last_used = used;
         if sessions == 0 {
             if warmed_up {
                 self.baseline = Some(self.baseline.map_or(used, |b| b.min(used)));
@@ -264,6 +268,52 @@ pub fn rdp_memory_budget(sizes: Vec<(u32, u32)>) -> MemoryBudget {
     }
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryStatus {
+    /// Iruka as a whole (main process + WebView etc.) at the latest sample; 0 before the first one
+    used_bytes: u64,
+    /// Physical memory of the machine
+    total_bytes: u64,
+    /// Estimated share of the given RDP session (None for other sessions)
+    session_bytes: Option<u64>,
+}
+
+static TOTAL_MEMORY: LazyLock<u64> = LazyLock::new(|| {
+    let mut sys = System::new();
+    sys.refresh_memory();
+    sys.total_memory()
+});
+
+/// Share of one RDP session in the current usage. All sessions live in one process, so this
+/// splits the usage above the baseline in proportion to each session's standard requirement;
+/// without a baseline (no session-free sample yet) it falls back to the learned estimate.
+fn session_share(model: &Model, sizes: &HashMap<u32, (u32, u32)>, id: u32) -> Option<u64> {
+    let &(w, h) = sizes.get(&id)?;
+    let own = base_estimate(1, w as u64 * h as u64);
+    match model.baseline {
+        Some(baseline) if model.last_used > baseline => {
+            let pixels = sizes.values().map(|&(w, h)| w as u64 * h as u64).sum();
+            let all = base_estimate(sizes.len() as u64, pixels);
+            Some(((model.last_used - baseline) as f64 * own / all) as u64)
+        }
+        _ => Some((own * model.scale()) as u64),
+    }
+}
+
+/// Memory figures for the toolbar: Iruka as a whole, the machine's RAM, and the share of the
+/// displayed session when it is an RDP session.
+#[tauri::command]
+pub fn memory_status(id: Option<u32>) -> MemoryStatus {
+    let model = MODEL.lock().unwrap();
+    let sizes = SESSION_SIZES.lock().unwrap();
+    MemoryStatus {
+        used_bytes: model.last_used,
+        total_bytes: *TOTAL_MEMORY,
+        session_bytes: id.and_then(|id| session_share(&model, &sizes, id)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -288,5 +338,21 @@ mod tests {
         // 4K estimate = 2 x (fixed part + pixel part) x safety margin
         let expect = 2.0 * base_estimate(1, 3840 * 2160) * SAFETY_FACTOR;
         assert!((m.estimate(3840, 2160) as f64 - expect).abs() < 1.0);
+    }
+
+    #[test]
+    fn splits_usage_between_sessions_by_size() {
+        let mut m = Model::default();
+        let sizes = HashMap::from([(1, (1920, 1080)), (3, (3840, 2160))]);
+        // Before a baseline: the learned (here initial) estimate without the safety margin
+        assert_eq!(session_share(&m, &sizes, 1), Some(base_estimate(1, 1920 * 1080) as u64));
+        m.record(500 * MB, 0, 0, true);
+        let both = base_estimate(1, 1920 * 1080) + base_estimate(1, 3840 * 2160);
+        m.record(500 * MB + (3.0 * both) as u64, 2, 1920 * 1080 + 3840 * 2160, true);
+        let one = session_share(&m, &sizes, 1).unwrap();
+        let four_k = session_share(&m, &sizes, 3).unwrap();
+        assert!((one as f64 - 3.0 * base_estimate(1, 1920 * 1080)).abs() < 2.0);
+        assert!((one + four_k) as f64 - 3.0 * both < 2.0);
+        assert_eq!(session_share(&m, &sizes, 2), None, "not an RDP session");
     }
 }

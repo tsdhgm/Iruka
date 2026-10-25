@@ -380,6 +380,18 @@ body {
   white-space: nowrap;
 }
 
+.view-toolbar-memory {
+  font-size: 12px;
+  color: #7f93a8;
+  margin-right: 8px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.view-toolbar-body button.view-toolbar-print {
+  margin-right: 12px;
+}
+
 .view-toolbar-body button {
   background: transparent;
   border: 1px solid transparent;

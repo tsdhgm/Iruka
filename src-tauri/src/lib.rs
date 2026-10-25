@@ -84,6 +84,7 @@ pub fn run() {
             rdp::rdp_is_self,
             memory::rdp_memory_check,
             memory::rdp_memory_budget,
+            memory::memory_status,
             credentials::credential_set,
             credentials::credential_get,
             credentials::credential_delete
