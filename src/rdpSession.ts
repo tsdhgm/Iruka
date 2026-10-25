@@ -81,6 +81,20 @@ export async function createRdpSession(
 
   // Screen contents arrive as binary (see the FrameSink comments on the Rust side for the format).
   let sid: number | null = null;
+  // Back-pressure: the backend sends the next frame only after this one is acknowledged, and
+  // the acknowledgement waits for the next animation frame, so the rate follows what the
+  // display shows instead of piling up in the WebView (FrameGate on the Rust side). A frame
+  // that arrives before the session id is known is acknowledged as soon as it is.
+  let unackedSeq: number | null = null;
+  const ackFrame = (seq: number) => {
+    if (sid === null) {
+      unackedSeq = seq;
+      return;
+    }
+    requestAnimationFrame(() => {
+      invoke("rdp_frame_done", { id: sid, seq }).catch(() => {});
+    });
+  };
   const onFrame = new Channel<ArrayBuffer>();
   onFrame.onmessage = (buf) => {
     const t0 = performance.now();
@@ -88,9 +102,13 @@ export async function createRdpSession(
     const fbWidth = view.getUint32(0, true);
     const fbHeight = view.getUint32(4, true);
     const count = view.getUint32(8, true);
+    const seq = view.getUint32(12, true);
     const sentAt = view.getFloat64(16, true);
     // Drop data that crossed over a resize (a full frame arrives after the canvas is rebuilt).
-    if (fbWidth !== canvas.width || fbHeight !== canvas.height) return;
+    if (fbWidth !== canvas.width || fbHeight !== canvas.height) {
+      ackFrame(seq);
+      return;
+    }
     let offset = 24;
     for (let i = 0; i < count; i++) {
       const x = view.getUint32(offset, true);
@@ -107,6 +125,7 @@ export async function createRdpSession(
       cb.markDirty(sid);
       cb.markActivity(sid);
     }
+    ackFrame(seq);
     const dt = performance.now() - t0;
     perf.frames++;
     perf.kb += Math.round(buf.byteLength / 1024);
@@ -120,6 +139,10 @@ export async function createRdpSession(
   try {
     id = await invoke<number>("rdp_connect", { params, onEvent, onFrame });
     sid = id;
+    if (unackedSeq !== null) {
+      ackFrame(unackedSeq);
+      unackedSeq = null;
+    }
   } catch (e) {
     container.remove();
     alert(`Could not start the RDP connection: ${e}`);

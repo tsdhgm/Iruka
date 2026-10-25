@@ -78,6 +78,7 @@ pub fn run() {
             rdp::rdp_input,
             rdp::rdp_close,
             rdp::rdp_refresh,
+            rdp::rdp_frame_done,
             rdp::rdp_perf_log,
             rdp::rdp_set_active,
             rdp::rdp_is_self,

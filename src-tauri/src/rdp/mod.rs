@@ -13,7 +13,6 @@ mod ironrdp;
 use std::{
     collections::HashMap,
     sync::{
-        atomic::{AtomicBool, Ordering},
         mpsc::{self, Receiver, Sender},
         Arc, Mutex,
     },
@@ -28,6 +27,51 @@ use crate::{clipboard, memory, NEXT_SESSION_ID};
 
 /// Minimum interval between frames sent to the frontend (about 30fps).
 const FRAME_INTERVAL: Duration = Duration::from_millis(33);
+/// How long a frame may stay unacknowledged by the frontend before the gate opens anyway
+/// (the frontend is hidden, its message was dropped, or it is hopelessly behind).
+const FRAME_ACK_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// End-to-end back-pressure for one session: at most one frame is in flight between the
+/// backend and the frontend's canvas. `arm` is called when a frame is queued, `done` when
+/// the frontend reports it painted (`rdp_frame_done`, after its next animation frame), and
+/// `is_open` tells `flush` whether it may send. A late or unknown acknowledgement is
+/// ignored (sequence numbers), and a frame that is never acknowledged stops blocking after
+/// `FRAME_ACK_TIMEOUT`, so a hidden window costs one frame per timeout instead of a stall.
+#[derive(Default)]
+pub struct FrameGate {
+    in_flight: Mutex<Option<(u32, Instant)>>,
+}
+
+impl FrameGate {
+    fn arm(&self, seq: u32, now: Instant) {
+        *self.in_flight.lock().unwrap() = Some((seq, now));
+    }
+
+    /// The frontend painted frame `seq`. Returns false when it was not the frame in flight.
+    pub fn done(&self, seq: u32) -> bool {
+        let mut slot = self.in_flight.lock().unwrap();
+        match *slot {
+            Some((current, _)) if current == seq => {
+                *slot = None;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Whether a new frame may be sent at `now`. Clears a timed-out frame (and says so).
+    fn is_open(&self, now: Instant) -> (bool, Option<u32>) {
+        let mut slot = self.in_flight.lock().unwrap();
+        match *slot {
+            None => (true, None),
+            Some((seq, since)) if now.duration_since(since) >= FRAME_ACK_TIMEOUT => {
+                *slot = None;
+                (true, Some(seq))
+            }
+            Some(_) => (false, None),
+        }
+    }
+}
 /// Maximum number of pending dirty rectangles. Beyond this they are collapsed into a single rectangle.
 pub const MAX_DIRTY_RECTS: usize = 128;
 
@@ -253,23 +297,23 @@ fn merge_rects(mut rects: Vec<Rect>) -> Vec<Rect> {
 /// regions keep accumulating and the next send delivers the latest screen in one batch.
 ///
 /// Wire format (little-endian):
-/// `screen width u32, screen height u32, rect count u32, reserved u32, send time f64 (UNIX milliseconds)`
+/// `screen width u32, screen height u32, rect count u32, frame sequence u32, send time f64 (UNIX milliseconds)`
 /// followed, per rectangle, by `x, y, w, h (u32 each)` and `w*h*4` bytes of RGBA pixels.
+/// The frontend answers every frame with `rdp_frame_done(id, sequence)` once painted.
 pub struct FrameSink {
     id: u32,
     events: Channel<RdpEvent>,
     dirty: Vec<Rect>,
     last_sent: Instant,
-    /// The sender thread is still delivering the previous batch
-    busy: Arc<AtomicBool>,
+    /// One frame in flight at a time, until the frontend has painted it
+    gate: Arc<FrameGate>,
+    seq: u32,
     frames: Sender<Vec<u8>>,
 }
 
 impl FrameSink {
-    fn new(id: u32, events: Channel<RdpEvent>, frames: Channel<InvokeResponseBody>) -> Self {
-        let busy = Arc::new(AtomicBool::new(false));
+    fn new(id: u32, events: Channel<RdpEvent>, frames: Channel<InvokeResponseBody>, gate: Arc<FrameGate>) -> Self {
         let (tx, rx) = mpsc::channel::<Vec<u8>>();
-        let sender_busy = busy.clone();
         std::thread::spawn(move || {
             for msg in rx {
                 let t0 = Instant::now();
@@ -281,7 +325,6 @@ impl FrameSink {
                     send_ms = t0.elapsed().as_secs_f64() * 1000.0,
                     "frame sent"
                 );
-                sender_busy.store(false, Ordering::Release);
             }
         });
         Self {
@@ -289,7 +332,8 @@ impl FrameSink {
             events,
             dirty: Vec::new(),
             last_sent: Instant::now(),
-            busy,
+            gate,
+            seq: 0,
             frames: tx,
         }
     }
@@ -342,13 +386,17 @@ impl FrameSink {
     /// Send the accumulated changes. Unless `force`, only sends once enough time has passed since the last send.
     /// Backends must call this after every round of event processing (periodically even when idle).
     pub fn flush(&mut self, fb: &FrameView, force: bool) -> anyhow::Result<()> {
-        if self.dirty.is_empty()
-            || self.busy.load(Ordering::Acquire)
-            || (!force && self.last_sent.elapsed() < FRAME_INTERVAL)
-        {
+        if self.dirty.is_empty() || (!force && self.last_sent.elapsed() < FRAME_INTERVAL) {
             return Ok(());
         }
         let t0 = Instant::now();
+        let (open, timed_out) = self.gate.is_open(t0);
+        if let Some(seq) = timed_out {
+            tracing::debug!(target: "iruka_perf", id = self.id, seq, "frame not acknowledged in time; sending on");
+        }
+        if !open {
+            return Ok(());
+        }
         let rects: Vec<Rect> = merge_rects(std::mem::take(&mut self.dirty))
             .into_iter()
             .filter_map(|r| {
@@ -372,7 +420,8 @@ impl FrameSink {
         let sent_at = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0.0, |d| d.as_secs_f64() * 1000.0);
-        for v in [fb.width, fb.height, rects.len() as u32, 0] {
+        self.seq = self.seq.wrapping_add(1);
+        for v in [fb.width, fb.height, rects.len() as u32, self.seq] {
             msg.extend_from_slice(&v.to_le_bytes());
         }
         msg.extend_from_slice(&sent_at.to_le_bytes());
@@ -392,23 +441,30 @@ impl FrameSink {
         }
         tracing::debug!(
             target: "iruka_perf",
+            seq = self.seq,
             rects = rects.len(),
             kb = msg.len() / 1024,
             copy_ms = t0.elapsed().as_secs_f64() * 1000.0,
             "frame queued"
         );
-        self.busy.store(true, Ordering::Release);
+        self.gate.arm(self.seq, Instant::now());
         if self.frames.send(msg).is_err() {
-            self.busy.store(false, Ordering::Release);
+            self.gate.done(self.seq);
         }
         self.last_sent = Instant::now();
         Ok(())
     }
 }
 
+/// A running session as the commands see it: its command channel and its frame gate.
+struct SessionEntry {
+    commands: Sender<Command>,
+    gate: Arc<FrameGate>,
+}
+
 #[derive(Default)]
 pub struct RdpState {
-    sessions: Arc<Mutex<HashMap<u32, Sender<Command>>>>,
+    sessions: Arc<Mutex<HashMap<u32, SessionEntry>>>,
 }
 
 #[tauri::command]
@@ -421,12 +477,13 @@ pub fn rdp_connect(
     let backend = select_backend(params.backend)?;
     let id = NEXT_SESSION_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let (tx, rx) = mpsc::channel();
-    state.sessions.lock().unwrap().insert(id, tx);
+    let gate = Arc::new(FrameGate::default());
+    state.sessions.lock().unwrap().insert(id, SessionEntry { commands: tx, gate: gate.clone() });
 
     memory::set_session_size(id, params.width.into(), params.height.into());
     let sessions = state.sessions.clone();
     std::thread::spawn(move || {
-        let mut sink = FrameSink::new(id, on_event.clone(), on_frame);
+        let mut sink = FrameSink::new(id, on_event.clone(), on_frame, gate);
         let (reason, error) = match backend.run(&params, &rx, &mut sink) {
             Ok(reason) => (reason, false),
             Err(e) => (format!("{e:#}"), true),
@@ -446,7 +503,7 @@ pub fn rdp_connect(
 #[tauri::command]
 pub fn rdp_input(state: tauri::State<'_, RdpState>, id: u32, events: Vec<RdpInput>) -> Result<(), String> {
     let sessions = state.sessions.lock().unwrap();
-    let tx = sessions.get(&id).ok_or("session not found")?;
+    let tx = &sessions.get(&id).ok_or("session not found")?.commands;
     let keys = events.iter().filter(|e| matches!(e, RdpInput::Key { down: true, .. })).count();
     if keys > 0 {
         tracing::debug!(target: "iruka_perf", keys, total = events.len(), "input received from frontend");
@@ -485,6 +542,33 @@ mod tests {
     use super::*;
 
     #[test]
+    fn frame_gate_allows_one_frame_in_flight() {
+        let gate = FrameGate::default();
+        let t0 = Instant::now();
+        assert_eq!(gate.is_open(t0), (true, None));
+        gate.arm(1, t0);
+        assert_eq!(gate.is_open(t0 + Duration::from_millis(100)), (false, None));
+        assert!(!gate.done(7), "an unknown sequence is ignored");
+        assert_eq!(gate.is_open(t0 + Duration::from_millis(200)), (false, None));
+        assert!(gate.done(1));
+        assert_eq!(gate.is_open(t0 + Duration::from_millis(300)), (true, None));
+        assert!(!gate.done(1), "a second acknowledgement of the same frame is ignored");
+    }
+
+    #[test]
+    fn frame_gate_opens_after_the_timeout() {
+        let gate = FrameGate::default();
+        let t0 = Instant::now();
+        gate.arm(5, t0);
+        assert_eq!(gate.is_open(t0 + FRAME_ACK_TIMEOUT - Duration::from_millis(1)), (false, None));
+        assert_eq!(gate.is_open(t0 + FRAME_ACK_TIMEOUT), (true, Some(5)));
+        // The late acknowledgement of the timed-out frame must not open a gate armed since.
+        gate.arm(6, t0 + FRAME_ACK_TIMEOUT);
+        assert!(!gate.done(5));
+        assert_eq!(gate.is_open(t0 + FRAME_ACK_TIMEOUT + Duration::from_millis(1)), (false, None));
+    }
+
+    #[test]
     fn detects_own_addresses() {
         assert!(is_local_host("127.0.0.1", 3389));
         assert!(is_local_host("localhost", 3389));
@@ -502,8 +586,8 @@ pub async fn rdp_set_active(state: tauri::State<'_, RdpState>, id: Option<u32>) 
     clipboard::set_active(id);
     let Some(id) = id else { return Ok(()) };
     let text = clipboard::local_text();
-    if let Some(tx) = state.sessions.lock().unwrap().get(&id) {
-        let _ = tx.send(Command::ClipboardLocal(text));
+    if let Some(entry) = state.sessions.lock().unwrap().get(&id) {
+        let _ = entry.commands.send(Command::ClipboardLocal(text));
     }
     Ok(())
 }
@@ -514,15 +598,25 @@ pub async fn rdp_set_active(state: tauri::State<'_, RdpState>, id: Option<u32>) 
 #[tauri::command]
 pub fn rdp_refresh(state: tauri::State<'_, RdpState>, id: u32) -> Result<(), String> {
     let sessions = state.sessions.lock().unwrap();
-    let tx = sessions.get(&id).ok_or("session not found")?;
+    let tx = &sessions.get(&id).ok_or("session not found")?.commands;
     tx.send(Command::Refresh).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub fn rdp_close(state: tauri::State<'_, RdpState>, id: u32) -> Result<(), String> {
     let sessions = state.sessions.lock().unwrap();
-    if let Some(tx) = sessions.get(&id) {
-        let _ = tx.send(Command::Close);
+    if let Some(entry) = sessions.get(&id) {
+        let _ = entry.commands.send(Command::Close);
     }
     Ok(())
+}
+
+/// The frontend painted frame `seq` of session `id`; the next frame may be sent. Called after
+/// the frontend's next animation frame, so the rate follows what the display actually shows.
+/// A late acknowledgement (after the timeout) is ignored; a closed session is not an error.
+#[tauri::command]
+pub fn rdp_frame_done(state: tauri::State<'_, RdpState>, id: u32, seq: u32) {
+    if let Some(entry) = state.sessions.lock().unwrap().get(&id) {
+        entry.gate.done(seq);
+    }
 }
