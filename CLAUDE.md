@@ -64,9 +64,11 @@ KNOWN_ISSUES.md and TODO.md.
   memory estimate allows (owner's premise). Verified: cargo tests incl. a real GNOME Keyring round
   trip, tsc, vite build. **In use by the owner since 2026-10-24** (6 RDP + 5 SSH, saved and
   restored). Open follow-ups in TODO.md "Goal: worksets".
-- **2026-10-24 (evening), new Ubuntu box** (hostname `linux-ssd`, 60 GB RAM, 16 CPUs; the repo lives
-  on shared storage, the home directory was carried over). Dev environment reinstalled: rustup
-  stable, Tauri `-dev` packages, `freerdp3-dev`, `patchelf`. Features added the same evening, all
+- **2026-10-24 (evening), the Ubuntu system moved to a portable USB SSD** (hostname `linux-ssd`;
+  the whole installation, home directory and the repo at `/_export/shared/Local/Iruka` are on that
+  disk, so it boots on different hardware: 60 GB RAM / 16 CPUs on 2026-10-24, 16 GB / 8 CPUs on
+  2026-10-25, which matches the 16 GB monitoring-box budget). Dev environment reinstalled on it:
+  rustup stable, Tauri `-dev` packages, `freerdp3-dev`, `patchelf`; nothing per machine. Features added the same evening, all
   pushed: SSH "Save password" (typed once at ssh's `password:` prompt, `passwordPromptAnswerer` in
   `src/ptySession.ts`); toolbar "Scaled" (fit the RDP screen, `iruka.scaled`); toolbar Print Screen
   button (⎙; the local GNOME keeps the key, KNOWN_ISSUES.md, owner declined a keyboard grab);
