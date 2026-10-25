@@ -62,6 +62,14 @@ Known bugs and limitations. Problems whose cause lies outside Iruka (FreeRDP or 
 - **How to confirm**: `ss -tin state established '( dport = :3389 )'` twice, 20 s apart, and compare `bytes_received` per host; replacing or minimising the terminal brought 10.0.1.53 to 0 at once.
 - **What to do**: keep such windows minimised (a minimised window generates no damage) or on a workspace that is not shown, or lower that session's resolution. Iruka cannot tell a spinner from a video; a future frame-rate cap per session (TODO.md) would limit the cost but not the waste.
 
+## A session drops with "The connection transport layer failed" after a stall of about 9 s
+
+- **Status**: understood 2026-10-25; outside Iruka (FreeRDP's TCP timeouts and the Wi-Fi link), a reconnect feature is in TODO.md.
+- **Symptom**: during a test with a constantly redrawing browser page shown full screen (the second run of the back-pressure build), the session to 10.0.1.113 ended with "Connection error (FreeRDP): Communication error: The connection transport layer failed." The host was reachable and its port 3389 open right afterwards; the other five sessions stayed up.
+- **Cause**: FreeRDP sets `TCP_USER_TIMEOUT` to 9000 ms on every connection (default `FreeRDP_TcpAckTimeout`), plus TCP keep-alive (idle 5 s, interval 2 s, 3 retries). When data the client sent (frame acknowledgements, mouse moves) is not acknowledged by the remote for 9 s, the kernel aborts the socket with ETIMEDOUT and FreeRDP reports the generic transport error. On this box all RDP traffic goes over Wi-Fi (the Ethernet port is on another network); since boot the kernel counted 4568 TCP retransmissions, 255 retransmission timeouts and one connection aborted on timeout (`nstat -az | grep -E 'TcpRetransSegs|TcpExtTCPTimeouts|TcpExtTCPAbortOnTimeout'`), that one abort being this session. The frame gate (`FrameGate`) cannot cause it: the FreeRDP thread never waits on it, and FreeRDP's own frame acknowledgements to the server are unaffected.
+- **How to confirm**: `nstat -az` before and after, and the FreeRDP log line in the terminal just before the error (`BIO_read returned a system error 110: Connection timed out` or similar). Remmina on the same box would drop the same way, it uses the same defaults.
+- **What to do**: a wired link to the remotes' network, or fewer 4K sessions over Wi-Fi (a full-screen redraw at 4K is about 1 MB/s per session on the wire, and a lost burst stalls the acknowledgements). In Iruka: reconnect automatically (TODO.md); raising `TcpAckTimeout` would only delay the drop.
+
 ## FreeRDP allocates decode buffers it never uses
 
 - **Status**: parked as a FreeRDP-side problem (2026-10-09)

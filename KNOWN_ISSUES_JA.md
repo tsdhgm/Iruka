@@ -62,6 +62,14 @@
 - **確かめ方**: `ss -tin state established '( dport = :3389 )'` を 20 秒おきに 2 回取り、ホストごとの `bytes_received` を比べる。端末を置き換える（最小化する）と 10.0.1.53 は即座に 0 になった。
 - **対処**: そういうウィンドウは最小化しておく（最小化したウィンドウは更新を生まない）か、表示していないワークスペースに置くか、そのセッションの解像度を下げる。Iruka はスピナーと動画を区別できない。将来のセッションごとのフレームレート上限（TODO_JA.md）は負荷を抑えるが無駄そのものは減らない。
 
+## 約 9 秒の停滞で "The connection transport layer failed" とセッションが切れる
+
+- **状態**: 2026-10-25 に判明。Iruka の外（FreeRDP の TCP タイムアウトと Wi-Fi 回線）。再接続機能は TODO_JA.md に。
+- **症状**: 常時描き変わるブラウザのページを全画面で表示する試験（背圧ビルドの 2 回目）の最中に、10.0.1.113 のセッションが "Connection error (FreeRDP): Communication error: The connection transport layer failed." で終わった。直後にそのホストには ping が通り、3389 番も開いていた。ほかの 5 本は生きていた。
+- **原因**: FreeRDP はすべての接続に `TCP_USER_TIMEOUT` 9000 ms（`FreeRDP_TcpAckTimeout` の既定値）と TCP keep-alive（無通信 5 秒、間隔 2 秒、3 回）を設定する。クライアントが送ったデータ（フレームの応答、マウスの移動）にリモートからの ACK が 9 秒来ないと、カーネルがソケットを ETIMEDOUT で打ち切り、FreeRDP はこの一般的なトランスポートの誤りとして報告する。この機では RDP の通信はすべて Wi-Fi を通る（有線ポートは別のネットワーク）。起動からカーネルは TCP の再送 4568 回、再送タイムアウト 255 回、タイムアウトによる接続の打ち切り 1 回を数えていて（`nstat -az | grep -E 'TcpRetransSegs|TcpExtTCPTimeouts|TcpExtTCPAbortOnTimeout'`）、その 1 回がこのセッション。フレームの関門（`FrameGate`）が原因にはなりえない。FreeRDP のスレッドは関門を待たないし、FreeRDP 自身がサーバーに返すフレームの応答にも影響しない。
+- **確かめ方**: 前後で `nstat -az` を取る。端末のエラーの直前の FreeRDP のログ行（`BIO_read returned a system error 110: Connection timed out` など）。同じ機の Remmina も同じ既定値なので同じように切れる。
+- **対処**: リモート側のネットワークへの有線接続、または Wi-Fi 越しの 4K セッションを減らす（4K の全画面の描き変えは回線上でセッションあたり約 1 MB/s で、ひとまとまりの損失が応答を止める）。Iruka 側では自動再接続（TODO_JA.md）。`TcpAckTimeout` を延ばしても切れるのが遅れるだけ。
+
 ## FreeRDP が使わない展開用バッファーを確保する
 
 - **状態**: FreeRDP 側の問題として保留（2026-10-09）
