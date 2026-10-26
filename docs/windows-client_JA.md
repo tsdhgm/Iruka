@@ -19,6 +19,7 @@ vcpkg の FreeRDP 3.32.1 で Ubuntu（GNOME Remote Desktop）に接続できた�
 | FreeRDP 3 | `vcpkg install "freerdp[client]:x64-windows" "pkgconf:x64-windows"` | 初回 20 分。FreeRDP 3.32.1 |
 | `ssh.exe` | 最初から入っている（OpenSSH クライアント） | 「+ SSH」で使う |
 | Git | Git for Windows（ネイティブ構成）、または WSL の git（WSL 構成） | |
+| スマート アプリ コントロールをオフ | Windows セキュリティ → アプリとブラウザーの制御 | オンのままだとビルドした `iruka.exe` が止められる（os error 4551）。KNOWN_ISSUES_JA.md 参照 |
 
 ## 開発の 2 つのやり方
 

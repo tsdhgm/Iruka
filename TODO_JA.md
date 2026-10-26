@@ -69,6 +69,7 @@ Iruka が向かう到達点: 複数の RDP セッション（できれば SSH �
 - [ ] Windows のインストーラー: FreeRDP / OpenSSL の DLL（`legacy.dll` を含む）を `bundle.resources` で同梱し、起動時に `OPENSSL_MODULES` を設定する（KNOWN_ISSUES_JA.md）。
   - 配布の方針: 当面は署名なし。Tauri の NSIS インストーラーとポータブル zip（exe と DLL。インストールも管理者権限も不要。WebView2 は Windows 11 に入っている）の両方を出す。README に「SmartScreen の警告が出たら『詳細情報 → 実行』」と書く。
   - zip でも SmartScreen は避けられない: エクスプローラーで展開すると Mark of the Web が引き継がれる。署名だけでも避けられない: EV でも最初から評判は付かず、ビルドごとに評判はゼロから。
+  - スマート アプリ コントロール（Windows 11 をクリーンインストールすると多くの PC でオン）は SmartScreen より厳しい: 署名のない `iruka.exe` を「実行」の選択肢なしで止める。そうした PC では署名のない zip もインストーラーもまったく動かない。README にそう書き、広く配るには信頼された証明書での署名が要る（KNOWN_ISSUES_JA.md、2026-10-26）。
   - 広く配布するときの選択肢:
     - Azure Artifact Signing: 有料（月 $10 程度）。OSS 向けの無料枠はない。無料・試用・スポンサー付きの Azure サブスクリプションは使えない。個人は米国・カナダのみ。法人の対象の国と地域は資料によって違う（日本を含む／含まない）ので、使う前に Microsoft の公式ページで確かめる。
     - SignPath Foundation（Microsoft の制度ではない。Microsoft の説明ページが OSS 向けに紹介している）: 条件を満たし CI/CD でビルドしている OSS は無料。Windows に出る発行元は「SignPath Foundation」になり、リリースごとに SignPath 側で手動の承認が要る。実行ファイルには人による最初の審査で「検証できる一定の評判」が求められるので、Iruka に利用者がつくまでは無理（docs/windows-client-log_JA.md）。

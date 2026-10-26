@@ -37,6 +37,13 @@ Known bugs and limitations. Problems whose cause lies outside Iruka (FreeRDP or 
 - **Cause**: OpenSSL 3 keeps MD4 and RC4 in the "legacy" provider (`legacy.dll`). vcpkg's `libcrypto-3-x64.dll` is built with `MODULESDIR` = `C:\Program Files\OpenSSL\bin`, so it looks there, not in vcpkg's `bin` where `legacy.dll` actually is.
 - **Fix**: set `OPENSSL_MODULES` to the folder holding `legacy.dll` (vcpkg's `installed\x64-windows\bin`) before Iruka starts. For an installer, ship `legacy.dll` next to `iruka.exe` and have Iruka set `OPENSSL_MODULES` to its own folder at startup when the variable is unset.
 
+## Windows: Smart App Control blocks a locally built or unsigned iruka.exe
+
+- **Status**: found 2026-10-26 on a fresh Windows 11 Pro (build 26200); worked around by turning Smart App Control off on the development PC. Not an Iruka bug, but it affects every unsigned build.
+- **Symptom**: `tauri dev` builds fine, then `cargo run` stops with `could not execute process target\debug\iruka.exe (never executed)` / `An Application Control policy has blocked this file. (os error 4551)`; started from Explorer, Windows shows "Smart App Control has blocked part of this app".
+- **Cause**: Smart App Control (Windows Security → App & browser control), switched on by a clean Windows 11 install on many PCs, only runs code that is signed by a trusted certificate or known to Microsoft's cloud reputation service. A freshly built `iruka.exe` is neither. There is no per-file or per-folder exception, and self-signed certificates do not count. (Unrelated to SmartScreen, which only warns about downloaded files and can be bypassed with "Run anyway".)
+- **Fix**: for development, turn Smart App Control off (Settings → Privacy & security → Windows Security → App & browser control → Smart App Control settings → Off). Historically it could not be turned back on without reinstalling Windows; newer builds are said to allow it, not checked. For distribution, users with Smart App Control on cannot run the unsigned portable zip either; only code signing with a trusted certificate (TODO.md, Windows installer) avoids it.
+
 ## Linux: starting Iruka a second time kills the running Iruka
 
 - **Status**: found 2026-10-24 (by accident, while testing a launcher); open, fix candidates in TODO.md. Iruka-side.

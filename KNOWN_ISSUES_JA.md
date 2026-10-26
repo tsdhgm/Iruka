@@ -37,6 +37,13 @@
 - **原因**: OpenSSL 3 では MD4 と RC4 は「legacy」プロバイダー（`legacy.dll`）にある。vcpkg の `libcrypto-3-x64.dll` は `MODULESDIR` = `C:\Program Files\OpenSSL\bin` でビルドされていて、そこを探す。`legacy.dll` が実際にある vcpkg の `bin` は見ない。
 - **対処**: Iruka の起動前に、`OPENSSL_MODULES` を `legacy.dll` のあるフォルダー（vcpkg の `installed\x64-windows\bin`）にする。インストーラーでは `legacy.dll` を `iruka.exe` の横に同梱し、変数が未設定なら Iruka が起動時に自分のフォルダーを `OPENSSL_MODULES` に設定する。
 
+## Windows: スマート アプリ コントロールが手元でビルドした / 署名のない iruka.exe を止める
+
+- **状態**: 2026-10-26、新しく入れた Windows 11 Pro（ビルド 26200）で発見。開発用 PC ではスマート アプリ コントロールをオフにして回避。Iruka のバグではないが、署名のないビルドすべてに関わる。
+- **症状**: `tauri dev` のビルドは通るが、`cargo run` が `could not execute process target\debug\iruka.exe (never executed)` / `An Application Control policy has blocked this file. (os error 4551)` で止まる。エクスプローラーから起動すると「スマート アプリ コントロールによってこのアプリの一部がブロックされました」と出る。
+- **原因**: スマート アプリ コントロール（Windows セキュリティ → アプリとブラウザーの制御）は、Windows 11 をクリーンインストールすると多くの PC でオンになる。信頼された証明書で署名されたコードか、Microsoft のクラウドの評判サービスが知っているコードしか実行しない。ビルドしたばかりの `iruka.exe` はどちらでもない。ファイルやフォルダー単位の例外はなく、自己署名の証明書も信頼されない。（SmartScreen とは別物。SmartScreen はダウンロードしたファイルに警告するだけで、「実行」で通せる。）
+- **対処**: 開発では、スマート アプリ コントロールをオフにする（設定 → プライバシーとセキュリティ → Windows セキュリティ → アプリとブラウザーの制御 → スマート アプリ コントロールの設定 → オフ）。以前はいったんオフにすると Windows を入れ直さない限りオンに戻せなかった。新しいビルドでは戻せるという話もあるが未確認。配布では、スマート アプリ コントロールがオンの利用者は署名のないポータブル zip も実行できない。避けられるのは信頼された証明書でのコード署名だけ（TODO_JA.md の Windows インストーラー）。
+
 ## Linux: 起動中にもう一度 Iruka を起動すると、動いている Iruka が死ぬ
 
 - **状態**: 2026-10-24 に発見（起動口のテスト中の事故で）。未修正、修正候補は TODO_JA.md。Iruka 側の問題。

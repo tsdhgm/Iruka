@@ -19,6 +19,7 @@ The step-by-step history with the dead ends is in [windows-client-log.md](window
 | FreeRDP 3 | `vcpkg install "freerdp[client]:x64-windows" "pkgconf:x64-windows"` | 20 min the first time; FreeRDP 3.32.1 |
 | `ssh.exe` | preinstalled (OpenSSH client) | for "+ SSH" |
 | Git | Git for Windows (native setup), or WSL's git (WSL setup) | |
+| Smart App Control off | Windows Security → App & browser control | otherwise the built `iruka.exe` is blocked (os error 4551); see KNOWN_ISSUES.md |
 
 ## Two ways to develop
 
