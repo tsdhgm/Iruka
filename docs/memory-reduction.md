@@ -108,3 +108,28 @@ sharpens later, and keeps the session alive. Part of that is the server, not the
   (longer build, more DLLs), or a build with Windows' own Media Foundation decoder (probably no extra
   DLLs; not checked). The Linux client uses Ubuntu's FreeRDP package, which is probably built with
   ffmpeg and may already receive H.264; not checked.
+
+### What H.264 would and would not buy
+
+A natural follow-up question was whether ffmpeg (H.264) trades memory for CPU. It does not save
+memory:
+
+- **Memory goes up a little, not down.** The decoded result is the same 4-byte-per-pixel screen; the
+  gdi framebuffer and the WebView canvas stay. The H.264 decoder adds its reference frames (a few,
+  each a little over 10 MB at 3840×2160 in YUV 4:2:0), and FreeRDP still allocates its Progressive
+  and other codec buffers. Expect tens of MB more per session; AVC444 runs two H.264 streams
+  internally, so more.
+- **Client CPU depends on how it decodes.** Software decoding of 4K H.264 is heavy, but Progressive
+  is decoded in software today as well, so which one costs more depends on the screen content and
+  has to be measured. ffmpeg can also decode on the GPU (FreeRDP's `WITH_FFMPEG_HWACCEL`: D3D11 and
+  others on Windows, VA-API on Linux), which takes most of the work off the CPU; FreeRDP still
+  copies the result back to system memory to compose its gdi frame, so this saves CPU, not memory
+  (Microsoft's client keeps decoded frames on the GPU).
+- **Server CPU goes up** on a GPU-less VM, which encodes H.264 on its vCPUs: the watched machine
+  pays for heavy motion.
+- **For monitoring**, mostly static screens send little data whatever the codec, so H.264 gains
+  little there. It pays off for video or constant full-screen motion over a thin link, such as the
+  session that kept sending full 4K frames on 2026-10-26.
+
+In short, H.264 buys bandwidth and resilience on a bad link, paid in CPU (and a little memory).
+The memory levers are the ones above: a lower resolution for thumbnails and FreeRDP's unused buffers.
