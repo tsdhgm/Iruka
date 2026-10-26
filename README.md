@@ -65,6 +65,7 @@ See [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
 - [docs/windows-client.md](docs/windows-client.md): running Iruka on Windows (prerequisites, FreeRDP via vcpkg; not tried yet).
 - [docs/mac-target.md](docs/mac-target.md): how to use a Mac as a target, and the results of connecting through macrdp (2026-10-13).
 - [docs/realtime-kill.md](docs/realtime-kill.md): why Iruka was SIGKILLed under load (WebKitGTK's real-time IPC threads), how it was traced, and the design comparison with Remmina that came out of it (2026-10-23).
+- [docs/memory-reduction.md](docs/memory-reduction.md): can a session use less memory? Why a higher compression ratio or more dropped frames would not help, and what would (study, 2026-10-26; nothing implemented).
 - [docs/linux-diagnostics.md](docs/linux-diagnostics.md): when Iruka disappears on Linux, how to find out why (exit-status wrapper, journal, bpftrace watch); the trial and error is in [docs/linux-diagnostics-log.md](docs/linux-diagnostics-log.md) (2026-10-24).
 
 ## For contributors

@@ -118,6 +118,8 @@ A workset (`src/worksets.ts`) is a list of profile ids in sidebar order plus the
 
 Windows client (docs/windows-client-log.md): 393 idle, about 1,580–1,630 with one 3840×2160 session, 1,010 after closing a 1920×1080 session. So one 4K session costs about 550 MB on Linux against about 1.2 GB on Windows. Both clients keep memory after a session closes, and on Linux the kept amount grows with each open/close cycle (after-close readings in one run: 666 → 684 → 791 → 1080).
 
+Whether this can be reduced (compression ratio, dropped frames, a lower resolution for thumbnails, FreeRDP's unused buffers, the Windows-only extra): [memory-reduction.md](memory-reduction.md) (study, 2026-10-26).
+
 Where it sits (`/proc/<pid>/smaps` of the main process after everything was closed): 574 MB anonymous memory in the main process, 114 MB in the WebKit web process. Seven mappings of the main process were 64 MB glibc malloc arena heaps, each almost fully resident (about 440 MB together), plus two part-filled ones. That is most likely memory the session threads freed but glibc kept: an arena only shrinks from its top, and these are fragmented with allocations below `M_MMAP_THRESHOLD` (FreeRDP codec and cache state, channel buffers). Things to try: `malloc_trim(0)` when a session ends, or `M_ARENA_MAX` to cap the number of arenas; whether part of it is a real leak (FreeRDP context or codec state not freed) is not established and would need a heaptrack run. Tracked in TODO.md.
 
 ### Clipboard
