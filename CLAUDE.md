@@ -110,13 +110,36 @@ KNOWN_ISSUES.md and TODO.md.
   compression ratio, dropped frames or H.264 do not save memory; candidate levers; the Windows build
   has no H.264). Seen with 6 × 4K RDP in a **debug** build: about 7 GB, a ~10 s whole-window freeze
   while one remote sent full 4K frames (`copy_ms` 220–380 ms, ~1 s per 32 MB frame to the WebView).
-  **Next (owner, 2026-10-26)**: try Iruka on an old 8 GB laptop (a carry-around PC whose loss would
-  not hurt), **Ubuntu first, then Windows** (the zip; check WebView2 on Windows 10 and Smart App
-  Control). Things to see: whether the restore memory limit skips RDP sessions on a really small
-  machine (only faked with `IRUKA_FAKE_AVAILABLE_MB` so far), OOM-killer / SIGKILL behaviour on
-  Linux, paging on Windows, how many 1920×1080 sessions fit; record the counts, the toolbar memory
-  readout and the `iruka_mem` log lines. Still open after that: repeat the freeze with the release
-  build (copy cost vs. WebView2 transfer), the reconnect and back-pressure tests from 2026-10-25.
+  (The 8 GB laptop plan from this day is carried out in the next item.)
+- **2026-10-26 (afternoon): the 8 GB laptop, Ubuntu half done.** ThinkPad X1 Carbon 3rd gen
+  (i5-5300U, 4 CPUs, 7.1 GiB, 32 GB swap, Ubuntu 26.04.1, kernel 7.0.0-38, GNOME/Wayland); clone at
+  `/home/tosihide/Foundry/Repo/Iruka`. Dev environment built from nothing: rustup stable (1.99.1),
+  the Tauri `-dev` packages, `freerdp3-dev` 3.32.1, `patchelf`, Node 24.20.0 through nvm.
+  `npx tauri build --no-bundle` took 19 min 50 s with `CARGO_BUILD_JOBS=3` (target directory 3.3 GB);
+  `cargo test` 8 passed, and the `#[ignore]`d real-GNOME-Keyring round trip passes here too.
+  **Six 3840×2160 sessions run fine on 7.1 GiB** (peak 3567–3864 MB over seven runs, 525–551 MB per
+  session, the same per-session cost as the 16 GB box). Measurements and what they mean are in
+  docs/code-notes.md "Memory model": the restore memory limit fired on real hardware for the first
+  time (five of six restored once, all six a few minutes later — it sits right on the boundary, and
+  is about 30% more conservative than the measurements); `IRUKA_FAKE_AVAILABLE_MB` turned out to be
+  debug-only, so a release build ignores it; the memory model learns nothing in a run that restores
+  a workset inside the 15 s warm-up; and only 178 MB stayed after closing all six sessions, against
+  about 600 MB on the 16-core box (4 CPUs cap glibc at 32 arenas against 128 — supports the arena
+  explanation and `M_ARENA_MAX`). Open follow-ups are in TODO.md. **Two crashes found**, both in
+  KNOWN_ISSUES.md and both deferred by the owner to a day of their own: (1) the RealtimeKit SIGKILL
+  reproduced **without OBS and without any other load** — killed 42 s into ordinary use with six 4K
+  sessions, and the mechanism read straight off `/proc` (`RLIMIT_RTTIME` 160/200 ms, two `SCHED_RR`
+  priority-5 `ReceiveQueue` threads in the main process), so on a slow CPU this is an ordinary-use
+  problem, not a screen-capture one; (2) a glibc "corrupted double-linked list" crash of
+  `WebKitWebProcess` (and once of Iruka itself) within about 2 s of closing the window with sessions
+  open — heap corruption, cause not established. **Lesson for the next session**: start Iruka
+  through `scripts/diag/iruka-logged`. A bare run of the binary hides the exit status and apport
+  ignores unpackaged executables, so two abnormal exits (137 = SIGKILL, 134 = SIGABRT) were first
+  misread as clean ones.
+  **Next (owner, 2026-10-26)**: the **Windows half** on the same laptop (the portable zip; check
+  WebView2 on Windows 10 and Smart App Control, paging under load, how many 1920×1080 sessions fit).
+  Still open after that: the two Linux crashes above, repeat the 10 s freeze with a release build
+  (copy cost vs. WebView2 transfer), and the reconnect and back-pressure tests from 2026-10-25.
 - The deb from `scripts/make-deb.sh` is installed on the Ubuntu box (`/usr/bin/iruka`; installed
   2026-10-24 on the new box with `apt install`; on a box that already has it, reinstalling the same
   version 0.1.0 needs `sudo dpkg -i`, since `apt install` does not replace a same-version package);

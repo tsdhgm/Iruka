@@ -103,7 +103,9 @@ A workset (`src/worksets.ts`) is a list of profile ids in sidebar order plus the
 - With sessions open, `scale = (used − baseline) / base_estimate(sessions, pixels)` is appended to a list of observations (at most 1200, about an hour).
 - The estimate uses the **95th percentile** of the observations once there are at least 20, times a **1.2 safety factor**. The observations are saved to `memory-model.json` in the app data directory every 60 s and loaded at start-up.
 
-`rdp_memory_check` returns available memory (from the OS) and the estimate; in debug builds `IRUKA_FAKE_AVAILABLE_MB` fakes the available figure for testing the dialog. `lib.rs` also sets glibc's `M_MMAP_THRESHOLD` to 256 KB on Linux so large frame buffers go back to the OS when freed instead of lingering in per-thread arenas.
+A baseline is only taken from a sample with no session open **after** the 15 s warm-up, and no observation is recorded until there is one. So a run that opens sessions within 15 s of launch — which restoring a workset right after starting does — learns nothing at all for its whole life (seen 2026-10-26: `samples` stayed at 448 through a 3.5-minute run with six sessions). Worse, if every session is then closed, the first baseline of that run is taken from a process that is still holding memory, which would make any later observation in the same run read low. Tracked in TODO.md.
+
+`rdp_memory_check` returns available memory (from the OS) and the estimate; in debug builds `IRUKA_FAKE_AVAILABLE_MB` fakes the available figure for testing the dialog (debug only: it is behind `cfg(debug_assertions)`, so a release build ignores it — which is why the limit had to be exercised on real hardware, see below). `lib.rs` also sets glibc's `M_MMAP_THRESHOLD` to 256 KB on Linux so large frame buffers go back to the OS when freed instead of lingering in per-thread arenas.
 
 **Measured 2026-10-23** (Linux client, debug build, Ubuntu 26.04, FreeRDP 3.32.1, WebKitGTK 2.52.6; `used_mb` is the whole process tree; the target was a Windows 11 PC at 3840×2160):
 
@@ -117,6 +119,18 @@ A workset (`src/worksets.ts`) is a list of profile ids in sidebar order plus the
 | All sessions closed, 6 min later | 1079–1117, steady |
 
 Windows client (docs/windows-client-log.md): 393 idle, about 1,580–1,630 with one 3840×2160 session, 1,010 after closing a 1920×1080 session. So one 4K session costs about 550 MB on Linux against about 1.2 GB on Windows. Both clients keep memory after a session closes, and on Linux the kept amount grows with each open/close cycle (after-close readings in one run: 666 → 684 → 791 → 1080).
+
+**Measured 2026-10-26** (Linux client, **release** build, 8 GB laptop: ThinkPad X1 Carbon 3rd gen, i5-5300U, 4 CPUs, 7.1 GiB, Ubuntu 26.04.1, WebKitGTK 2.52.6, FreeRDP 3.32.1; six sessions restored from a workset, all 3840×2160 because the profiles use `local` and the attached display is 4K):
+
+| State | `used_mb` |
+|---|---|
+| Idle after start (baseline) | 408–426 |
+| Six 3840×2160 sessions (49.8 Mpx), across seven runs | 3567–3864 |
+| All six closed again (one run) | 601 |
+
+That is 525–551 MB per 4K session above the baseline, matching the about 550 MB measured on the 16 GB box on 2026-10-23. **What differs is how much comes back**: closing all six left only 178 MB above the baseline here, against about 600 MB on the 16-core box. glibc allows 8 arenas per CPU, so this 4-CPU machine caps at 32 arenas against 128 there — evidence for the arena explanation below, and for `M_ARENA_MAX` as a lever.
+
+The estimate is conservative against these figures. One 3840×2160 session estimates at 714–716 MB (the standard formula times the learned scale 0.885 times the 1.2 safety factor) against 525–551 MB measured, about 30% high: 20% from the safety factor, the rest from taking the 95th percentile of the observations (0.885) rather than their median (0.728). On a 7.1 GiB machine that is enough to matter. Restoring the same six-session workset twice, minutes apart, gave five sessions one time and six the other, because the available figure at that moment fell on either side of 6 × 714 MB (free memory before the two launches differed by 229 MB); the session skipped the first time was then opened by hand and ran with 1.6 GB to spare. Tracked in TODO.md.
 
 Whether this can be reduced (compression ratio, dropped frames, a lower resolution for thumbnails, FreeRDP's unused buffers, the Windows-only extra): [memory-reduction.md](memory-reduction.md) (study, 2026-10-26).
 

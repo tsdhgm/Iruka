@@ -19,10 +19,25 @@ back. The Windows client is mandatory, macOS desirable. The pieces, in order:
 - [x] (2026-10-24) Restore in order, one session at a time (an RDP session is awaited up to 20 s);
   only as many RDP sessions as the memory estimate allows (`rdp_memory_budget`), the rest listed in
   the report. SSH is restored by retyping the `ssh` line (the remote shell state does not come back).
+- [x] (2026-10-26) The "memory would run short" path exercised on real hardware for the first time
+  (8 GB laptop, 6 × 4K in the workset): one restore brought back five of the six RDP sessions and
+  listed the sixth, the next one minutes later brought back all six. `IRUKA_FAKE_AVAILABLE_MB` was
+  not usable for this — it is behind `cfg(debug_assertions)` and a release build ignores it.
 - [ ] Verify the worksets in real use (Linux: in daily use since 2026-10-24 with 6 RDP + 5 SSH, no
-  problem reported yet): the "memory would run short" path (`IRUKA_FAKE_AVAILABLE_MB` in a dev build); the
-  Windows client (Credential Manager; the memory model has not learned Windows figures yet, so the
-  first estimates use the Linux-based default and may let too many sessions through).
+  problem reported yet): the Windows client (Credential Manager; the memory model has not learned
+  Windows figures yet, so the first estimates use the Linux-based default and may let too many
+  sessions through).
+- [ ] The restore limit is about 30% more conservative than reality (2026-10-26, 8 GB machine:
+  714 MB estimated against 525–551 MB measured per 4K session), so it skips sessions that would have
+  fitted, and on a small machine the number restored changes between launches with whatever else is
+  running — the same workset gave five sessions once and six minutes later. Consider dropping
+  `SAFETY_FACTOR` below 1.2, or a lower percentile than the 95th, now that the model is learned;
+  docs/code-notes.md "Memory model".
+- [ ] The memory model learns nothing in a run that opens sessions within the 15 s warm-up, which is
+  exactly what restoring a workset at launch does (2026-10-26). And if every session is then closed,
+  that run's first baseline is taken from a process still holding memory, which skews later
+  observations low. Take the baseline differently (the first sample before any session, or keep one
+  across runs).
 - [ ] Sessions skipped at restore (memory, no password) and sessions that failed to connect are only
   listed in the report; give them placeholders in the session list that reconnect on click.
 - [ ] A dialog before restoring (all / only what fits / cancel) instead of deciding silently, if the
@@ -42,6 +57,9 @@ A quick check on 2026-10-13 found no problems. Still to be checked more carefull
 ## Linux desktop
 
 - [ ] A second start kills the running Iruka (KNOWN_ISSUES.md, 2026-10-24): add `tauri-plugin-single-instance` (focus the existing window) or turn off `enableGTKAppId`; rebuild the deb and check the dock still matches the window.
+- [ ] No window-close or exit handler in `lib.rs`: RDP sessions keep running and emitting frames while the WebView is destroyed. Close every session on `CloseRequested` before the window goes. Untidy on its own merits; whether it has anything to do with the glibc heap-corruption crash below is **not** established (2026-10-26).
+- [ ] Investigate the glibc "corrupted double-linked list" crash (KNOWN_ISSUES.md, found 2026-10-26): first `MALLOC_CHECK_=3 MALLOC_PERTURB_=165` to find out whether the corruption is detected during a run or only while tearing down, then `apport-retrace` with the `libwebkit2gtk-4.1-0` ddeb symbols for a stack. Needs a day of its own (owner, 2026-10-26).
+- [ ] Run tests through `scripts/diag/iruka-logged` from now on. A bare run of the binary or `npm run tauri dev` hides the exit status, and apport ignores unpackaged executables, so a SIGKILL or SIGABRT of a development build passes unnoticed — on 2026-10-26 two abnormal exits (137 and 134) were first read as clean ones.
 
 ## Frame path under load (found 2026-10-25)
 
