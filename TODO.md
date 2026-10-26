@@ -38,6 +38,13 @@ back. The Windows client is mandatory, macOS desirable. The pieces, in order:
   that run's first baseline is taken from a process still holding memory, which skews later
   observations low. Take the baseline differently (the first sample before any session, or keep one
   across runs).
+- [ ] On Windows the memory model measures the working set (`sysinfo`'s `memory()` is
+  `WorkingSetSize`), which Windows trims under pressure, so it learns too low a scale exactly when
+  memory is short (2026-10-26, 8 GB Windows laptop: 1.83 → 1.65 while six 4K sessions were opened,
+  with private bytes still growing about 0.5 GB per session). Use the private bytes / commit
+  (`virtual_memory()` is `PrivateUsage`) on Windows. Likewise `available_memory()` ignores that Windows
+  can make room by compressing and paging: six 4K sessions ran with under 1 GB available
+  (docs/windows-client-log.md "2026-10-26 (evening)").
 - [ ] Sessions skipped at restore (memory, no password) and sessions that failed to connect are only
   listed in the report; give them placeholders in the session list that reconnect on click.
 - [ ] A dialog before restoring (all / only what fits / cancel) instead of deciding silently, if the

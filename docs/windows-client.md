@@ -104,8 +104,11 @@ copyright files). What it does, by hand: put next to `iruka.exe`, from vcpkg's `
 `README.txt`, and zip the folder. 2026-10-16: 26 MB unpacked, 9.7 MB zipped.
 
 At startup on Windows Iruka sets `OPENSSL_MODULES` to its own folder when `legacy.dll` is there and
-the variable is unset (`src-tauri/src/lib.rs`), so NTLM works without any setup (checked 2026-10-16:
-unpacked to another folder, connected to a Windows target, audio played locally).
+the variable is unset (`src-tauri/src/lib.rs`), so NTLM works without any setup. This only works
+since 2026-10-26: before that the variable was set in a way OpenSSL did not see, and the zip logged
+`OpenSSL LEGACY provider failed to load` on connect (KNOWN_ISSUES.md). Check after a change: connect
+from the unpacked folder with `OPENSSL_MODULES` unset; the log must have no `LEGACY` / `md4` / `rc4`
+line.
 
 ## Developing from WSL
 

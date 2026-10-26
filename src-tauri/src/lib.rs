@@ -34,8 +34,18 @@ fn tune_malloc() {
 /// vcpkg's OpenSSL looks for it in the path baked in at build time
 /// (C:\Program Files\OpenSSL\bin), so point it at the folder of iruka.exe when the
 /// DLLs ship next to it (portable zip). An OPENSSL_MODULES set by the user wins.
+///
+/// OpenSSL reads the variable with the C runtime's getenv, which looks at the CRT's own
+/// copy of the environment. std::env::set_var only changes the process environment
+/// (SetEnvironmentVariableW); if the CRT copy was made before run() starts, OpenSSL
+/// never sees it. _wputenv_s updates both (2026-10-26: with set_var alone the legacy
+/// provider failed to load, with the variable set before launch it loaded).
 #[cfg(windows)]
 fn point_openssl_at_exe_dir() {
+    use std::os::windows::ffi::OsStrExt;
+    extern "C" {
+        fn _wputenv_s(name: *const u16, value: *const u16) -> i32;
+    }
     if std::env::var_os("OPENSSL_MODULES").is_some() {
         return;
     }
@@ -43,8 +53,14 @@ fn point_openssl_at_exe_dir() {
         return;
     };
     if dir.join("legacy.dll").exists() {
-        // Still single-threaded here, before any FreeRDP / OpenSSL call.
-        std::env::set_var("OPENSSL_MODULES", dir);
+        let name: Vec<u16> = "OPENSSL_MODULES".encode_utf16().chain([0]).collect();
+        let value: Vec<u16> = dir.as_os_str().encode_wide().chain([0]).collect();
+        // SAFETY: both pointers are NUL-terminated UTF-16 strings that outlive the call;
+        // still single-threaded here, before any FreeRDP / OpenSSL call.
+        let rc = unsafe { _wputenv_s(name.as_ptr(), value.as_ptr()) };
+        if rc != 0 {
+            eprintln!("could not set OPENSSL_MODULES (error {rc}); NTLM may not work");
+        }
     }
 }
 

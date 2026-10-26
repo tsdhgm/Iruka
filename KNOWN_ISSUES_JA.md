@@ -32,10 +32,10 @@
 
 ## Windows: vcpkg の OpenSSL が legacy プロバイダーを見つけられない（NTLM）
 
-- **状態**: 環境変数で回避。`OPENSSL_MODULES` を設定すると警告は消え、Windows の接続先に NLA（NTLM）でつながる（2026-10-16）
+- **状態**: 回避済み。`OPENSSL_MODULES` を設定すると警告は消え、Windows の接続先に NLA（NTLM）でつながる（2026-10-16）。ポータブル zip 向けに Iruka が起動時に自分のフォルダーを設定するが、それが実際に効くのは 2026-10-26 から（対処を参照）。
 - **症状**: 接続時に FreeRDP が `[SSL] {Digest} build or configuration missing: md4: NTLM support not available` と `rc4: … NTLM and autoreconnect cookies will not work` を出す。GNOME Remote Desktop にはつながる。NLA で NTLM を使う Windows の接続先には失敗する見込み。
 - **原因**: OpenSSL 3 では MD4 と RC4 は「legacy」プロバイダー（`legacy.dll`）にある。vcpkg の `libcrypto-3-x64.dll` は `MODULESDIR` = `C:\Program Files\OpenSSL\bin` でビルドされていて、そこを探す。`legacy.dll` が実際にある vcpkg の `bin` は見ない。
-- **対処**: Iruka の起動前に、`OPENSSL_MODULES` を `legacy.dll` のあるフォルダー（vcpkg の `installed\x64-windows\bin`）にする。インストーラーでは `legacy.dll` を `iruka.exe` の横に同梱し、変数が未設定なら Iruka が起動時に自分のフォルダーを `OPENSSL_MODULES` に設定する。
+- **対処**: Iruka の起動前に、`OPENSSL_MODULES` を `legacy.dll` のあるフォルダー（vcpkg の `installed\x64-windows\bin`）にする。ポータブル zip は `legacy.dll` を `iruka.exe` の横に同梱し、変数が未設定なら Iruka が起動時に自分のフォルダーを `OPENSSL_MODULES` に設定する（`src-tauri/src/lib.rs` の `point_openssl_at_exe_dir`）。2026-10-26 まではこれを `std::env::set_var` でしていたが、OpenSSL からは見えていなかった。OpenSSL は C ランタイムが持つ環境変数のコピーを読み（`getenv`）、`SetEnvironmentVariableW` はそのコピーを更新しないため。8 GB のノートで発見: zip から起動すると接続のたびに `OpenSSL LEGACY provider failed to load` が出て、起動前に変数を設定すると警告は消えた。今は両方を更新する `_wputenv_s` で設定する。同日、変数なしで展開したビルドから確認済み（legacy / md4 / rc4 の警告なし、Windows と GNOME Remote Desktop の接続先）。したがって 2026-10-16 の「設定なしで NTLM が動いた」という zip の確認は、この経路を試していなかった。おそらく接続先が NTLM 以外で認証していた。
 
 ## Windows: スマート アプリ コントロールが手元でビルドした / 署名のない iruka.exe を止める
 

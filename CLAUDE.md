@@ -136,15 +136,30 @@ KNOWN_ISSUES.md and TODO.md.
   through `scripts/diag/iruka-logged`. A bare run of the binary hides the exit status and apport
   ignores unpackaged executables, so two abnormal exits (137 = SIGKILL, 134 = SIGABRT) were first
   misread as clean ones.
-  **Next (owner, 2026-10-26)**: the **Windows half** on the same laptop (the portable zip; check
-  WebView2 on Windows 10 and Smart App Control, paging under load, how many 1920×1080 sessions fit).
-  Still open after that: the two Linux crashes above, repeat the 10 s freeze with a release build
+- **2026-10-26 (evening): the 8 GB laptop, Windows half done**, on a different machine (Dell
+  Inspiron 13-5378, i5-7200U 2 cores / 4 threads, 7.9 GiB, Windows 11 Pro 24H2, 24–32 GB page file;
+  Windows 10 dropped by the owner, end of support). vcpkg set up fresh (44.9 min, now **FreeRDP
+  3.32.2**), release build 14.2 min, zip in `C:\Users\tosihide\Foundry\dist`. **Six 3840×2160
+  sessions run on 7.9 GiB**, with and without Chrome playing Prime Video beside them; nothing crashed,
+  and closing the window with six sessions open exits cleanly (code 0; the Linux crash on close does
+  not happen on Windows). The first session costs about 1.2 GB, each further one about 0.5–0.6 GB of
+  private bytes (close to Linux); Windows absorbs the rest by trimming working sets into the
+  compressed store and page file (at most 0.9 GB of page file used). **The limit is the 2-core CPU**:
+  "jerky and slow to respond, but does not crash" (owner), 5 s frame-ack timeouts, `lag_ms_max`
+  1–4 s. Numbers in docs/windows-client-log.md "2026-10-26 (evening)" and docs/code-notes.md "Memory
+  model". New TODO: on Windows the memory model reads the working set, so it learns low under
+  pressure. **Fixed**: the portable zip never loaded OpenSSL's legacy provider (md4 / rc4, so no NTLM)
+  — `std::env::set_var` did not reach OpenSSL's CRT `getenv`; now `_wputenv_s` in
+  `point_openssl_at_exe_dir`, verified to a Windows and an Ubuntu target (KNOWN_ISSUES.md). On this
+  machine (outside the repo): `C:\Users\tosihide\Foundry\memlog.ps1` samples memory every 5 s into
+  `memlog.csv`; `dist\iruka-fixtest` was the test copy of the fix. No worksets saved here yet.
+  Still open: the two Linux crashes above, repeat the 10 s freeze with a release build
   (copy cost vs. WebView2 transfer), and the reconnect and back-pressure tests from 2026-10-25.
 - The deb from `scripts/make-deb.sh` is installed on the Ubuntu box (`/usr/bin/iruka`; installed
   2026-10-24 on the new box with `apt install`; on a box that already has it, reinstalling the same
   version 0.1.0 needs `sudo dpkg -i`, since `apt install` does not replace a same-version package);
   the dev desktop entry was removed since the deb's entry also matches dev builds.
-- Tested so far: clients on Ubuntu 26.04 LTS and Windows 11 24H2 / build 26200; targets Windows 11 Pro, Ubuntu
+- Tested so far: clients on Ubuntu 26.04 LTS and Windows 11 24H2 (builds 26100 and 26200); targets Windows 11 Pro, Ubuntu
   GNOME Remote Desktop, Apple Silicon Mac running clintcan/macrdp.
 - Open items live in TODO.md; do not keep a separate list elsewhere.
 

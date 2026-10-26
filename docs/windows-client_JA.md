@@ -104,8 +104,10 @@ npm install
 2026-10-16: 展開後 26 MB、zip で 9.7 MB。
 
 Windows では起動時に、`legacy.dll` が同じフォルダーにあり `OPENSSL_MODULES` が未設定なら、Iruka が
-自分のフォルダーをこの変数に設定する（`src-tauri/src/lib.rs`）。設定なしで NTLM が動く（2026-10-16 確認:
-別のフォルダーに展開して Windows の接続先につながり、音声もローカルで鳴った）。
+自分のフォルダーをこの変数に設定する（`src-tauri/src/lib.rs`）。設定なしで NTLM が動く。これが実際に
+効くのは 2026-10-26 から。それまでは OpenSSL から見えないやり方で設定していて、zip から接続すると
+`OpenSSL LEGACY provider failed to load` が出ていた（KNOWN_ISSUES_JA.md）。変更後の確認: 展開した
+フォルダーから `OPENSSL_MODULES` なしで接続し、ログに `LEGACY` / `md4` / `rc4` の行がないこと。
 
 ## WSL から開発する
 

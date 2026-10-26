@@ -225,3 +225,77 @@ The cleaned-up procedure is in [windows-client.md](windows-client.md).
   the WebView (`lag_ms_max`), up to 9.6 s during the freeze; the 5 s frame-ack timeout fired
   repeatedly. To repeat with the release build. Memory questions that came out of it:
   [memory-reduction.md](memory-reduction.md).
+## 2026-10-26 (evening): an 8 GB Windows laptop
+
+- Machine: Dell Inspiron 13-5378 (i5-7200U, 2 cores / 4 threads, 7.9 GiB), Windows 11 Pro 24H2
+  build 26100, WebView2 155, Smart App Control off. Not the ThinkPad of the Ubuntu half. VS Community
+  2026 C++ tools, Rust 1.99.1 and Node 26.12.1 were already installed, and so was the clone with
+  `node_modules`; vcpkg and `iruka-env.ps1` were set up fresh.
+- `vcpkg install "freerdp[client]:x64-windows" "pkgconf:x64-windows"`: 44.9 min (OpenSSL alone
+  36 min, FreeRDP 6 min). vcpkg now gives **FreeRDP 3.32.2** (3.32.1 before). The slow OpenSSL build
+  is possibly Kaspersky (`avp`) scanning every new file; not verified.
+- `tauri build --no-bundle`: 14.2 min (13 min 58 s for cargo). `scripts/make-zip.ps1` gives the same
+  9.7 MB zip (27.0 MB unpacked), unpacked to `C:\Users\tosihide\Foundry\dist`; it starts from there
+  (about 290–370 MB with no session).
+- The owner decided not to check Windows 10 at all (end of support).
+- Before the measurement, at idle: about 2.3–2.6 GB available, with Chrome, Kaspersky and Dell
+  SupportAssist running (Dropbox closed). The page file was system managed (3.3 GB, commit limit
+  11.4 GB); the owner's 24–32 GB setting had not taken effect, so the session stopped for a reboot.
+  A sampler (`C:\Users\tosihide\Foundry\memlog.ps1`, outside the repo) writes Iruka + WebView2 tree,
+  Chrome, available memory, commit and page-file use every 5 s into `memlog.csv`.
+- After the reboot: page file 24–32 GB, commit limit 32.6 GB.
+
+### Six 3840×2160 sessions on 7.9 GiB, release build from the unpacked zip
+
+The owner opened the sessions one by one by hand (the profiles connect at the local 4K size, not
+1920×1080 as planned). Private bytes add up the commit Iruka actually holds; the working set is what
+Windows lets stay in RAM.
+
+| Sessions | Chrome closed: iruka.exe private / WebView2 private / `used_mb` | Chrome open (Prime Video playing): same / page file in use |
+| --- | --- | --- |
+| 0 | 7 MB / 160 MB / 400 | 7 MB / 160 MB / 384; Chrome 3.7 GB working set, 0.75 GB available |
+| 1 | 540 MB / 650 MB / 1,500–1,600 | 540 MB / 600–720 MB / 1,100; 70 MB |
+| 2 | 1.18 GB / 980 MB / 2,050–2,110 | 1.05–1.37 GB / 850–1,010 MB / 1,940; 540 MB |
+| 3 | 1.56 GB / 1.02 GB / 2,650–2,720 | 1.56–1.86 GB / 1.0–1.24 GB / 1,940; 537 MB |
+| 4 | 2.07 GB / 1.13 GB / 2,560–2,650 | 2.07–2.34 GB / 1.0–1.33 GB / 1,730; 528 MB |
+| 5 | 2.6 GB / 1.27–1.39 GB / 2,480–2,540 | 2.58–2.79 GB / 1.19–1.53 GB / 1,720; 910 MB |
+| 6 | 3.1–3.4 GB / 1.35–1.55 GB / 2,400–2,700 | 3.1–3.4 GB / 1.15–1.48 GB / 1,720; 884 MB |
+
+- All six run in both cases and nothing crashed. The first 4K session costs about 1.2 GB (as on the
+  32 GB box), every further one about 0.5–0.6 GB of private bytes, close to Linux's 525–551 MB.
+  Iruka holds about 4.5–4.9 GB in all with six.
+- **Memory is not the limit.** Without Chrome, from the fourth session Windows trims Iruka's working
+  set (iruka.exe 1.35 → 0.5 GB) into the compressed store (Memory Compression 335 → 610 MB); the page
+  file stays at 40 MB and commit at 11 GB of 32.6 GB. With Chrome, Windows trims both Chrome
+  (3.7 → 1.3 GB working set) and Iruka, the page file grows to about 0.9 GB (most of it when the second
+  and the fifth session connected), commit reaches 14.3 GB. The 24–32 GB page file is far more than
+  needed.
+- **The 2-core CPU is.** The owner: "jerky and slow to respond, but does not crash" with six. Without
+  Chrome, two whole-window stalls (all six sessions' 5 s frame-ack timeouts at the same second, 20:00:04
+  and 20:00:55) and `lag_ms_max` averaging 1.0 s (max 2.2 s); with Chrome, 44 timeouts, recurring every
+  5 s for four to five sessions at once while the thumbnails kept drawing, `lag_ms_max` averaging 2.2 s
+  (max 4.0 s). Up to five sessions with Chrome had no timeout at all. The 5 s sampler stretched to
+  8–12 s. CPU use itself was not recorded.
+- Chrome's Prime Video played smoothly beside three sessions and paused for a moment when the fifth
+  connected (the page file grew by 380 MB at that point). It also pauses while Iruka is full screen,
+  which is Chrome hiding an occluded page, not Iruka.
+- Closing the window with six sessions open: clean exit (code 0) both times, Iruka's WebView2
+  processes gone within seconds. The Linux crash on close (KNOWN_ISSUES.md) does not happen here.
+- Windows Error Reporting logged `RADAR_PRE_LEAK_64` (the leak detector's report on a process whose
+  commit keeps growing; not a crash) for iruka.exe at 20:04 and for msedgewebview2.exe at 20:08.
+- The memory model learns from the working set on Windows (`sysinfo`'s `memory()` is `WorkingSetSize`),
+  so under pressure it reads low: the learned scale fell from 1.83 to 1.65 during the Chrome-less run.
+  The second run opened its first session within the 15 s warm-up and learned nothing (TODO.md).
+- No crash, no TDR: the owner thought a graphics-driver error had appeared over Claude Code during
+  the Chrome run; the System log has no display-driver event (4101) for that time.
+
+### The portable zip never loaded OpenSSL's legacy provider (fixed)
+
+- Both runs logged `OpenSSL LEGACY provider failed to load, no md4 support available!` and the md4 /
+  rc4 warnings on connect, although `legacy.dll` sits next to `iruka.exe` and Iruka sets
+  `OPENSSL_MODULES` at startup. The Windows target still connected (not through NTLM, apparently).
+- With the variable set before launch the warnings were gone, so the startup code was at fault:
+  `std::env::set_var` changes the process environment only, while OpenSSL reads the C runtime's copy
+  with `getenv`. Fixed with `_wputenv_s` (updates both); rebuilt in 2 min 43 s; from the unpacked
+  folder without the variable no legacy / md4 / rc4 line, to both a Windows and an Ubuntu target.
+  KNOWN_ISSUES.md "vcpkg's OpenSSL does not find its legacy provider".
