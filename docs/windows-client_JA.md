@@ -93,7 +93,9 @@ npm install
 .\node_modules\.bin\tauri.cmd build --no-bundle   # src-tauri\target\release\iruka.exe。フロントエンドを埋め込み（約 10 分）
 ```
 
-その後、vcpkg の `installed\x64-windows\bin` から `freerdp3.dll`、`freerdp-client3.dll`、`winpr3.dll`、
+その後、`powershell -ExecutionPolicy Bypass -File scripts\make-zip.ps1` で全部を集めて
+`release\iruka-<version>-windows-x64.zip` にする（2026-10-26 から。FreeRDP と OpenSSL の著作権表示ファイルも
+入れる）。手作業でやる場合の中身: vcpkg の `installed\x64-windows\bin` から `freerdp3.dll`、`freerdp-client3.dll`、`winpr3.dll`、
 `libcrypto-3-x64.dll`、`libssl-3-x64.dll`、`legacy.dll`、`z.dll`、`cjson.dll` を `iruka.exe` の横に置き
 （`pkgconf-8.dll` と `.pdb` は不要）、`LICENSE.txt` と短い `README.txt` を添えてフォルダーごと zip にする。
 2026-10-16: 展開後 26 MB、zip で 9.7 MB。

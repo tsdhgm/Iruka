@@ -93,7 +93,9 @@ For use without a development environment (unsigned; see TODO.md for the distrib
 .\node_modules\.bin\tauri.cmd build --no-bundle   # src-tauri\target\release\iruka.exe, frontend embedded (about 10 min)
 ```
 
-Then put next to `iruka.exe`, from vcpkg's `installed\x64-windows\bin`: `freerdp3.dll`,
+Then `powershell -ExecutionPolicy Bypass -File scripts\make-zip.ps1` stages and zips everything into
+`release\iruka-<version>-windows-x64.zip` (since 2026-10-26; it also adds the FreeRDP and OpenSSL
+copyright files). What it does, by hand: put next to `iruka.exe`, from vcpkg's `installed\x64-windows\bin`: `freerdp3.dll`,
 `freerdp-client3.dll`, `winpr3.dll`, `libcrypto-3-x64.dll`, `libssl-3-x64.dll`, `legacy.dll`,
 `z.dll`, `cjson.dll` (not `pkgconf-8.dll`, not the `.pdb` files), plus `LICENSE.txt` and a short
 `README.txt`, and zip the folder. 2026-10-16: 26 MB unpacked, 9.7 MB zipped.

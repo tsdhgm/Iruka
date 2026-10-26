@@ -39,8 +39,8 @@
 
 ## Windows: スマート アプリ コントロールが手元でビルドした / 署名のない iruka.exe を止める
 
-- **状態**: 2026-10-26、新しく入れた Windows 11 Pro（ビルド 26200）で発見。開発用 PC ではスマート アプリ コントロールをオフにして回避。Iruka のバグではないが、署名のないビルドすべてに関わる。
-- **症状**: `tauri dev` のビルドは通るが、`cargo run` が `could not execute process target\debug\iruka.exe (never executed)` / `An Application Control policy has blocked this file. (os error 4551)` で止まる。エクスプローラーから起動すると「スマート アプリ コントロールによってこのアプリの一部がブロックされました」と出る。
+- **状態**: 2026-10-26、新しく入れた Windows 11 Pro（ビルド 26200）で発見。開発用 PC ではスマート アプリ コントロールをオフにして回避（同日に実施）。Iruka のバグではないが、署名のないビルドすべてに関わる。
+- **症状**: `tauri dev` のビルドは通るが、`cargo run` が `could not execute process target\debug\iruka.exe (never executed)` / `An Application Control policy has blocked this file. (os error 4551)` で止まる。エクスプローラーから起動すると「スマート アプリ コントロールによってこのアプリの一部がブロックされました」と出る。ビルドそのものも壊すことがある: `tauri build` が `error[E0463]: can't find crate for asn1_rs_derive` で失敗した。`rustc.exe` が、ビルドしたばかりの手続き型マクロの DLL を読み込むのを止められたため（イベント ビューアー → Microsoft → Windows → CodeIntegrity → Operational のイベント 3033/3077）。判定はクラウドの評判サービスから来るので、同じファイルが通ったり止められたりする（同じ日の朝、開発ビルドの `iruka.exe` は後で動いたが、リリースビルドは止められた）。
 - **原因**: スマート アプリ コントロール（Windows セキュリティ → アプリとブラウザーの制御）は、Windows 11 をクリーンインストールすると多くの PC でオンになる。信頼された証明書で署名されたコードか、Microsoft のクラウドの評判サービスが知っているコードしか実行しない。ビルドしたばかりの `iruka.exe` はどちらでもない。ファイルやフォルダー単位の例外はなく、自己署名の証明書も信頼されない。（SmartScreen とは別物。SmartScreen はダウンロードしたファイルに警告するだけで、「実行」で通せる。）
 - **対処**: 開発では、スマート アプリ コントロールをオフにする（設定 → プライバシーとセキュリティ → Windows セキュリティ → アプリとブラウザーの制御 → スマート アプリ コントロールの設定 → オフ）。以前はいったんオフにすると Windows を入れ直さない限りオンに戻せなかった。新しいビルドでは戻せるという話もあるが未確認。配布では、スマート アプリ コントロールがオンの利用者は署名のないポータブル zip も実行できない。避けられるのは信頼された証明書でのコード署名だけ（TODO_JA.md の Windows インストーラー）。
 
