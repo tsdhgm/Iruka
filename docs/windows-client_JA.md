@@ -65,6 +65,22 @@ npm install
 - cargo のフラグは 2 つ目の `--` の後に書く。`npm run tauri dev -- --no-default-features` は動かない
   （npm がフラグを Tauri CLI に渡し、CLI が受け付けない）。
 - 初回のビルドは約 7 分。2 回目以降は 25〜60 秒。
+- **起動直後に赤字で出る `NativeCommandError` / `RemoteException` は問題ない。** `2>&1` を付けると
+  （たとえば `Tee-Object` でログを残すとき）、Windows PowerShell 5.1 は外部プログラムが stderr に書いた
+  各行をエラーレコードに包み、最初の 1 行を赤字で `At line:1 char:…`、
+  `CategoryInfo : NotSpecified: (… Running BeforeDevCommand (`npm run dev`) …) [], RemoteException`、
+  `FullyQualifiedErrorId : NativeCommandError` と表示する。「Exception（例外）」「Error」という言葉が
+  あっても、何も失敗していない。Tauri と cargo が進行状況（「Running …」「Compiling …」「Finished …」）を
+  stderr に書いているだけで、メッセージの本体は括弧の中にある。`RemoteException` は PowerShell が
+  「別のプログラムの stderr から来た文字列」に付ける名前にすぎない。表示を消したければ、合流を cmd に
+  任せる。ログにはすべて残る:
+
+  ```powershell
+  [Console]::OutputEncoding = [Text.Encoding]::UTF8   # 任意: これがないと vite の「➜」が「Ô×£」と化ける
+  cmd /c ".\node_modules\.bin\tauri.cmd dev 2>&1" | Tee-Object -FilePath $env:USERPROFILE\iruka-dev.log
+  ```
+
+  PowerShell 7（`pwsh`）はこの包み込みをしない。
 - npm 11 以降は esbuild の postinstall スクリプトについて「not yet covered by allowScripts」と警告し、
   実行しない。問題はない: esbuild の実行ファイルは `@esbuild/win32-x64` パッケージから入り、
   `npm run build` は動く。

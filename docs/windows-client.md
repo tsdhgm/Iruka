@@ -65,6 +65,22 @@ npm install
 - Cargo flags go after the second `--`. `npm run tauri dev -- --no-default-features` does not work
   (npm hands the flag to the Tauri CLI, which rejects it).
 - First build about 7 minutes; later builds 25–60 s.
+- **Red `NativeCommandError` / `RemoteException` lines at startup are harmless.** With `2>&1` (for
+  example to keep a log with `Tee-Object`), Windows PowerShell 5.1 wraps each line a native program
+  writes to stderr in an error record, and prints the first one in red with `At line:1 char:…`,
+  `CategoryInfo : NotSpecified: (… Running BeforeDevCommand (`npm run dev`) …) [], RemoteException`
+  and `FullyQualifiedErrorId : NativeCommandError`. Despite the words "Exception" and "Error",
+  nothing failed: Tauri and cargo simply write their progress messages ("Running …", "Compiling …",
+  "Finished …") to stderr, and the message itself is inside the parentheses. `RemoteException` is
+  only PowerShell's name for "text that came from another program's stderr". To avoid the noise, let
+  cmd do the redirection; the log keeps everything:
+
+  ```powershell
+  [Console]::OutputEncoding = [Text.Encoding]::UTF8   # optional: vite's "➜" otherwise shows as "Ô×£"
+  cmd /c ".\node_modules\.bin\tauri.cmd dev 2>&1" | Tee-Object -FilePath $env:USERPROFILE\iruka-dev.log
+  ```
+
+  PowerShell 7 (`pwsh`) does not do this wrapping at all.
 - npm 11 and later warn that esbuild's postinstall script is "not yet covered by allowScripts" and
   skip it. Harmless: the esbuild binary comes from the `@esbuild/win32-x64` package, and
   `npm run build` works.
