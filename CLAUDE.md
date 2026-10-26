@@ -106,8 +106,13 @@ KNOWN_ISSUES.md and TODO.md.
   compression ratio, dropped frames or H.264 do not save memory; candidate levers; the Windows build
   has no H.264). Seen with 6 × 4K RDP in a **debug** build: about 7 GB, a ~10 s whole-window freeze
   while one remote sent full 4K frames (`copy_ms` 220–380 ms, ~1 s per 32 MB frame to the WebView).
-  **Next**: repeat that with the release build (copy cost vs. WebView2 transfer), then the reconnect
-  and back-pressure tests from 2026-10-25.
+  **Next (owner, 2026-10-26)**: try Iruka on an old 8 GB laptop (a carry-around PC whose loss would
+  not hurt), **Ubuntu first, then Windows** (the zip; check WebView2 on Windows 10 and Smart App
+  Control). Things to see: whether the restore memory limit skips RDP sessions on a really small
+  machine (only faked with `IRUKA_FAKE_AVAILABLE_MB` so far), OOM-killer / SIGKILL behaviour on
+  Linux, paging on Windows, how many 1920×1080 sessions fit; record the counts, the toolbar memory
+  readout and the `iruka_mem` log lines. Still open after that: repeat the freeze with the release
+  build (copy cost vs. WebView2 transfer), the reconnect and back-pressure tests from 2026-10-25.
 - The deb from `scripts/make-deb.sh` is installed on the Ubuntu box (`/usr/bin/iruka`; installed
   2026-10-24 on the new box with `apt install`; on a box that already has it, reinstalling the same
   version 0.1.0 needs `sudo dpkg -i`, since `apt install` does not replace a same-version package);
