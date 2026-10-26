@@ -189,3 +189,19 @@ The cleaned-up procedure is in [windows-client.md](windows-client.md).
 - The keyring round trip (`cargo test -- --ignored credentials`) passes against the Windows
   Credential Manager.
 - docs/windows-client.md: "Two ways to develop" (native PowerShell and from WSL) added.
+### Workset restore right after launch failed (fixed)
+
+- Restoring a workset (6 RDP + 5 SSH) right after launch: every RDP session failed within about
+  70 ms with `getaddrinfo(10.0.1.112) failed` → `ERRCONNECT_DNS_NAME_NOT_FOUND`, although the host is
+  an IP address. Opening the same profiles one by one from "Saved" worked, which first looked like
+  load-related TCP failures.
+- Cause: on Windows every Winsock call fails until the process has called `WSAStartup`, and FreeRDP
+  leaves that to the application (wfreerdp does it in its `main`). A manual connect first runs the
+  "is this PC" check (`rdp_is_self`), whose Rust `std::net` call starts Winsock for the whole
+  process; a restore skips that check.
+- Fix: `iruka_rdp_new` in `native/freerdp_bridge.c` calls `WSAStartup(2.2)` on Windows (reference
+  counted, so once per session is fine). Including `<winsock2.h>` before the FreeRDP headers broke
+  `freerdp/rail.h` (C2059); `<winpr/winsock.h>` after them works. Verified: all 6 RDP sessions
+  restored right after launch.
+- Also added the same day: a memory readout in the toolbar and the Print Screen button moved to the
+  far left (README).

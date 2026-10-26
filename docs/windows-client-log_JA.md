@@ -186,3 +186,17 @@ Windows でクライアントとして Iruka を動かすまでの作業を、�
   `src-tauri/src/rdp/mod.rs` を修正（空のホストはローカルではない）。
 - keyring の往復テスト（`cargo test -- --ignored credentials`）は Windows の資格情報マネージャーで通る。
 - docs/windows-client_JA.md に「開発の 2 つのやり方」（ネイティブ PowerShell と WSL から）を追加。
+### 起動直後のワークセット復元が失敗する（修正済み）
+
+- 起動直後にワークセット（RDP 6 + SSH 5）を復元すると、RDP がすべて約 70 ms で
+  `getaddrinfo(10.0.1.112) failed` → `ERRCONNECT_DNS_NAME_NOT_FOUND` で失敗した。ホストは IP アドレス。
+  「Saved」から 1 つずつ開くとつながるので、最初は負荷で TCP が失敗していると見えた。
+- 原因: Windows ではプロセスが `WSAStartup` を呼ぶまで Winsock の呼び出しはすべて失敗する。FreeRDP は
+  これをアプリに任せている（wfreerdp は `main` で呼ぶ）。手で接続すると先に「この PC か」の確認
+  （`rdp_is_self`）が走り、その Rust の `std::net` がプロセス全体の Winsock を開始していた。復元では
+  この確認を通らない。
+- 修正: `native/freerdp_bridge.c` の `iruka_rdp_new` で、Windows では `WSAStartup(2.2)` を呼ぶ（参照
+  カウントなのでセッションごとに呼んでよい）。FreeRDP のヘッダーより前に `<winsock2.h>` を入れると
+  `freerdp/rail.h` が壊れた（C2059）。後ろで `<winpr/winsock.h>` を入れれば通る。確認: 起動直後の復元で
+  RDP 6 本ともつながった。
+- 同じ日に追加: ツールバーのメモリ表示、Print Screen ボタンを左端へ移動（README）。

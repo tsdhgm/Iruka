@@ -29,6 +29,10 @@
 #include <freerdp/scancode.h>
 #include <winpr/string.h>
 #include <winpr/user.h>
+#ifdef _WIN32
+#include <winpr/winsock.h>
+#pragma comment(lib, "ws2_32.lib")
+#endif
 #ifdef __linux__
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -513,6 +517,19 @@ static void iruka_client_free(freerdp* instance, rdpContext* context)
  */
 rdpContext* iruka_rdp_new(int argc, char** argv)
 {
+#ifdef _WIN32
+	/*
+	 * FreeRDP leaves Winsock start-up to the application (wfreerdp calls WSAStartup in its main).
+	 * Without it every getaddrinfo fails, even for an IP address (ERRCONNECT_DNS_NAME_NOT_FOUND).
+	 * It used to work by accident: the "is this PC" check before a manual connect goes through
+	 * Rust's std::net, which starts Winsock for the whole process; restoring a workset right
+	 * after launch skips that check (2026-10-26). WSAStartup is reference counted, so calling
+	 * it for every session is harmless; WSACleanup is left to process exit.
+	 */
+	WSADATA wsa;
+	if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
+		return NULL;
+#endif
 	RDP_CLIENT_ENTRY_POINTS entry = { 0 };
 	entry.Version = RDP_CLIENT_INTERFACE_VERSION;
 	entry.Size = sizeof(RDP_CLIENT_ENTRY_POINTS_V1);
