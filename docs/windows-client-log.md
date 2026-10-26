@@ -205,3 +205,23 @@ The cleaned-up procedure is in [windows-client.md](windows-client.md).
   restored right after launch.
 - Also added the same day: a memory readout in the toolbar and the Print Screen button moved to the
   far left (README).
+### Smart App Control, release build and portable zip
+
+- With Smart App Control still on, the release build failed: `error[E0463]: can't find crate for
+  asn1_rs_derive`. Event Viewer → CodeIntegrity → Operational showed events 3033/3077: `rustc.exe`
+  was refused loading the freshly built proc-macro DLL `asn1_rs_derive-….dll` ("did not meet the
+  Enterprise signing level requirements"). Earlier the same morning the debug `iruka.exe` had been
+  blocked first and then ran; the verdicts come from a cloud reputation service and vary. The owner
+  turned Smart App Control off; the release build then passed (10 min 51 s).
+- `scripts/make-zip.ps1` added (stages the release exe, the 8 vcpkg DLLs, LICENSE, the FreeRDP and
+  OpenSSL copyright files and a README, then zips): `iruka-0.1.0-windows-x64.zip`, 9.7 MB, 27 MB
+  unpacked, copied to `C:\Users\tosihide\Foundry\dist`. A `dumpbin /dependents` walk confirmed every
+  non-system DLL is bundled. The owner unpacked it elsewhere and it runs.
+
+### Seen in the debug build with 6 × 3840×2160 RDP
+
+- About 7 GB for Iruka as a whole; a whole-window freeze of about 10 s while one remote kept sending
+  full 4K frames: `copy_ms` 220–380 ms per 32 MB frame (unoptimised debug code), about 1 s from send to
+  the WebView (`lag_ms_max`), up to 9.6 s during the freeze; the 5 s frame-ack timeout fired
+  repeatedly. To repeat with the release build. Memory questions that came out of it:
+  [memory-reduction.md](memory-reduction.md).

@@ -200,3 +200,23 @@ Windows でクライアントとして Iruka を動かすまでの作業を、�
   `freerdp/rail.h` が壊れた（C2059）。後ろで `<winpr/winsock.h>` を入れれば通る。確認: 起動直後の復元で
   RDP 6 本ともつながった。
 - 同じ日に追加: ツールバーのメモリ表示、Print Screen ボタンを左端へ移動（README）。
+### スマート アプリ コントロール、リリースビルド、ポータブル zip
+
+- スマート アプリ コントロールがオンのままだと、リリースビルドが `error[E0463]: can't find crate for
+  asn1_rs_derive` で失敗した。イベント ビューアー → CodeIntegrity → Operational にイベント 3033/3077:
+  `rustc.exe` がビルドしたばかりの手続き型マクロの DLL `asn1_rs_derive-….dll` を読み込むのを拒まれていた
+  （「Enterprise signing level requirements を満たさない」）。同じ日の朝、開発ビルドの `iruka.exe` は最初
+  止められ、後で動いた。判定はクラウドの評判サービスから来るので一定しない。オーナーがスマート アプリ
+  コントロールをオフにし、リリースビルドは通った（10 分 51 秒）。
+- `scripts/make-zip.ps1` を追加（リリースの exe、vcpkg の DLL 8 個、LICENSE、FreeRDP と OpenSSL の著作権
+  表示、README を集めて zip にする）: `iruka-0.1.0-windows-x64.zip`、9.7 MB、展開後 27 MB。
+  `C:\Users\tosihide\Foundry\dist` にもコピー。`dumpbin /dependents` でたどり、システム以外の DLL が
+  すべて入っていることを確認。オーナーが別の場所に展開して動作を確認。
+
+### 開発ビルドで 3840×2160 の RDP を 6 本開いて見たこと
+
+- Iruka 全体で約 7 GB。あるリモートが 4K の画面全体を送り続けている間、ウィンドウ全体が約 10 秒
+  固まった: 32 MB のフレーム 1 枚の `copy_ms` が 220〜380 ms（最適化なしの開発ビルド）、送信から
+  WebView に届くまで約 1 秒（`lag_ms_max`）、固まっている間は最大 9.6 秒。5 秒のフレーム確認の
+  タイムアウトが繰り返し発動。リリースビルドで再確認する。ここから出たメモリの疑問:
+  [memory-reduction_JA.md](memory-reduction_JA.md)。

@@ -93,13 +93,26 @@ KNOWN_ISSUES.md and TODO.md.
   link drop**; test recipe: on a remote, `sudo iptables -I INPUT -s <client ip> -j DROP; sleep 20
   (or 75); sudo iptables -D INPUT -s <client ip> -j DROP`. The back-pressure build itself has had
   only that one short run (no `frame not acknowledged in time` / `lag_ms_max` numbers yet).
-  **Next (owner, 2026-10-26)**: boot the USB SSD on the Windows machine's hardware, build, verify,
-  test both.
+  (The plan for 2026-10-26 was to test both from the USB SSD on the Windows hardware; the day went
+  to the native Windows setup instead, see the next item. Both tests are still open.)
+- **2026-10-26: native Windows development set up and used** (fresh Windows 11 Pro build 26200,
+  32 GB box; docs/windows-client-log.md "2026-10-26"). Smart App Control was on and blocked the
+  built `iruka.exe` and even `rustc` loading proc-macro DLLs; the owner turned it **off**
+  (KNOWN_ISSUES.md). Fixed: workset restore right after launch failed on Windows (Winsock never
+  started: `WSAStartup` now in `iruka_rdp_new`); `is_local_host("")` true on Windows. Added: toolbar
+  memory readout (`memory_status`: selected RDP session's estimated share / Iruka / RAM) and the
+  Print Screen button moved to the far left; `scripts/make-zip.ps1` (portable zip, verified by the
+  owner unpacked elsewhere). Study only, nothing implemented: docs/memory-reduction.md (why
+  compression ratio, dropped frames or H.264 do not save memory; candidate levers; the Windows build
+  has no H.264). Seen with 6 × 4K RDP in a **debug** build: about 7 GB, a ~10 s whole-window freeze
+  while one remote sent full 4K frames (`copy_ms` 220–380 ms, ~1 s per 32 MB frame to the WebView).
+  **Next**: repeat that with the release build (copy cost vs. WebView2 transfer), then the reconnect
+  and back-pressure tests from 2026-10-25.
 - The deb from `scripts/make-deb.sh` is installed on the Ubuntu box (`/usr/bin/iruka`; installed
   2026-10-24 on the new box with `apt install`; on a box that already has it, reinstalling the same
   version 0.1.0 needs `sudo dpkg -i`, since `apt install` does not replace a same-version package);
   the dev desktop entry was removed since the deb's entry also matches dev builds.
-- Tested so far: clients on Ubuntu 26.04 LTS and Windows 11 24H2; targets Windows 11 Pro, Ubuntu
+- Tested so far: clients on Ubuntu 26.04 LTS and Windows 11 24H2 / build 26200; targets Windows 11 Pro, Ubuntu
   GNOME Remote Desktop, Apple Silicon Mac running clintcan/macrdp.
 - Open items live in TODO.md; do not keep a separate list elsewhere.
 
