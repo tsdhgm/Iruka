@@ -22,10 +22,14 @@ KNOWN_ISSUES.md and TODO.md.
   appending to it).
 - **Windows machine setup**: two ways, both building natively (docs/windows-client.md "Two ways to
   develop"). **Native** (from 2026-10-26): Claude Code for Windows in PowerShell, clone at
-  `C:\Users\tosihide\Iruka` (Git for Windows, remote `origin` = GitHub), VS Community 2026 C++ tools,
-  Node 26. **From WSL** (2026-10-16): Claude Code in WSL drives the build through `powershell.exe`;
-  clone at `C:\Users\tosihide\Foundry\Iruka` (remotes `wsl` = the WSL repository, `origin` = GitHub;
-  commit in WSL, then `git pull wsl main` there); see "Developing from WSL". Shared: vcpkg at
+  `C:\Users\tosihide\Foundry\iruka` (moved there from `C:\Users\tosihide\Iruka` after 2026-10-26; Git
+  for Windows, remote `origin` = GitHub only), VS Community 2026 C++ tools, Node 26. **From WSL**
+  (2026-10-16, not set up on the current Windows install): Claude Code in WSL drives the build
+  through `powershell.exe`; it used a clone at `C:\Users\tosihide\Foundry\Iruka`, which is the
+  same folder as the native clone now (Windows paths ignore case), so a WSL setup would work on
+  that clone from `/mnt/c/Users/tosihide/Foundry/iruka`, never building at the same time as the
+  native side; back then it had a second remote `wsl` = the WSL repository (commit in WSL, then
+  `git pull wsl main` there); see "Developing from WSL". Shared: vcpkg at
   `C:\Users\tosihide\Foundry\vcpkg`, environment in `C:\Users\tosihide\Foundry\iruka-env.ps1`
   (dot-source it before building), zips in `C:\Users\tosihide\Foundry\dist`. Stop `tauri dev` before
   touching a clone from the other side.

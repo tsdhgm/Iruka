@@ -28,7 +28,7 @@ vcpkg の FreeRDP 3.32.1 で Ubuntu（GNOME Remote Desktop）に接続できた�
 | | ネイティブ（PowerShell） | WSL から |
 | --- | --- | --- |
 | シェル、Claude Code | PowerShell、Windows 版 Claude Code | WSL の bash、Linux 版 Claude Code |
-| clone | Windows のファイルシステムのどこでも。例: `%USERPROFILE%\Iruka` | Windows のファイルシステム上。例: `%USERPROFILE%\Foundry\Iruka`（WSL からは `/mnt/c/...`） |
+| clone | Windows のファイルシステムのどこでも。例: `%USERPROFILE%\Foundry\iruka` | Windows のファイルシステム上。ネイティブ構成と同じ clone でもよい（WSL からは `/mnt/c/Users/<user>/Foundry/iruka`） |
 | Git | Git for Windows | WSL の git |
 | ビルドのコマンド | 環境スクリプトを読み込んでから直接実行 | `powershell.exe` 経由。[WSL から開発する](#wsl-から開発する) 参照 |
 
@@ -65,6 +65,9 @@ npm install
 - cargo のフラグは 2 つ目の `--` の後に書く。`npm run tauri dev -- --no-default-features` は動かない
   （npm がフラグを Tauri CLI に渡し、CLI が受け付けない）。
 - 初回のビルドは約 7 分。2 回目以降は 25〜60 秒。
+- clone を移動したり名前を変えたりしたら、`src-tauri` で一度 `cargo clean` する。Tauri のビルドスクリプトは
+  古い `target` フォルダーへの絶対パスを覚えているので、次のビルドが `failed to read plugin permissions:
+  failed to read file '\\?\C:\<古いパス>\src-tauri\target\…\app_hide.toml'` で失敗する。
 - **起動直後に赤字で出る `NativeCommandError` / `RemoteException` は問題ない。** `2>&1` を付けると
   （たとえば `Tee-Object` でログを残すとき）、Windows PowerShell 5.1 は外部プログラムが stderr に書いた
   各行をエラーレコードに包み、最初の 1 行を赤字で `At line:1 char:…`、
@@ -110,8 +113,9 @@ WSL 内の Claude Code から Windows のビルドを動かせる（2026-10-16 �
 
 - ビルドは Windows ネイティブで行う。WSL 内でビルドすると Linux のバイナリになり、WSLg 上で
   動くだけになる。
-- clone は Windows のファイルシステムに置く（例: `C:\Users\<user>\Foundry\Iruka`。WSL からは
-  `/mnt/c/Users/<user>/Foundry/Iruka`）。そこでは WSL の git が使えるので、Git for Windows はなくてもよい。
+- clone は Windows のファイルシステムに置く（例: `C:\Users\<user>\Foundry\iruka`。WSL からは
+  `/mnt/c/Users/<user>/Foundry/iruka`）。そこでは WSL の git が使えるので、Git for Windows はなくてもよい。
+  Windows のパスは大文字と小文字を区別しないので、`Foundry\Iruka` と `Foundry\iruka` は同じフォルダー。
 - bash から `powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '. <環境スクリプト>; …'` で呼ぶ。
   WSL から起動した Windows プロセスは WSL 起動時の PATH を引き継ぐので、後から入れた Rust は PATH に
   入っていない。環境スクリプトで補う。

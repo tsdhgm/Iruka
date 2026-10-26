@@ -28,7 +28,7 @@ Both build natively on Windows; they differ in where the shell (and Claude Code)
 | | Native (PowerShell) | From WSL |
 | --- | --- | --- |
 | Shell, Claude Code | PowerShell, Claude Code for Windows | bash in WSL, Claude Code for Linux |
-| Clone | anywhere on the Windows file system, for example `%USERPROFILE%\Iruka` | on the Windows file system, for example `%USERPROFILE%\Foundry\Iruka` (`/mnt/c/...` from WSL) |
+| Clone | anywhere on the Windows file system, for example `%USERPROFILE%\Foundry\iruka` | on the Windows file system; it can be the same clone as the native setup (`/mnt/c/Users/<user>/Foundry/iruka` from WSL) |
 | Git | Git for Windows | WSL's git |
 | Build commands | run directly after dot-sourcing the environment script | through `powershell.exe`, see [Developing from WSL](#developing-from-wsl) |
 
@@ -65,6 +65,9 @@ npm install
 - Cargo flags go after the second `--`. `npm run tauri dev -- --no-default-features` does not work
   (npm hands the flag to the Tauri CLI, which rejects it).
 - First build about 7 minutes; later builds 25–60 s.
+- After moving or renaming the clone, run `cargo clean` in `src-tauri` once. Tauri's build scripts
+  keep absolute paths into the old `target` folder, so the next build fails with `failed to read
+  plugin permissions: failed to read file '\\?\C:\<old path>\src-tauri\target\…\app_hide.toml'`.
 - **Red `NativeCommandError` / `RemoteException` lines at startup are harmless.** With `2>&1` (for
   example to keep a log with `Tee-Object`), Windows PowerShell 5.1 wraps each line a native program
   writes to stderr in an error record, and prints the first one in red with `At line:1 char:…`,
@@ -109,8 +112,9 @@ unpacked to another folder, connected to a Windows target, audio played locally)
 Claude Code can run inside WSL and drive the Windows build (the 2026-10-16 setup):
 
 - Build natively on Windows: a build inside WSL produces a Linux binary that only runs under WSLg.
-- Keep the clone on the Windows file system (for example `C:\Users\<user>\Foundry\Iruka`, which is
-  `/mnt/c/Users/<user>/Foundry/Iruka` from WSL); WSL's git works there, so Git for Windows is optional.
+- Keep the clone on the Windows file system (for example `C:\Users\<user>\Foundry\iruka`, which is
+  `/mnt/c/Users/<user>/Foundry/iruka` from WSL); WSL's git works there, so Git for Windows is optional.
+  Windows paths ignore case, so `Foundry\Iruka` and `Foundry\iruka` are the same folder.
 - Call `powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '. <env script>; …'` from bash.
   Windows processes started from WSL inherit the PATH from when WSL started, so a fresh install of
   Rust is not on it; the environment script handles that.
