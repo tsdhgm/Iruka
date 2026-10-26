@@ -69,3 +69,36 @@ Microsoft 純正のクライアント（mstsc / Windows App）は、大きなセ
 ハードウェアでデコードできるので、展開した画面はプロセスのメモリではなくビデオメモリにある。
 デコーダーと画面の間にブラウザーエンジンも挟まらない。Iruka はソフトウェアでシステムメモリに展開し
 （FreeRDP の gdi）、各フレームを WebView の canvas にコピーするので、どの画素も少なくとも 2 回持っている。
+
+### 回線が悪いとき
+
+オーナーの観察: 遅延が多い回線では、Microsoft のクライアントは荒い JPEG のような画面を出して後から
+鮮明にし、接続を保つ。その一部はクライアントではなくサーバーの働き:
+
+- 荒い画面から鮮明になるのは RDPGFX の **Progressive** コーデック（RemoteFX Progressive）。サーバーは
+  タイルごとにまず粗い版を送り、帯域に余裕ができたら細部を足す。**ネットワーク自動検出**でサーバーは
+  往復時間と帯域を測り、画質とフレーム数を下げる。Iruka は FreeRDP にこの両方を指定している
+  （`src-tauri/src/rdp/freerdp.rs` の `/gfx` と `/network:auto`）ので、接続先が Windows なら Iruka でも
+  同じように画質が落ちるはず。まだ見ていない。
+- Iruka にたぶん欠けているもの:
+  - **UDP での送信。** Microsoft のクライアントは RDP を UDP で運べる（MS-RDPEUDP。Azure Virtual Desktop
+    では RDP Shortpath）。UDP では失われたパケットが後続を止めない。FreeRDP のクライアントはこれを
+    実装していないとされ、Iruka は TCP だけで動く。TCP は再送をすべて待つ。2026-10-25 に Wi-Fi の
+    9 秒の停滞でセッションが切れたのはこのため（今は `/timeout:60000` と自動再接続）。
+  - **H.264。** 次の節。
+
+### Windows Server の H.264 と、Iruka のビルド
+
+- Windows Server 2016 以降（エディションは問わず、Datacenter も、Azure VM でも）と Windows 10/11 は
+  H.264/AVC で送る。既定では混合で、文字や静止部分は Progressive などのコーデック、動画のような部分
+  だけを H.264 で送る。グループポリシー「リモート デスクトップ接続で H.264/AVC 444 グラフィックス
+  モードを優先する」で画面全体が AVC444 になる。
+- Azure VM の多くは GPU がないので、サーバーは H.264 を vCPU でソフトウェア圧縮する（動きが多いと
+  重い）。GPU 付きの VM（NV シリーズ）はハードウェアで圧縮でき、別のポリシーで有効にする。
+- サーバーが H.264 を使うのは、クライアントが展開できると申告したときだけ。Iruka の Windows 版は
+  できない: vcpkg の FreeRDP 3.32.2 の `freerdp/config.h` では `WITH_GFX_H264`、`WITH_OPENH264`、
+  `WITH_MEDIA_FOUNDATION`、ffmpeg がすべて未定義（2026-10-26 確認）。そのため Windows のサーバーは
+  Progressive などのコーデックで送ってくる。有効にする方法: vcpkg で FreeRDP の `ffmpeg` 機能を足す
+  （ビルドが長くなり DLL が増える）、または Windows 標準の Media Foundation のデコーダーを使うビルド
+  （たぶん DLL は増えない。未確認）。Linux 版は Ubuntu の FreeRDP パッケージを使っており、おそらく
+  ffmpeg 付きでビルドされているので、すでに H.264 を受けている可能性がある。未確認。

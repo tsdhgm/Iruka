@@ -73,3 +73,38 @@ can decode H.264 in hardware, so decoded frames live in video memory rather than
 private memory, and it has no browser engine between the decoder and the screen. Iruka decodes in
 software into system memory (FreeRDP's gdi) and then copies each frame into a WebView canvas, so
 every pixel is held at least twice.
+
+### On a bad link
+
+The owner's observation: on a laggy link Microsoft's client shows a coarse, JPEG-like screen that
+sharpens later, and keeps the session alive. Part of that is the server, not the client:
+
+- The coarse-then-sharp picture is the RDPGFX **Progressive** codec (RemoteFX Progressive): the
+  server sends a rough version of each tile first and refines it when bandwidth allows. With
+  **network auto-detect** the server measures round-trip time and bandwidth and lowers quality and
+  frame rate. Iruka asks FreeRDP for both (`/gfx` and `/network:auto` in
+  `src-tauri/src/rdp/freerdp.rs`), so against a Windows target Iruka should degrade the same way.
+  Not yet observed.
+- What Iruka probably lacks:
+  - **UDP transport.** Microsoft's client can carry RDP over UDP (MS-RDPEUDP; RDP Shortpath in
+    Azure Virtual Desktop), where a lost packet does not hold up everything behind it. FreeRDP's
+    client is believed not to implement it, so Iruka runs over TCP only, and TCP waits for every
+    retransmission; that is how a 9 s Wi-Fi stall dropped a session on 2026-10-25 (now
+    `/timeout:60000` plus automatic reconnect).
+  - **H.264.** See below.
+
+### H.264 from Windows Server, and Iruka's build
+
+- Windows Server 2016 and later (any edition, Datacenter included, on Azure VMs as well) and
+  Windows 10/11 send H.264/AVC. By default it is a mix: text and static areas go through Progressive
+  and the other codecs, only video-like areas through H.264. The group policy "Prioritize H.264/AVC
+  444 graphics mode for Remote Desktop Connections" makes the whole screen AVC444.
+- Most Azure VMs have no GPU, so the server encodes H.264 in software on its vCPUs (costly with
+  much motion). GPU VMs (NV series) can encode in hardware, enabled by another policy.
+- The server uses H.264 only when the client says it can decode it. Iruka's Windows build cannot:
+  in vcpkg's FreeRDP 3.32.2 `freerdp/config.h` has `WITH_GFX_H264`, `WITH_OPENH264`,
+  `WITH_MEDIA_FOUNDATION` and ffmpeg all undefined (checked 2026-10-26), so a Windows server sends
+  Progressive and the other codecs instead. Ways to enable it: vcpkg's `ffmpeg` feature for FreeRDP
+  (longer build, more DLLs), or a build with Windows' own Media Foundation decoder (probably no extra
+  DLLs; not checked). The Linux client uses Ubuntu's FreeRDP package, which is probably built with
+  ffmpeg and may already receive H.264; not checked.
