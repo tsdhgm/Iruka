@@ -155,6 +155,10 @@ KNOWN_ISSUES.md and TODO.md.
   `memlog.csv`; `dist\iruka-fixtest` was the test copy of the fix. No worksets saved here yet.
   Still open: the two Linux crashes above, repeat the 10 s freeze with a release build
   (copy cost vs. WebView2 transfer), and the reconnect and back-pressure tests from 2026-10-25.
+- **2026-11-02: another Ubuntu dev machine** (hostname `M5-Pro`, 16 CPUs, 30 GiB, Ubuntu 26.04.1,
+  kernel 7.0.0-42; clone at `/home/tosihide/Foundry/Repo/Iruka`, Node 26.13.0 through nvm). The owner
+  installed the build environment (Tauri `-dev` packages, `freerdp3-dev`, `patchelf`,
+  `libdbus-1-dev`, rustup stable) and reports that it builds. Nothing measured or tested on it yet.
 - The deb from `scripts/make-deb.sh` is installed on the Ubuntu box (`/usr/bin/iruka`; installed
   2026-10-24 on the new box with `apt install`; on a box that already has it, reinstalling the same
   version 0.1.0 needs `sudo dpkg -i`, since `apt install` does not replace a same-version package);
