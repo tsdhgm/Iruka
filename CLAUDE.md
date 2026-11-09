@@ -159,6 +159,15 @@ KNOWN_ISSUES.md and TODO.md.
   kernel 7.0.0-42; clone at `/home/tosihide/Foundry/Repo/Iruka`, Node 26.13.0 through nvm). The owner
   installed the build environment (Tauri `-dev` packages, `freerdp3-dev`, `patchelf`,
   `libdbus-1-dev`, rustup stable) and reports that it builds. Nothing measured or tested on it yet.
+- **2026-11-09: another Windows build machine** (ThinkPad E14 Gen7 AMD, 16 threads, 62 GB, Windows 11
+  Pro build 26300; clone at `C:\Users\tosihide\Foundry\Repo\Iruka`, not `Foundry\iruka`). Already
+  there: VS Build Tools 18 (C++), Node 24.14.0, Git, Python. Installed per user, no admin needed:
+  rustup stable (1.99.1), vcpkg at `C:\Users\tosihide\Foundry\vcpkg` with FreeRDP (12 min),
+  `C:\Users\tosihide\Foundry\iruka-env.ps1`. Smart App Control was on and blocked even a hello-world
+  exe (os error 4551); the owner turned it **off**. Release build (2 min after pre-compiling the
+  dependencies) and `scripts\make-zip.ps1` → `release\iruka-0.1.0-windows-x64.zip` (9.6 MB). The
+  owner wants a plain zip with the exe, not an installer. Checked only that the unpacked copy starts
+  (window opens, no vcpkg on `PATH`, `OPENSSL_MODULES` unset); no RDP / SSH connection tried yet.
 - The deb from `scripts/make-deb.sh` is installed on the Ubuntu box (`/usr/bin/iruka`; installed
   2026-10-24 on the new box with `apt install`; on a box that already has it, reinstalling the same
   version 0.1.0 needs `sudo dpkg -i`, since `apt install` does not replace a same-version package);
