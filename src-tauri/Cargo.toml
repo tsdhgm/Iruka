@@ -38,6 +38,12 @@ sysinfo = { version = "0.39.6", default-features = false, features = ["system"] 
 keyring = "4"
 arboard = { version = "3.6.1", default-features = false }
 
+# Only to rebuild the Secret Service connection when its session is gone (credentials.rs); same
+# crates and features that `keyring` already pulls in on Linux
+[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
+keyring-core = "1"
+zbus-secret-service-keyring-store = { version = "1", features = ["crypto-rust"] }
+
 [features]
 default = ["freerdp", "ironrdp"]
 # FreeRDP 3（システムの libfreerdp3 / libwinpr3 を使う）。GNOME Remote Desktop に必要

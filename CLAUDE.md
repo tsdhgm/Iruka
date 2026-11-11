@@ -168,6 +168,18 @@ KNOWN_ISSUES.md and TODO.md.
   dependencies) and `scripts\make-zip.ps1` → `release\iruka-0.1.0-windows-x64.zip` (9.6 MB). The
   owner wants a plain zip with the exe, not an installer. Checked only that the unpacked copy starts
   (window opens, no vcpkg on `PATH`, `OPENSSL_MODULES` unset); no RDP / SSH connection tried yet.
+- **2026-11-11: another Ubuntu machine** (hostname `linux-m2sata`, 16 CPUs, 30 GiB, Ubuntu 26.04.1,
+  kernel 7.0.0-43; repo at `/_export/shared/Foundry/Repo/Iruka`, Node 24.18.0 through nvm, rustc
+  1.98.1, `freerdp3-dev` 3.32.2). The build environment was checked and nothing is missing. Clean
+  build (`cargo clean`, `npm ci`, `npx tauri build --no-bundle`): 2 min 58 s, no warnings. Build
+  **Fixed the same day**: "Save password" failed with `NoSession: The session wrapping the secret
+  does not exist` after the keyring daemon was replaced under a running Iruka
+  (`gnome-keyring-daemon --replace` at 13:45, Iruka started 13:11); `credentials.rs` now reconnects
+  to the Secret Service and retries once (docs/code-notes.md). Proven only by the `#[ignore]`d test
+  `survives_a_keyring_daemon_restart` on a throw-away session bus; in real use the owner is waiting
+  to see whether it comes back (a working reconnect leaves `credential store call failed … reconnecting`
+  in the log). The installed deb (0.1.1, version bump not in the repo: it was made on a Windows
+  machine and never pushed) does not have the fix; the owner runs the repo's release build.
 - The deb from `scripts/make-deb.sh` is installed on the Ubuntu box (`/usr/bin/iruka`; installed
   2026-10-24 on the new box with `apt install`; on a box that already has it, reinstalling the same
   version 0.1.0 needs `sudo dpkg -i`, since `apt install` does not replace a same-version package);

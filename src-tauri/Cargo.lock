@@ -2612,6 +2612,7 @@ dependencies = [
  "ironrdp-pdu",
  "ironrdp-session",
  "keyring",
+ "keyring-core",
  "pkg-config",
  "portable-pty",
  "rustls",
@@ -2624,6 +2625,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "x509-cert",
+ "zbus-secret-service-keyring-store",
 ]
 
 [[package]]

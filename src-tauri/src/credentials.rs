@@ -27,6 +27,41 @@ fn entry(profile_id: &str) -> Result<Entry, String> {
     Entry::new(SERVICE, profile_id).map_err(|e| format!("credential store unavailable: {e}"))
 }
 
+/// Run one store operation. On Linux the `keyring` crate opens a single Secret Service
+/// session for the life of the process; when the keyring daemon is restarted under a running
+/// Iruka that session is gone and every call fails ("NoSession: The session wrapping the
+/// secret does not exist"). So after a platform failure, connect to the store again and try
+/// once more.
+fn with_entry<T>(
+    profile_id: &str,
+    op: impl Fn(&Entry) -> Result<T, Error>,
+) -> Result<Result<T, Error>, String> {
+    let first = op(&entry(profile_id)?);
+    #[cfg(all(unix, not(target_os = "macos")))]
+    if let Err(Error::PlatformFailure(e)) = &first {
+        tracing::warn!("credential store call failed ({e}); reconnecting to the store");
+        if reconnect() {
+            return Ok(op(&entry(profile_id)?));
+        }
+    }
+    Ok(first)
+}
+
+/// Replace the process-wide store with a new Secret Service connection and session.
+#[cfg(all(unix, not(target_os = "macos")))]
+fn reconnect() -> bool {
+    match zbus_secret_service_keyring_store::Store::new() {
+        Ok(store) => {
+            keyring_core::set_default_store(store);
+            true
+        }
+        Err(e) => {
+            tracing::warn!("could not reconnect to the credential store: {e}");
+            false
+        }
+    }
+}
+
 async fn blocking<T: Send + 'static>(
     f: impl FnOnce() -> Result<T, String> + Send + 'static,
 ) -> Result<T, String> {
@@ -39,8 +74,7 @@ async fn blocking<T: Send + 'static>(
 #[tauri::command]
 pub async fn credential_set(profile_id: String, password: String) -> Result<(), String> {
     blocking(move || {
-        entry(&profile_id)?
-            .set_password(&password)
+        with_entry(&profile_id, |e| e.set_password(&password))?
             .map_err(|e| format!("could not store the password: {e}"))
     })
     .await
@@ -49,7 +83,7 @@ pub async fn credential_set(profile_id: String, password: String) -> Result<(), 
 /// The stored password of a saved connection, or None when there is none.
 #[tauri::command]
 pub async fn credential_get(profile_id: String) -> Result<Option<String>, String> {
-    blocking(move || match entry(&profile_id)?.get_password() {
+    blocking(move || match with_entry(&profile_id, |e| e.get_password())? {
         Ok(password) => Ok(Some(password)),
         Err(Error::NoEntry) => Ok(None),
         Err(e) => Err(format!("could not read the password: {e}")),
@@ -60,7 +94,7 @@ pub async fn credential_get(profile_id: String) -> Result<Option<String>, String
 /// Forget the stored password of a saved connection (no error when there is none).
 #[tauri::command]
 pub async fn credential_delete(profile_id: String) -> Result<(), String> {
-    blocking(move || match entry(&profile_id)?.delete_credential() {
+    blocking(move || match with_entry(&profile_id, |e| e.delete_credential())? {
         Ok(()) | Err(Error::NoEntry) => Ok(()),
         Err(e) => Err(format!("could not delete the password: {e}")),
     })
@@ -92,5 +126,66 @@ mod tests {
         assert_eq!(e.get_password().unwrap(), "changed");
         e.delete_credential().unwrap();
         assert!(matches!(e.get_password(), Err(Error::NoEntry)));
+    }
+
+    /// The keyring daemon is replaced under the running process: the old session is gone,
+    /// and the calls must reconnect instead of failing with NoSession. This replaces the
+    /// daemon, so it only runs on a throw-away session bus with a throw-away keyring:
+    ///
+    /// (the runtime directory must be short: the daemon's control socket path has the usual
+    /// 108-byte limit)
+    ///
+    /// ```sh
+    /// d=$(mktemp -d -p "$XDG_RUNTIME_DIR" ikt.XXXX)
+    /// XDG_DATA_HOME=$d/data XDG_RUNTIME_DIR=$d IRUKA_TEST_THROWAWAY_KEYRING=1 \
+    ///   dbus-run-session -- cargo test -- --ignored daemon_restart
+    /// rm -rf "$d"
+    /// ```
+    #[test]
+    #[ignore]
+    #[cfg(target_os = "linux")]
+    fn survives_a_keyring_daemon_restart() {
+        use std::io::Write;
+        use std::process::{Command, Stdio};
+        assert!(
+            std::env::var_os("IRUKA_TEST_THROWAWAY_KEYRING").is_some(),
+            "refusing to replace the keyring daemon of a real session"
+        );
+        // The pid comes from the throw-away bus, so this can never be the user's daemon.
+        let daemon_pid = || {
+            let out = Command::new("busctl")
+                .args(["--user", "status", "org.freedesktop.secrets"])
+                .output()
+                .unwrap();
+            String::from_utf8_lossy(&out.stdout)
+                .lines()
+                .find_map(|l| l.strip_prefix("PID=").map(str::to_owned))
+                .unwrap()
+        };
+        let start_daemon = || {
+            let mut child = Command::new("gnome-keyring-daemon")
+                .args(["--unlock", "--components=secrets"])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::null())
+                .spawn()
+                .unwrap();
+            child.stdin.take().unwrap().write_all(b"test").unwrap();
+            assert!(child.wait().unwrap().success());
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        };
+        start_daemon();
+        let id = format!("test-restart-{}", std::process::id());
+        with_entry(&id, |e| e.set_password("before")).unwrap().unwrap();
+        let old = daemon_pid();
+        assert!(Command::new("kill").arg(&old).status().unwrap().success());
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        start_daemon();
+        assert_ne!(daemon_pid(), old);
+        // Without the reconnect this is the failure the user saw.
+        let stale = entry(&id).unwrap().set_password("stale");
+        assert!(matches!(stale, Err(Error::PlatformFailure(_))), "{stale:?}");
+        with_entry(&id, |e| e.set_password("after")).unwrap().unwrap();
+        assert_eq!(with_entry(&id, |e| e.get_password()).unwrap().unwrap(), "after");
+        with_entry(&id, |e| e.delete_credential()).unwrap().unwrap();
     }
 }
