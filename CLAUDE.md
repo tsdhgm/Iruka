@@ -202,8 +202,8 @@ KNOWN_ISSUES.md and TODO.md.
   Windows machine (hostname `NucBox-M5-5`, 16 threads, 32 GB, Windows 11 Pro build 26300; clone at
   `C:\Users\tosihide\Foundry\Repo\Iruka`; VS Build Tools 2026, Node 24.14.1, `gh` logged in).
   Installed per user: rustup, vcpkg with FreeRDP 3.32.2 (9.3 min), `iruka-env.ps1`; Smart App
-  Control turned off by the owner. Release build 5.4 min, zip 9.6 MB; checked only that the unpacked
-  copy starts without the vcpkg environment, and the owner connected RDP and SSH from it (both OK). The release is on
+  Control turned off by the owner. Release build 5.4 min, zip 9.6 MB; the unpacked copy starts
+  without the vcpkg environment, and the owner connected RDP and SSH from it (both OK). Release on
   commit b7774aa; docs/windows-client-log.md "2026-11-12".
 - The deb from `scripts/make-deb.sh` is installed on the Ubuntu box (`/usr/bin/iruka`; installed
   2026-10-24 on the new box with `apt install`; on a box that already has it, reinstalling the same
