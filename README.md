@@ -6,7 +6,7 @@ A viewer for keeping an eye on many PCs at once. Consoles (SSH and the like) and
 
 ![Grid view: SSH consoles and RDP desktops of several PCs side by side](docs/images/grid-view.png)
 
-A short recording: [docs/images/demo.mp4](docs/images/demo.mp4).
+https://github.com/user-attachments/assets/c7ae349d-7b1f-41d7-b337-631f762f4ac7
 
 Tauri 2 + React + TypeScript. RDP uses FreeRDP 3 (IronRDP is built in as an experimental fallback).
 

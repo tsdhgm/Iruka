@@ -6,7 +6,7 @@
 
 ![グリッド表示: 複数の PC の SSH コンソールと RDP デスクトップを並べたところ](docs/images/grid-view.png)
 
-短い録画: [docs/images/demo.mp4](docs/images/demo.mp4)。
+https://github.com/user-attachments/assets/c7ae349d-7b1f-41d7-b337-631f762f4ac7
 
 Tauri 2 + React + TypeScript。RDP は FreeRDP 3 を使う（予備として IronRDP も組み込んである。experimental 扱い）。
 
