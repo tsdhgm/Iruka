@@ -299,3 +299,17 @@ Windows lets stay in RAM.
   with `getenv`. Fixed with `_wputenv_s` (updates both); rebuilt in 2 min 43 s; from the unpacked
   folder without the variable no legacy / md4 / rc4 line, to both a Windows and an Ubuntu target.
   KNOWN_ISSUES.md "vcpkg's OpenSSL does not find its legacy provider".
+
+## 2026-11-12: release 0.1.2 from a new machine (NucBox-M5-5)
+
+- Machine: NucBox-M5-5, 16 threads, 32 GB, Windows 11 Pro build 26300; clone at
+  `C:\Users\tosihide\Foundry\Repo\Iruka`. Already there: VS Build Tools 2026 (18.4.2, C++), Node
+  24.14.1, Git, `gh` (logged in). Installed per user: rustup (winget), vcpkg at
+  `C:\Users\tosihide\Foundry\vcpkg`, `C:\Users\tosihide\Foundry\iruka-env.ps1`.
+- Smart App Control was on again; the owner turned it off before the vcpkg build.
+- `vcpkg install "freerdp[client]:x64-windows" "pkgconf:x64-windows"`: 9.3 min, FreeRDP 3.32.2.
+- `tauri build --no-bundle`: 5.4 min from nothing, no warnings. `scripts\make-zip.ps1` →
+  `release\iruka-0.1.2-windows-x64.zip` (9.6 MB; 26.8 MB unpacked).
+- Checked: the unpacked copy starts (window opens) with no vcpkg on `PATH` and `OPENSSL_MODULES`
+  unset. No RDP / SSH connection tried.
+- Published as GitHub release `v0.1.2` (Latest, not a pre-release) on commit b7774aa.

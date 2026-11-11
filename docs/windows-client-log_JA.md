@@ -295,3 +295,17 @@ Windows でクライアントとして Iruka を動かすまでの作業を、�
   更新する）で修正。再ビルド 2 分 43 秒。変数なしで展開したフォルダーから、Windows と Ubuntu の
   両方の接続先で legacy / md4 / rc4 の行なし。KNOWN_ISSUES_JA.md「vcpkg の OpenSSL が legacy
   プロバイダーを見つけられない」。
+
+## 2026-11-12: 新しいマシン（NucBox-M5-5）から 0.1.2 をリリース
+
+- マシン: NucBox-M5-5、16 スレッド、32 GB、Windows 11 Pro ビルド 26300。clone は
+  `C:\Users\tosihide\Foundry\Repo\Iruka`。既にあったもの: VS Build Tools 2026（18.4.2、C++）、
+  Node 24.14.1、Git、`gh`（ログイン済み）。ユーザー単位で導入: rustup（winget）、vcpkg
+  （`C:\Users\tosihide\Foundry\vcpkg`）、`C:\Users\tosihide\Foundry\iruka-env.ps1`。
+- Smart App Control はまたオンだった。vcpkg のビルド前にオーナーがオフにした。
+- `vcpkg install "freerdp[client]:x64-windows" "pkgconf:x64-windows"`: 9.3 分、FreeRDP 3.32.2。
+- `tauri build --no-bundle`: ゼロから 5.4 分、警告なし。`scripts\make-zip.ps1` →
+  `release\iruka-0.1.2-windows-x64.zip`（9.6 MB、展開後 26.8 MB）。
+- 確認: vcpkg を `PATH` から外し `OPENSSL_MODULES` なしで、展開したコピーが起動する（ウィンドウが
+  開く）。RDP / SSH の接続は試していない。
+- GitHub release `v0.1.2`（Latest、pre-release ではない）として commit b7774aa で公開。

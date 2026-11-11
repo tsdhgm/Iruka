@@ -183,9 +183,8 @@ KNOWN_ISSUES.md and TODO.md.
   on this system on 2026-11-09 from a source state that was never committed and was not found
   again. Also new in 0.1.2: **the version is shown beside the name in the sidebar** (`getVersion()`,
   verified by the owner). `release/iruka_0.1.2_amd64.deb` with both changes is installed on this
-  box (verified byte for byte against `/usr/bin/iruka`). **Still to do: the Windows build of
-  0.1.2**, which the owner will make on a Windows machine; the only GitHub release is still the
-  pre-release `v0.1.0` (Windows zip).
+  box (verified byte for byte against `/usr/bin/iruka`). The Windows build of 0.1.2 was released
+  on 2026-11-12 (see below).
 - **2026-11-11: the repository is public** (owner's decision; see "Everything committed is public"
   under Conventions). Before the switch the whole history (102 commits) was scanned for keys,
   tokens and literal passwords: nothing found. Knowingly public: the two author e-mail addresses in
@@ -199,6 +198,13 @@ KNOWN_ISSUES.md and TODO.md.
   in `Pict/` (ignored). GitHub made two-factor authentication mandatory for the account the same
   day; pushing over https with the `gh` token still works from this box, the other machines are
   not checked.
+- **2026-11-12: release v0.1.2 (Windows zip, Latest, not a pre-release)** built on another new
+  Windows machine (hostname `NucBox-M5-5`, 16 threads, 32 GB, Windows 11 Pro build 26300; clone at
+  `C:\Users\tosihide\Foundry\Repo\Iruka`; VS Build Tools 2026, Node 24.14.1, `gh` logged in).
+  Installed per user: rustup, vcpkg with FreeRDP 3.32.2 (9.3 min), `iruka-env.ps1`; Smart App
+  Control turned off by the owner. Release build 5.4 min, zip 9.6 MB; checked only that the unpacked
+  copy starts without the vcpkg environment (no RDP / SSH connection tried). The release is on
+  commit b7774aa; docs/windows-client-log.md "2026-11-12".
 - The deb from `scripts/make-deb.sh` is installed on the Ubuntu box (`/usr/bin/iruka`; installed
   2026-10-24 on the new box with `apt install`; on a box that already has it, reinstalling the same
   version 0.1.0 needs `sudo dpkg -i`, since `apt install` does not replace a same-version package);
