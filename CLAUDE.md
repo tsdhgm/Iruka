@@ -181,7 +181,10 @@ KNOWN_ISSUES.md and TODO.md.
   in the log). The installed deb (0.1.1, version bump not in the repo: it was made on a Windows
   machine and never pushed) does not have the fix. **Version raised to 0.1.2** to tell the fixed build from that
   unknown 0.1.1 (the GitHub release is still `v0.1.0`, Windows zip only);
-  `release/iruka_0.1.2_amd64.deb` is built, installing it needs the owner's sudo.
+  the deb was installed by the owner at 14:31. Added afterwards, still as 0.1.2 (owner's choice):
+  **the version is shown beside the name in the sidebar** (`getVersion()`, verified by the owner);
+  the deb was rebuilt with it, and since the number is the same it installs only with
+  `sudo dpkg -i release/iruka_0.1.2_amd64.deb`.
 - The deb from `scripts/make-deb.sh` is installed on the Ubuntu box (`/usr/bin/iruka`; installed
   2026-10-24 on the new box with `apt install`; on a box that already has it, reinstalling the same
   version 0.1.0 needs `sudo dpkg -i`, since `apt install` does not replace a same-version package);

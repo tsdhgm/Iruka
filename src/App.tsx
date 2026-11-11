@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import "@xterm/xterm/css/xterm.css";
@@ -697,10 +698,18 @@ function App() {
 
   const activeSession = sessions.find((s) => s.id === activeId) ?? null;
 
+  // The version of the running build (tauri.conf.json), shown beside the name.
+  const [appVersion, setAppVersion] = useState("");
+  useEffect(() => {
+    getVersion().then(setAppVersion, () => {});
+  }, []);
+
   return (
     <div className={`app ${fullscreen ? "fullscreen" : ""}`}>
       <aside className="sidebar">
-        <div className="brand">🐬 Iruka</div>
+        <div className="brand">
+          🐬 Iruka{appVersion && <span className="brand-version">{appVersion}</span>}
+        </div>
         <div className="connect-form">
           <button className="new-console-btn" onClick={() => openConsole()}>
             + Console
