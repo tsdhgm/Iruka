@@ -171,7 +171,7 @@ KNOWN_ISSUES.md and TODO.md.
 - **2026-11-11: another Ubuntu machine** (hostname `linux-m2sata`, 16 CPUs, 30 GiB, Ubuntu 26.04.1,
   kernel 7.0.0-43; repo at `/_export/shared/Foundry/Repo/Iruka`, Node 24.18.0 through nvm, rustc
   1.98.1, `freerdp3-dev` 3.32.2). The build environment was checked and nothing is missing. Clean
-  build (`cargo clean`, `npm ci`, `npx tauri build --no-bundle`): 2 min 58 s, no warnings. Build
+  build (`cargo clean`, `npm ci`, `npx tauri build --no-bundle`): 2 min 58 s, no warnings.
   **Fixed the same day**: "Save password" failed with `NoSession: The session wrapping the secret
   does not exist` after the keyring daemon was replaced under a running Iruka
   (`gnome-keyring-daemon --replace` at 13:45, Iruka started 13:11); `credentials.rs` now reconnects
