@@ -170,21 +170,32 @@ KNOWN_ISSUES.md and TODO.md.
   (window opens, no vcpkg on `PATH`, `OPENSSL_MODULES` unset); no RDP / SSH connection tried yet.
 - **2026-11-11: another Ubuntu machine** (hostname `linux-m2sata`, 16 CPUs, 30 GiB, Ubuntu 26.04.1,
   kernel 7.0.0-43; repo at `/_export/shared/Foundry/Repo/Iruka`, Node 24.18.0 through nvm, rustc
-  1.98.1, `freerdp3-dev` 3.32.2). The build environment was checked and nothing is missing. Clean
-  build (`cargo clean`, `npm ci`, `npx tauri build --no-bundle`): 2 min 58 s, no warnings.
-  **Fixed the same day**: "Save password" failed with `NoSession: The session wrapping the secret
-  does not exist` after the keyring daemon was replaced under a running Iruka
+  1.98.1, `freerdp3-dev` 3.32.2). The build environment was checked and nothing is missing
+  (optional: `rustup update stable` to 1.99.1). Clean build (`cargo clean`, `npm ci`,
+  `npx tauri build --no-bundle`): 2 min 58 s, no warnings.
+- **2026-11-11: keyring fix, version 0.1.2.** "Save password" failed with `NoSession: The session
+  wrapping the secret does not exist` after the keyring daemon was replaced under a running Iruka
   (`gnome-keyring-daemon --replace` at 13:45, Iruka started 13:11); `credentials.rs` now reconnects
   to the Secret Service and retries once (docs/code-notes.md). Proven only by the `#[ignore]`d test
   `survives_a_keyring_daemon_restart` on a throw-away session bus; in real use the owner is waiting
-  to see whether it comes back (a working reconnect leaves `credential store call failed … reconnecting`
-  in the log). The installed deb (0.1.1, version bump not in the repo: it was made on a Windows
-  machine and never pushed) does not have the fix. **Version raised to 0.1.2** to tell the fixed build from that
-  unknown 0.1.1 (the GitHub release is still `v0.1.0`, Windows zip only);
-  the deb was installed by the owner at 14:31. Added afterwards, still as 0.1.2 (owner's choice):
-  **the version is shown beside the name in the sidebar** (`getVersion()`, verified by the owner);
-  the deb was rebuilt with it, and since the number is the same it installs only with
-  `sudo dpkg -i release/iruka_0.1.2_amd64.deb`.
+  to see whether it comes back (a working reconnect leaves `credential store call failed …
+  reconnecting` in the log). **Version raised to 0.1.2**, skipping 0.1.1: a 0.1.1 deb was installed
+  on this system on 2026-11-09 from a source state that was never committed and was not found
+  again. Also new in 0.1.2: **the version is shown beside the name in the sidebar** (`getVersion()`,
+  verified by the owner). `release/iruka_0.1.2_amd64.deb` with both changes is installed on this
+  box (verified byte for byte against `/usr/bin/iruka`). **Still to do: the Windows build of
+  0.1.2**, which the owner will make on a Windows machine; the only GitHub release is still the
+  pre-release `v0.1.0` (Windows zip).
+- **2026-11-11: the repository is public** (owner's decision; see "Everything committed is public"
+  under Conventions). Before the switch the whole history (102 commits) was scanned for keys,
+  tokens and literal passwords: nothing found. Knowingly public: the two author e-mail addresses in
+  the history, and this work log with its machines, paths and LAN addresses. README and README_JA
+  now show a screenshot (`docs/images/grid-view.png`, reduced to 2400 px wide, 256 colours) and
+  link a 24 s recording (`docs/images/demo.mp4`; a video in the repository is only a link on
+  GitHub, it plays inline only when uploaded through the web editor). The owner's originals stay
+  in `Pict/` (ignored). GitHub made two-factor authentication mandatory for the account the same
+  day; pushing over https with the `gh` token still works from this box, the other machines are
+  not checked.
 - The deb from `scripts/make-deb.sh` is installed on the Ubuntu box (`/usr/bin/iruka`; installed
   2026-10-24 on the new box with `apt install`; on a box that already has it, reinstalling the same
   version 0.1.0 needs `sudo dpkg -i`, since `apt install` does not replace a same-version package);
