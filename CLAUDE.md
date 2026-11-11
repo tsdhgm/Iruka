@@ -203,6 +203,11 @@ KNOWN_ISSUES.md and TODO.md.
   English-first; every doc has a Japanese twin with the `_JA.md` suffix (README_JA.md,
   KNOWN_ISSUES_JA.md, TODO_JA.md, docs/*_JA.md), each linking to the other at the top. Update both
   when changing one. Talk to the user in Japanese.
+- **Everything committed is public** (owner's decision 2026-11-11: the repository goes from private
+  to public, work log and all). The hand-off, docs and commit messages may keep the working detail
+  (machines, paths, LAN addresses like 10.0.1.x, dead ends), but never write: passwords, keys or
+  tokens; addresses reachable from outside or the layout of networks other than the home LAN; other
+  people's names or anything work-related; what other projects showed on a remote screen.
 - **Problems outside Iruka** (FreeRDP, the OS, GNOME Remote Desktop) are recorded in
   KNOWN_ISSUES.md with the cause and a possible fix, not worked around in code.
 - **Debugging aids stay** until the user says debugging is over: the `iruka_perf` / `iruka_mem`
