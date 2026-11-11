@@ -31,3 +31,4 @@ dist-ssr
 
 # Tarballs from scripts/make-tarball.sh
 /release
+Pict/*

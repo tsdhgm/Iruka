@@ -82,7 +82,7 @@ GNOME 専用ではないが、試したのは GNOME（Wayland）だけで、KDE 
 
 ```sh
 scripts/make-deb.sh                          # -> release/iruka_<version>_amd64.deb
-sudo apt install ./release/iruka_0.1.0_amd64.deb
+sudo apt install ./release/iruka_0.1.2_amd64.deb
 ```
 
 パッケージは Ubuntu 自身の FreeRDP 3（`libfreerdp-client3-3`）、WebKitGTK、GTK に依存するので、足りない

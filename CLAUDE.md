@@ -179,7 +179,9 @@ KNOWN_ISSUES.md and TODO.md.
   `survives_a_keyring_daemon_restart` on a throw-away session bus; in real use the owner is waiting
   to see whether it comes back (a working reconnect leaves `credential store call failed … reconnecting`
   in the log). The installed deb (0.1.1, version bump not in the repo: it was made on a Windows
-  machine and never pushed) does not have the fix; the owner runs the repo's release build.
+  machine and never pushed) does not have the fix. **Version raised to 0.1.2** to tell the fixed build from that
+  unknown 0.1.1 (the GitHub release is still `v0.1.0`, Windows zip only);
+  `release/iruka_0.1.2_amd64.deb` is built, installing it needs the owner's sudo.
 - The deb from `scripts/make-deb.sh` is installed on the Ubuntu box (`/usr/bin/iruka`; installed
   2026-10-24 on the new box with `apt install`; on a box that already has it, reinstalling the same
   version 0.1.0 needs `sudo dpkg -i`, since `apt install` does not replace a same-version package);
