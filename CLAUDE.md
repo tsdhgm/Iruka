@@ -191,8 +191,11 @@ KNOWN_ISSUES.md and TODO.md.
   tokens and literal passwords: nothing found. Knowingly public: the two author e-mail addresses in
   the history, and this work log with its machines, paths and LAN addresses. README and README_JA
   now show a screenshot (`docs/images/grid-view.png`, reduced to 2400 px wide, 256 colours) and
-  link a 24 s recording (`docs/images/demo.mp4`; a video in the repository is only a link on
-  GitHub, it plays inline only when uploaded through the web editor). The owner's originals stay
+  a 24 s recording that plays inline: the mp4 was dropped into GitHub's web editor and the README
+  carries the resulting `github.com/user-attachments/assets/…` URL on a line of its own (a video
+  committed to the repository would only be a link). The owner checked the playback in a browser
+  without a GitHub login; the bare attachment URL itself answers 404 without a login, so it is of
+  no use outside the README. The owner's originals stay
   in `Pict/` (ignored). GitHub made two-factor authentication mandatory for the account the same
   day; pushing over https with the `gh` token still works from this box, the other machines are
   not checked.
