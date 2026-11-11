@@ -307,5 +307,5 @@ Windows でクライアントとして Iruka を動かすまでの作業を、�
 - `tauri build --no-bundle`: ゼロから 5.4 分、警告なし。`scripts\make-zip.ps1` →
   `release\iruka-0.1.2-windows-x64.zip`（9.6 MB、展開後 26.8 MB）。
 - 確認: vcpkg を `PATH` から外し `OPENSSL_MODULES` なしで、展開したコピーが起動する（ウィンドウが
-  開く）。RDP / SSH の接続は試していない。
+  開く）。その後オーナーがそこから RDP と SSH に接続: どちらも問題なし。
 - GitHub release `v0.1.2`（Latest、pre-release ではない）として commit b7774aa で公開。

@@ -311,5 +311,5 @@ Windows lets stay in RAM.
 - `tauri build --no-bundle`: 5.4 min from nothing, no warnings. `scripts\make-zip.ps1` →
   `release\iruka-0.1.2-windows-x64.zip` (9.6 MB; 26.8 MB unpacked).
 - Checked: the unpacked copy starts (window opens) with no vcpkg on `PATH` and `OPENSSL_MODULES`
-  unset. No RDP / SSH connection tried.
+  unset; the owner then connected RDP and SSH from it: both work.
 - Published as GitHub release `v0.1.2` (Latest, not a pre-release) on commit b7774aa.
