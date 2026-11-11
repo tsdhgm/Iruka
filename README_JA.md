@@ -4,6 +4,10 @@
 
 複数の PC を一度に見守るためのビューアー。SSH などのコンソールとリモートデスクトップ（RDP）を、左のサイドバーにライブのサムネイルとして並べ、クリックで右側に大きく表示する。表示していないセッションも接続したまま動き続ける。
 
+![グリッド表示: 複数の PC の SSH コンソールと RDP デスクトップを並べたところ](docs/images/grid-view.png)
+
+短い録画: [docs/images/demo.mp4](docs/images/demo.mp4)。
+
 Tauri 2 + React + TypeScript。RDP は FreeRDP 3 を使う（予備として IronRDP も組み込んである。experimental 扱い）。
 
 **状態**: 個人用の初期段階のツール（1.0 未満）。クライアントは Ubuntu 26.04 LTS、接続先は Windows 11 Pro、Ubuntu の GNOME Remote Desktop、Apple Silicon の macOS（macrdp）で試している。

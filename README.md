@@ -4,6 +4,10 @@
 
 A viewer for keeping an eye on many PCs at once. Consoles (SSH and the like) and remote desktops (RDP) are lined up as live thumbnails in a sidebar on the left; click one to show it large on the right. Sessions that are not on screen stay connected and keep running.
 
+![Grid view: SSH consoles and RDP desktops of several PCs side by side](docs/images/grid-view.png)
+
+A short recording: [docs/images/demo.mp4](docs/images/demo.mp4).
+
 Tauri 2 + React + TypeScript. RDP uses FreeRDP 3 (IronRDP is built in as an experimental fallback).
 
 **Status**: an early, personal-use tool (pre-1.0). Tested with Ubuntu 26.04 LTS as the client, against Windows 11 Pro, Ubuntu GNOME Remote Desktop and macOS on Apple Silicon (macrdp) targets.
