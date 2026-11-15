@@ -596,6 +596,31 @@ function App() {
     }
   }, []);
 
+  /**
+   * "Local desktop": step aside so that this computer's own desktop can be used, the way a
+   * remote one is chosen. The window is minimized as it is (full screen included), with the
+   * grid showing, so that coming back to Iruka (Alt+Tab, the dock or the taskbar) lands on
+   * the grid in the same window state. No RDP session is on show meanwhile, so nothing is
+   * pulled into the local clipboard.
+   */
+  const goLocal = useCallback(async () => {
+    setZoom(null);
+    setView("grid");
+    const win = getCurrentWindow();
+    try {
+      await win.minimize();
+      // Some platforms refuse to minimize a full-screen window (macOS: it has a Space of
+      // its own). Leave full screen there and try once more.
+      if (fullscreenRef.current && !(await win.isMinimized())) {
+        await win.setFullscreen(false);
+        setFullscreen(false);
+        await win.minimize();
+      }
+    } catch (e) {
+      alert(`Could not minimize the window: ${e}`);
+    }
+  }, []);
+
   const closeSession = useCallback((id: number) => {
     if (activeIdRef.current === id) toggleFullscreen(false);
     const handle = handlesRef.current.get(id);
@@ -876,6 +901,16 @@ function App() {
               )}
             </div>
           ))}
+          <div
+            className="session-card local-card"
+            title="Use this computer's own desktop: Iruka steps aside (minimizes) and comes back as it was"
+            onClick={goLocal}
+          >
+            <div className="session-card-header">
+              <span className="session-kind">LOCAL</span>
+              <span className="session-title">Local desktop</span>
+            </div>
+          </div>
           {sessions.length === 0 && (
             <div className="empty-hint">
               No sessions yet.
@@ -906,7 +941,12 @@ function App() {
             onSelect={(id) => {
               setView("single");
               focusSession(id);
+              // A desktop chosen from the grid fills the screen, like the local one does;
+              // a console is shown in the window (full-screen text is hard to read).
+              const wantFullscreen = handlesRef.current.get(id)?.kind === "rdp";
+              if (wantFullscreen !== fullscreenRef.current) toggleFullscreen(wantFullscreen);
             }}
+            onSelectLocal={goLocal}
           />
         )}
         {sessions.length > 0 && (

@@ -86,6 +86,7 @@ A quick check on 2026-10-13 found no problems. Still to be checked more carefull
 
 ## Input
 
+- [ ] Local desktop entry (2026-11-15; Ubuntu done and checked by the owner), next steps in this order: (1) Windows: check that minimizing from full screen and coming back behaves the same, then a low-level keyboard hook so that a lone right Alt brings Iruka back while it is minimized; (2) Ubuntu: coming back is Alt+Tab or the dock, because a Wayland client without focus sees no keys; try the GlobalShortcuts portal (present on GNOME 50; unknown whether it takes a lone modifier and whether it can raise a minimized window); (3) macOS: a full-screen window cannot be minimized, so the code leaves full screen first and does not restore it on return (never run on a Mac); (4) lowest priority (owner): a picture of the local screen in the tile; possible on Windows by excluding Iruka's window from the capture, not useful on GNOME where a capture shows Iruka itself.
 - [ ] Japanese keyboard: check the keys that have no US-layout counterpart (変換 / 無変換 / 半角全角 / カタカナひらがな).
 - [ ] A settings screen for the view toggle key (today it is only `localStorage` key `iruka.viewToggleKey`).
 

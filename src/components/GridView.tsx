@@ -6,6 +6,8 @@ import { ActivityBadge } from "./ActivityBadge";
 export const GRID_MAX_COLS = 6;
 const GRID_PAD = 8;
 const GRID_GAP = 8;
+/** Key of the local-desktop tile among the tile elements (session ids are positive). */
+const LOCAL_TILE = -1;
 
 /**
  * Tracks the width of the main (right) pane, which the tile size is computed from.
@@ -40,6 +42,7 @@ export function GridView({
   dirtyRef,
   lastActivityRef,
   onSelect,
+  onSelectLocal,
 }: {
   sessions: SessionInfo[];
   activeId: number | null;
@@ -49,6 +52,8 @@ export function GridView({
   dirtyRef: RefObject<Set<number>>;
   lastActivityRef: RefObject<Map<number, number>>;
   onSelect: (id: number) => void;
+  /** Called when the "Local desktop" tile (always the last one) is chosen. */
+  onSelectLocal: () => void;
 }) {
   // Keyboard selection: the tile that Enter would open. Starts on the active session.
   const [focused, setFocused] = useState(() => {
@@ -58,22 +63,22 @@ export function GridView({
   const tileRefs = useRef(new Map<number, HTMLDivElement>());
 
   // Keep the index valid when sessions come and go.
-  const count = sessions.length;
+  // Session i is tile i; the local desktop is the last tile.
+  const count = sessions.length + 1;
   useEffect(() => {
-    setFocused((i) => (count === 0 ? 0 : Math.min(i, count - 1)));
+    setFocused((i) => Math.min(i, count - 1));
   }, [count]);
 
   // Arrow keys and Tab / Shift+Tab move the selection, Enter opens it. Ignored while typing in a form field.
-  const latest = useRef({ sessions, gridCols, focused, onSelect });
-  latest.current = { sessions, gridCols, focused, onSelect };
+  const latest = useRef({ sessions, gridCols, focused, onSelect, onSelectLocal });
+  latest.current = { sessions, gridCols, focused, onSelect, onSelectLocal };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target;
       if (t instanceof HTMLElement && ["INPUT", "SELECT", "TEXTAREA"].includes(t.tagName)) return;
       if (e.altKey || e.ctrlKey || e.metaKey) return;
-      const { sessions, gridCols, focused, onSelect } = latest.current;
-      const n = sessions.length;
-      if (n === 0) return;
+      const { sessions, gridCols, focused, onSelect, onSelectLocal } = latest.current;
+      const n = sessions.length + 1;
       let next = focused;
       // Shift+Tab may arrive as "ISO_Left_Tab" rather than "Tab" (WebKitGTK), so go by the
       // physical key for Tab.
@@ -102,7 +107,8 @@ export function GridView({
           break;
         case "Enter":
           e.preventDefault();
-          onSelect(sessions[focused].id);
+          if (focused === sessions.length) onSelectLocal();
+          else onSelect(sessions[focused].id);
           return;
         default:
           return;
@@ -116,8 +122,8 @@ export function GridView({
 
   // Keep the selected tile visible when it moves off screen.
   useEffect(() => {
-    const s = sessions[focused];
-    if (s) tileRefs.current.get(s.id)?.scrollIntoView({ block: "nearest" });
+    const key = focused === sessions.length ? LOCAL_TILE : sessions[focused]?.id;
+    if (key !== undefined) tileRefs.current.get(key)?.scrollIntoView({ block: "nearest" });
   }, [focused, sessions]);
 
   // Tiles are 16:9. Divide the main pane width by the column count (minus padding and gaps).
@@ -166,6 +172,24 @@ export function GridView({
           />
         </div>
       ))}
+      <div
+        className={`grid-tile ${focused === sessions.length ? "focused" : ""}`}
+        title="Click to use this computer's own desktop: Iruka steps aside (minimizes) and comes back as it was"
+        onClick={onSelectLocal}
+        ref={(el) => {
+          if (el) tileRefs.current.set(LOCAL_TILE, el);
+          else tileRefs.current.delete(LOCAL_TILE);
+        }}
+      >
+        <div className="grid-tile-header">
+          <span className="session-kind">LOCAL</span>
+          <span className="session-title">Local desktop</span>
+        </div>
+        <div className="grid-tile-local" style={{ width: tileW, height: tileH }}>
+          <div className="grid-tile-local-icon">🖥</div>
+          <div>This computer</div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -205,6 +205,18 @@ KNOWN_ISSUES.md and TODO.md.
   Control turned off by the owner. Release build 5.4 min, zip 9.6 MB; the unpacked copy starts
   without the vcpkg environment, and the owner connected RDP and SSH from it (both OK). Release on
   commit b7774aa; docs/windows-client-log.md "2026-11-12".
+- **2026-11-15: "Local desktop" entry** (on `linux-m2sata`; owner's wish: choose this computer's
+  own screen the way a remote one is chosen, instead of leaving full screen by hand). Last tile of
+  the grid and last card in the sidebar; choosing it switches to the grid and minimizes the window
+  as it is (`goLocal` in `src/App.tsx`, permission `core:window:allow-minimize`), and GNOME brings
+  it back full screen on Alt+Tab or a dock click. Choosing from the grid now also sets the window
+  state: RDP goes full screen, a console leaves it (owner: full-screen text is hard to read); the
+  sidebar does not touch it. All checked by the owner in the repo's release build. **Not in the
+  installed deb and no version bump yet.** Ruled out: a transparent, click-through full-screen
+  window ("show only the frame"), because the click moves the keyboard focus to the window below
+  and Iruka then sees no keys. Why right Alt cannot bring Iruka back on Wayland, why the tile has
+  no picture, and the next steps (Windows hook, GlobalShortcuts portal, macOS) are in TODO.md
+  "Input".
 - The deb from `scripts/make-deb.sh` is installed on the Ubuntu box (`/usr/bin/iruka`; installed
   2026-10-24 on the new box with `apt install`; on a box that already has it, reinstalling the same
   version 0.1.0 needs `sudo dpkg -i`, since `apt install` does not replace a same-version package);
