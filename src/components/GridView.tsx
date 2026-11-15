@@ -43,6 +43,7 @@ export function GridView({
   lastActivityRef,
   onSelect,
   onSelectLocal,
+  onReconnect,
 }: {
   sessions: SessionInfo[];
   activeId: number | null;
@@ -54,6 +55,8 @@ export function GridView({
   onSelect: (id: number) => void;
   /** Called when the "Local desktop" tile (always the last one) is chosen. */
   onSelectLocal: () => void;
+  /** Connect an ended RDP session again (the button on its tile). */
+  onReconnect: (id: number) => void;
 }) {
   // Keyboard selection: the tile that Enter would open. Starts on the active session.
   const [focused, setFocused] = useState(() => {
@@ -145,7 +148,9 @@ export function GridView({
       {sessions.map((s, i) => (
         <div
           key={s.id}
-          className={`grid-tile ${s.id === activeId ? "active" : ""} ${i === focused ? "focused" : ""}`}
+          className={`grid-tile ${s.id === activeId ? "active" : ""} ${i === focused ? "focused" : ""} ${
+            s.kind === "rdp" && s.status === "exited" ? "disconnected" : ""
+          }`}
           title="Click to show on its own (or select with the arrow keys or Tab and press Enter)"
           onClick={() => onSelect(s.id)}
           ref={(el) => {
@@ -158,6 +163,18 @@ export function GridView({
             <span className="session-kind">{s.kind === "rdp" ? "RDP" : ">_"}</span>
             <span className="session-title">{s.title}</span>
             <ActivityBadge session={s} lastActivity={lastActivityRef.current.get(s.id)} />
+            {s.kind === "rdp" && s.status === "exited" && (
+              <button
+                className="reconnect-btn"
+                title="Connect again"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onReconnect(s.id);
+                }}
+              >
+                Reconnect
+              </button>
+            )}
           </div>
           <canvas
             style={{ width: tileW, height: tileH }}

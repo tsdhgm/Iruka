@@ -217,6 +217,16 @@ KNOWN_ISSUES.md and TODO.md.
   and Iruka then sees no keys. Why right Alt cannot bring Iruka back on Wayland, why the tile has
   no picture, and the next steps (Windows hook, GlobalShortcuts portal, macOS) are in TODO.md
   "Input".
+- **2026-11-15: closing, disconnects and Reconnect.** Closing the session on show returns to the
+  grid in the same window state (only the last one leaves full screen). An RDP session that was
+  connected and then ended stays in the list with a red frame, a "Disconnected" badge and a
+  "Reconnect" button on its tile, its sidebar card and under the reason over its screen (moved
+  down to clear the toolbar); if it was on show the view returns to the grid. `reconnect` in
+  `src/App.tsx` opens a new session from the stored request (`rdpRequestsRef`, password in memory
+  only) in the old one's place and skips the pre-connect memory check. Tried and dropped the same
+  day: closing a disconnected session by itself after 3 s (a session lost while not on show would
+  vanish unnoticed). A console that ends is unchanged ("Session ended" in the terminal). Checked
+  by the owner in the repo's release build; not in the installed deb.
 - The deb from `scripts/make-deb.sh` is installed on the Ubuntu box (`/usr/bin/iruka`; installed
   2026-10-24 on the new box with `apt install`; on a box that already has it, reinstalling the same
   version 0.1.0 needs `sudo dpkg -i`, since `apt install` does not replace a same-version package);

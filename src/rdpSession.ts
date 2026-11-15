@@ -217,6 +217,13 @@ export async function createRdpSession(
         : `Disconnected (${msg.backend}): ${msg.reason}`;
       status.classList.remove("warn");
       status.classList.toggle("error", msg.error);
+      // A way back, right under the reason. Kept off the canvas's keyboard focus path:
+      // the button is a sibling of the scroller, so clicking it sends nothing to the remote.
+      const again = document.createElement("button");
+      again.className = "rdp-reconnect";
+      again.textContent = "Reconnect";
+      again.addEventListener("click", () => cb.reconnect(id));
+      status.append(document.createElement("br"), again);
       cb.updateSession(id, { status: "exited", message: msg.reason });
     }
   };

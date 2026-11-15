@@ -92,6 +92,12 @@ function App() {
   const [restoreReport, setRestoreReport] = useState<RestoreReport | null>(null);
   // While restoring: sessions whose first "running" / "exited" status is awaited before the next connect.
   const pendingRef = useRef<Map<number, () => void>>(new Map());
+  // Sessions that have reached "running" at least once (see updateSession).
+  const everRunningRef = useRef<Set<number>>(new Set());
+  const reconnectRef = useRef<(id: number) => void>(() => {});
+  // What each RDP session was opened with, for "Reconnect" (the password is in memory only,
+  // as it already is in the backend's connection arguments).
+  const rdpRequestsRef = useRef<Map<number, RdpConnectRequest>>(new Map());
   const [fullscreen, setFullscreen] = useState(false);
   const [toolbarPinned, setToolbarPinned] = useState(false);
   const [scaled, setScaled] = useState(isScaledDisplay);
@@ -159,6 +165,21 @@ function App() {
       setSessions((prev) =>
         prev.map((s) => (s.id === id ? { ...s, ...patch } : s)),
       );
+      // An RDP session on show that was connected and is now gone for good (the remote
+      // disconnected, or reconnecting gave up): back to the grid, window state unchanged.
+      // The session stays in the list, marked as disconnected and with a Reconnect button,
+      // whether it was on show or not. A connection that never came up stays on show, so
+      // that its error can be read.
+      if (patch.status === "running") everRunningRef.current.add(id);
+      if (
+        patch.status === "exited" &&
+        everRunningRef.current.delete(id) &&
+        activeIdRef.current === id &&
+        viewRef.current === "single" &&
+        handlesRef.current.get(id)?.kind === "rdp"
+      ) {
+        setView("grid");
+      }
       if (patch.status === "running" || patch.status === "exited") {
         const resolve = pendingRef.current.get(id);
         if (resolve) {
@@ -183,6 +204,7 @@ function App() {
     markDirty: (id) => dirtyRef.current.add(id),
     markActivity: (id) => lastActivityRef.current.set(id, Date.now()),
     updateSession: (id, patch) => updateSession(id, patch),
+    reconnect: (id) => reconnectRef.current(id),
   }).current;
 
   /**
@@ -255,7 +277,7 @@ function App() {
   }, []);
 
   const openRdp = useCallback(
-    async (request: RdpConnectRequest): Promise<number | null> => {
+    async (request: RdpConnectRequest, replaceId?: number): Promise<number | null> => {
       const main = mainRef.current;
       if (!main) return null;
       // The title and profile id are for the session list only; `rdp_connect` gets exactly RdpConnectParams.
@@ -265,19 +287,23 @@ function App() {
       const { id, handle } = created;
 
       handlesRef.current.set(id, handle);
+      rdpRequestsRef.current.set(id, request);
       dirtyRef.current.add(id);
-      setSessions((prev) => [
-        ...prev,
-        {
-          id,
-          kind: "rdp",
-          profileId,
-          title: title ?? params.host,
-          status: "connecting",
-          exitCode: null,
-          message: null,
-        },
-      ]);
+      const info: SessionInfo = {
+        id,
+        kind: "rdp",
+        profileId,
+        title: title ?? params.host,
+        status: "connecting",
+        exitCode: null,
+        message: null,
+      };
+      // A reconnect takes the place of the session it replaces; anything else goes last.
+      setSessions((prev) =>
+        prev.some((s) => s.id === replaceId)
+          ? prev.map((s) => (s.id === replaceId ? info : s))
+          : [...prev, info],
+      );
       focusSession(id);
       return id;
     },
@@ -621,8 +647,43 @@ function App() {
     }
   }, []);
 
+  /**
+   * "Reconnect" on an ended RDP session: a new connection with what the old one was opened
+   * with, in the same place in the list. The view is left as it is (grid stays grid).
+   */
+  const reconnect = useCallback(
+    async (id: number) => {
+      const request = rdpRequestsRef.current.get(id);
+      const old = handlesRef.current.get(id);
+      if (!request || !old) return;
+      setZoom(null);
+      invoke("rdp_close", { id }).catch(() => {});
+      old.container.remove();
+      handlesRef.current.delete(id);
+      rdpRequestsRef.current.delete(id);
+      everRunningRef.current.delete(id);
+      if ((await openRdp(request, id)) === null) {
+        // The connection could not even be started (already reported): drop the old entry.
+        setSessions((prev) => prev.filter((s) => s.id !== id));
+      }
+    },
+    [openRdp],
+  );
+  reconnectRef.current = reconnect;
+
   const closeSession = useCallback((id: number) => {
-    if (activeIdRef.current === id) toggleFullscreen(false);
+    // Closing the session on show goes back to the grid in the same window state (full
+    // screen stays full screen); the next session is not put on show unasked. When it was
+    // the last one there is nothing to choose from, so leave full screen for the sidebar.
+    if (activeIdRef.current === id) {
+      if (handlesRef.current.size > 1) setView("grid");
+      else {
+        setView("single");
+        toggleFullscreen(false);
+      }
+    }
+    everRunningRef.current.delete(id);
+    rdpRequestsRef.current.delete(id);
     const handle = handlesRef.current.get(id);
     if (handle) {
       if (handle.kind === "pty") {
@@ -853,7 +914,9 @@ function App() {
           {sessions.map((s) => (
             <div
               key={s.id}
-              className={`session-card ${s.id === activeId ? "active" : ""}`}
+              className={`session-card ${s.id === activeId ? "active" : ""} ${
+                s.kind === "rdp" && s.status === "exited" ? "disconnected" : ""
+              }`}
               onClick={() => focusSession(s.id)}
               onMouseEnter={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
@@ -874,6 +937,18 @@ function App() {
                   {s.title}
                 </span>
                 <ActivityBadge session={s} lastActivity={lastActivityRef.current.get(s.id)} />
+                {s.kind === "rdp" && s.status === "exited" && (
+                  <button
+                    className="reconnect-btn"
+                    title="Connect again"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      reconnect(s.id);
+                    }}
+                  >
+                    ↻
+                  </button>
+                )}
                 <button
                   className="close-btn"
                   title="Close"
@@ -947,6 +1022,7 @@ function App() {
               if (wantFullscreen !== fullscreenRef.current) toggleFullscreen(wantFullscreen);
             }}
             onSelectLocal={goLocal}
+            onReconnect={reconnect}
           />
         )}
         {sessions.length > 0 && (

@@ -32,6 +32,8 @@ export interface SessionCallbacks {
   markActivity: (id: number) => void;
   /** Patch the session's entry in the session list. */
   updateSession: (id: number, patch: Partial<SessionInfo>) => void;
+  /** Connect an ended RDP session again, in its place in the session list. */
+  reconnect: (id: number) => void;
 }
 
 export function drawThumb(

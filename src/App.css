@@ -470,6 +470,33 @@ body {
   border-color: #3d8fb5;
 }
 
+/* An RDP session that is gone: red frame in the grid and in the sidebar */
+.grid-tile.disconnected,
+.grid-tile.disconnected:hover,
+.session-card.disconnected {
+  border-color: #e06c75;
+}
+
+.grid-tile.disconnected canvas,
+.session-card.disconnected .thumb {
+  opacity: 0.45;
+}
+
+.reconnect-btn {
+  flex-shrink: 0;
+  font-size: 11px;
+  padding: 0 6px;
+  border-radius: 4px;
+  border: 1px solid #e06c75;
+  background: #3a2426;
+  color: #f0b5ba;
+  cursor: pointer;
+}
+
+.reconnect-btn:hover {
+  background: #54303a;
+}
+
 /* Keyboard selection (arrow keys + Enter) */
 .grid-tile.focused {
   outline: 2px solid #7fc4e6;
@@ -697,7 +724,8 @@ body {
 
 .rdp-status {
   position: absolute;
-  top: 12px;
+  /* Two lines down, clear of the drop-down toolbar at the top centre */
+  top: 56px;
   left: 50%;
   transform: translateX(-50%);
   background: #131926e6;
@@ -707,6 +735,22 @@ body {
   font-size: 13px;
   color: #d6dde8;
   max-width: 80%;
+  text-align: center;
+}
+
+.rdp-reconnect {
+  margin-top: 8px;
+  font-size: 13px;
+  padding: 3px 12px;
+  border-radius: 4px;
+  border: 1px solid #3d8fb5;
+  background: #16233a;
+  color: #d6dde8;
+  cursor: pointer;
+}
+
+.rdp-reconnect:hover {
+  background: #1d3352;
 }
 
 .rdp-status.error {

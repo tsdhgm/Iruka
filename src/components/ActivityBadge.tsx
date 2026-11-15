@@ -24,7 +24,15 @@ export function ActivityBadge({
   session: SessionInfo;
   lastActivity: number | undefined;
 }) {
-  if (session.kind !== "pty") return null;
+  if (session.kind !== "pty") {
+    // A desktop that is gone must stand out among the tiles (its picture is the last frame).
+    if (session.status !== "exited") return null;
+    return (
+      <span className="badge exited" title={session.message ?? undefined}>
+        Disconnected
+      </span>
+    );
+  }
   if (session.status === "exited") return <span className="badge exited">Exited</span>;
   const idle = Date.now() - (lastActivity ?? 0);
   if (idle < RUNNING_WINDOW_MS) return <span className="badge running">Running</span>;
