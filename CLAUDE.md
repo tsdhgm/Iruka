@@ -227,6 +227,12 @@ KNOWN_ISSUES.md and TODO.md.
   day: closing a disconnected session by itself after 3 s (a session lost while not on show would
   vanish unnoticed). A console that ends is unchanged ("Session ended" in the terminal). Checked
   by the owner in the repo's release build; not in the installed deb.
+- **2026-11-15: the "Saved" list is grouped and sorted** (`src/components/SavedSection.tsx`):
+  an SSH and an RDP group that fold separately, each sorted by name with numbers compared as
+  numbers, ascending or descending ("A→Z" button). Owner's reason: with the list in connection
+  order, the same host sits in a different place on each machine and invites a wrong click
+  (Remmina as the model). Display only, `iruka.profiles` keeps its order. Checked by the owner in
+  the repo's release build; not in the installed deb.
 - The deb from `scripts/make-deb.sh` is installed on the Ubuntu box (`/usr/bin/iruka`; installed
   2026-10-24 on the new box with `apt install`; on a box that already has it, reinstalling the same
   version 0.1.0 needs `sudo dpkg -i`, since `apt install` does not replace a same-version package);

@@ -43,6 +43,7 @@ import { ConnectWarningModal, type ConnectWarning } from "./components/ConnectWa
 import { GridView, GRID_MAX_COLS, useMainAreaWidth } from "./components/GridView";
 import { RdpForm } from "./components/RdpForm";
 import { RestoreReportModal, type RestoreReport } from "./components/RestoreReport";
+import { SavedSection } from "./components/SavedSection";
 import { SshForm } from "./components/SshForm";
 import { ViewToolbar } from "./components/ViewToolbar";
 import { WorksetSection } from "./components/WorksetSection";
@@ -62,9 +63,6 @@ function App() {
     () => localStorage.getItem("iruka.showThumbs") !== "0",
   );
   // The "Saved" list folds away so it is not clicked by mistake once many sessions are open.
-  const [savedOpen, setSavedOpen] = useState<boolean>(
-    () => localStorage.getItem("iruka.savedOpen") === "1",
-  );
   const handlesRef = useRef<Map<number, SessionHandle>>(new Map());
   const mainRef = useRef<HTMLDivElement>(null);
   const activeIdRef = useRef<number | null>(null);
@@ -850,56 +848,12 @@ function App() {
           />
         )}
         <div className="session-list">
-          {profiles.length > 0 && (
-            <div className="profile-section">
-              <button
-                className="section-label section-toggle"
-                title={savedOpen ? "Hide saved connections" : "Show saved connections"}
-                onClick={() =>
-                  setSavedOpen((v) => {
-                    const next = !v;
-                    localStorage.setItem("iruka.savedOpen", next ? "1" : "0");
-                    return next;
-                  })
-                }
-              >
-                <span className="section-caret">{savedOpen ? "▾" : "▸"}</span> Saved ({profiles.length})
-              </button>
-              {savedOpen && profiles.map((p) => (
-                <div
-                  key={p.id}
-                  className="profile-card"
-                  title={p.username ? `${p.username}@${p.host}` : p.host}
-                  onClick={() => openProfile(p, true)}
-                >
-                  <span className="session-kind">{p.kind === "rdp" ? "RDP" : "SSH"}</span>
-                  <span className="profile-title">{p.name}</span>
-                  <button
-                    className="profile-btn"
-                    title="Edit"
-                    tabIndex={-1}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openProfile(p, false);
-                    }}
-                  >
-                    ✎
-                  </button>
-                  <button
-                    className="profile-btn delete"
-                    title="Delete"
-                    tabIndex={-1}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteProfile(p.id);
-                    }}
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+          <SavedSection
+            profiles={profiles}
+            onOpen={(p) => openProfile(p, true)}
+            onEdit={(p) => openProfile(p, false)}
+            onDelete={deleteProfile}
+          />
           {(profiles.length > 0 || worksets.length > 0 || lastWorkset) && (
             <WorksetSection
               worksets={worksets}
