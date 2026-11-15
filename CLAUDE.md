@@ -211,8 +211,7 @@ KNOWN_ISSUES.md and TODO.md.
   as it is (`goLocal` in `src/App.tsx`, permission `core:window:allow-minimize`), and GNOME brings
   it back full screen on Alt+Tab or a dock click. Choosing from the grid now also sets the window
   state: RDP goes full screen, a console leaves it (owner: full-screen text is hard to read); the
-  sidebar does not touch it. All checked by the owner in the repo's release build. **Not in the
-  installed deb and no version bump yet.** Ruled out: a transparent, click-through full-screen
+  sidebar does not touch it. All checked by the owner in the repo's release build. Ruled out: a transparent, click-through full-screen
   window ("show only the frame"), because the click moves the keyboard focus to the window below
   and Iruka then sees no keys. Why right Alt cannot bring Iruka back on Wayland, why the tile has
   no picture, and the next steps (Windows hook, GlobalShortcuts portal, macOS) are in TODO.md
@@ -226,20 +225,19 @@ KNOWN_ISSUES.md and TODO.md.
   only) in the old one's place and skips the pre-connect memory check. Tried and dropped the same
   day: closing a disconnected session by itself after 3 s (a session lost while not on show would
   vanish unnoticed). A console that ends is unchanged ("Session ended" in the terminal). Checked
-  by the owner in the repo's release build; not in the installed deb.
+  by the owner in the repo's release build.
 - **2026-11-15: the "Saved" list is grouped and sorted** (`src/components/SavedSection.tsx`):
   an SSH and an RDP group that fold separately, each sorted by name with numbers compared as
   numbers, ascending or descending ("A→Z" button). Owner's reason: with the list in connection
   order, the same host sits in a different place on each machine and invites a wrong click
   (Remmina as the model). Display only, `iruka.profiles` keeps its order. Checked by the owner in
-  the repo's release build; not in the installed deb.
+  the repo's release build.
 - **2026-11-15: "Magnify" on the toolbar** (owner: text too small to read, without touching the
   remote's resolution or scale). Per RDP session, 100% → 150% → 200%, not remembered
   (`MAGNIFY_STEPS`, `setCanvasMagnify` in `src/rdpSession.ts`: only the canvas's CSS size
   changes, so no memory or traffic cost; `image-rendering: pixelated` when a remote pixel maps to
   a whole number of physical pixels). Excludes "Scaled" both ways. The remote's cursor is not
-  enlarged (offered, not asked for). Checked by the owner in the repo's release build; not in the
-  installed deb.
+  enlarged (offered, not asked for). Checked by the owner in the repo's release build.
 - **2026-11-15: an RDP session and consoles side by side** (owner: feed local voice input into a
   console while watching a remote screen, and choose the set from the grid with the keyboard
   rather than from the toolbar). In the grid Space or Ctrl+click marks tiles (`marked` in
@@ -251,9 +249,17 @@ KNOWN_ISSUES.md and TODO.md.
   `visibility: hidden`, so no terminal resize; not remembered); the console row's left and right
   edge are dragged to put the consoles in the middle or on one side. Checked by the owner in the
   repo's release build, **except the voice input itself** (the dictation software is not installed
-  yet); not in the installed deb. Seen the same day: the detached start
+  yet). Seen the same day: the detached start
   (`setsid nohup sh -c … &`) from Claude Code's shell no longer left a process behind, so the
   test builds were started as a Claude Code background task instead (cause not looked into).
+- **2026-11-15: deb rebuilt with all of the day's features, still version 0.1.2** (owner's
+  choice: no version bump yet). `release/iruka_0.1.2_amd64.deb` built from commit 1574b53 and
+  installed on `linux-m2sata` with `sudo dpkg -i` (same version, so `apt install` would not
+  replace it); `/usr/bin/iruka` verified byte for byte against the package, and the owner saw the
+  "Local desktop" tile in the installed copy. The sidebar still says 0.1.2, so this build and the
+  one of 2026-11-11 cannot be told apart by the number: the "Local desktop" tile is the sign of
+  the new one. The Windows release v0.1.2 has none of these features. **Next:** the voice-input
+  check of the side-by-side view, then a version bump when the owner asks.
 - The deb from `scripts/make-deb.sh` is installed on the Ubuntu box (`/usr/bin/iruka`; installed
   2026-10-24 on the new box with `apt install`; on a box that already has it, reinstalling the same
   version 0.1.0 needs `sudo dpkg -i`, since `apt install` does not replace a same-version package);
