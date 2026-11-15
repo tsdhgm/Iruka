@@ -499,6 +499,71 @@ body {
   border-color: #3d8fb5;
 }
 
+/* Marked for showing side by side */
+.grid-tile.marked {
+  border-color: #98c379;
+}
+
+.mark-check {
+  flex-shrink: 0;
+  color: #98c379;
+  font-weight: 700;
+}
+
+/* Sessions shown side by side: a frame each, brighter around the one that has the keyboard */
+.combo-pane::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  border: 1px solid #263143;
+  pointer-events: none;
+}
+
+.combo-pane:focus-within::after {
+  border-color: #3d8fb5;
+}
+
+/* The bar between the RDP session and the consoles below; drag to change the heights */
+.combo-splitter {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 7px;
+  margin-top: -3px;
+  z-index: 40;
+  cursor: row-resize;
+}
+
+/* Left and right edge of the console row; drag to leave room beside the consoles */
+.combo-side {
+  position: absolute;
+  bottom: 0;
+  width: 7px;
+  margin-left: -3px;
+  z-index: 39;
+  cursor: col-resize;
+  background: #3d8fb530;
+}
+
+.combo-side:hover,
+.combo-side:active {
+  background: #3d8fb580;
+}
+
+/* Consoles folded away: the bar waits at the bottom, always visible */
+.combo-splitter.folded {
+  top: auto;
+  bottom: 0;
+  margin-top: 0;
+  background: #3d8fb555;
+}
+
+.combo-splitter:hover,
+.combo-splitter:active {
+  background: #3d8fb580;
+}
+
 /* An RDP session that is gone: red frame in the grid and in the sidebar */
 .grid-tile.disconnected,
 .grid-tile.disconnected:hover,

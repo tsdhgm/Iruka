@@ -240,6 +240,20 @@ KNOWN_ISSUES.md and TODO.md.
   a whole number of physical pixels). Excludes "Scaled" both ways. The remote's cursor is not
   enlarged (offered, not asked for). Checked by the owner in the repo's release build; not in the
   installed deb.
+- **2026-11-15: an RDP session and consoles side by side** (owner: feed local voice input into a
+  console while watching a remote screen, and choose the set from the grid with the keyboard
+  rather than from the toolbar). In the grid Space or Ctrl+click marks tiles (`marked` in
+  `src/App.tsx`, one RDP session at most); Enter on a marked tile shows the marked set (`combo`),
+  RDP on top, consoles in a row below; right Alt goes between the grid and the set; a click moves
+  the keyboard between panes (`trackPaneFocus`). `layoutShown` only sets each session container's
+  `inset`. Three bars, positions in `iruka.comboSplit` and `iruka.comboSides`: the horizontal one
+  is dragged, and a double click folds the consoles away (they stay laid out with
+  `visibility: hidden`, so no terminal resize; not remembered); the console row's left and right
+  edge are dragged to put the consoles in the middle or on one side. Checked by the owner in the
+  repo's release build, **except the voice input itself** (the dictation software is not installed
+  yet); not in the installed deb. Seen the same day: the detached start
+  (`setsid nohup sh -c … &`) from Claude Code's shell no longer left a process behind, so the
+  test builds were started as a Claude Code background task instead (cause not looked into).
 - The deb from `scripts/make-deb.sh` is installed on the Ubuntu box (`/usr/bin/iruka`; installed
   2026-10-24 on the new box with `apt install`; on a box that already has it, reinstalling the same
   version 0.1.0 needs `sudo dpkg -i`, since `apt install` does not replace a same-version package);

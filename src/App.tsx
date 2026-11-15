@@ -63,6 +63,10 @@ const THUMB_W = 196;
 const THUMB_H = 110;
 const ZOOM_W = 560;
 const ZOOM_H = 330;
+// Height of the bar left at the bottom while the consoles are folded away (matches .combo-splitter).
+const FOLDED_BAR_PX = 7;
+// Smallest share of the width the console row can be narrowed to.
+const MIN_CONSOLE_ROW = 0.2;
 
 function App() {
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
@@ -116,6 +120,52 @@ function App() {
     return n >= 1 && n <= GRID_MAX_COLS ? n : 3;
   });
   const mainAreaRef = useRef<HTMLDivElement>(null);
+  // Tiles marked in the grid (Space / Ctrl+click), and the marked set currently opened side
+  // by side: at most one RDP session on top, the consoles in a row below it. The ref is set
+  // together with the state because showSession runs before the next render.
+  const [marked, setMarked] = useState<number[]>([]);
+  const [combo, setComboState] = useState<number[] | null>(null);
+  const comboRef = useRef<number[] | null>(null);
+  const setCombo = useCallback((ids: number[] | null) => {
+    comboRef.current = ids;
+    setComboState(ids);
+  }, []);
+  // Share of the height given to the RDP session when it is shown with consoles.
+  const [split, setSplit] = useState<number>(() => {
+    const n = Number(localStorage.getItem("iruka.comboSplit"));
+    return n >= 0.2 && n <= 0.85 ? n : 0.6;
+  });
+  const splitRef = useRef(split);
+  splitRef.current = split;
+  // Left and right edge of the console row under the RDP session, as shares of the width;
+  // the room outside is left empty, so the consoles can sit in the middle or on one side.
+  const [sides, setSidesState] = useState<[number, number]>(() => {
+    try {
+      const [l, r] = JSON.parse(localStorage.getItem("iruka.comboSides") ?? "") as number[];
+      if (l >= 0 && r <= 1 && r - l >= MIN_CONSOLE_ROW - 0.001) return [l, r];
+    } catch {
+      // not stored yet, or unreadable: full width
+    }
+    return [0, 1];
+  });
+  const sidesRef = useRef(sides);
+  const setSides = useCallback((next: [number, number]) => {
+    sidesRef.current = next;
+    setSidesState(next);
+  }, []);
+  // Folded: the bar sits at the bottom and the RDP session has the whole pane. The consoles
+  // keep their place and size underneath, only hidden, so nothing is resized on the remote
+  // side and they come back as they were.
+  const [folded, setFoldedState] = useState(false);
+  const foldedRef = useRef(false);
+  const setFolded = useCallback((on: boolean) => {
+    foldedRef.current = on;
+    setFoldedState(on);
+  }, []);
+  // The console that had the keyboard when the consoles were folded away; it gets it back.
+  const foldFocusRef = useRef<number | null>(null);
+  // Where a press on the bar started, until it has moved far enough to count as a drag.
+  const splitPressRef = useRef<number | null>(null);
   const gridCanvasRef = useRef<Map<number, HTMLCanvasElement>>(new Map());
   // When each session last produced output (console) or a screen update (RDP); used for the running/idle badge.
   const lastActivityRef = useRef<Map<number, number>>(new Map());
@@ -130,10 +180,56 @@ function App() {
     if (handle) drawThumb(handle, canvas, ZOOM_W, ZOOM_H);
   }, []);
 
+  /** The sessions on show when `id` has the focus: its side-by-side set, or itself alone. */
+  const shownWith = useCallback((id: number): number[] => {
+    const combo = comboRef.current?.filter((sid) => handlesRef.current.has(sid));
+    return combo && combo.length > 1 && combo.includes(id) ? combo : [id];
+  }, []);
+
+  /**
+   * Place the containers of the sessions on show: one fills the pane; several are an RDP
+   * session on top (splitRef of the height) and the consoles in a row below, or just the
+   * consoles in a row. Then fit each to its new size.
+   */
+  const layoutShown = useCallback((shown: number[]) => {
+    const handles = handlesRef.current;
+    for (const h of handles.values()) {
+      h.container.style.inset = "";
+      h.container.style.visibility = "";
+      h.container.classList.remove("combo-pane");
+    }
+    if (shown.length > 1) {
+      const rdp = shown.find((sid) => handles.get(sid)?.kind === "rdp");
+      const consoles = shown.filter((sid) => sid !== rdp);
+      const top = rdp === undefined ? 0 : splitRef.current * 100;
+      const fold = rdp !== undefined && foldedRef.current;
+      if (rdp !== undefined) {
+        handles.get(rdp)!.container.style.inset = fold ? `0 0 ${FOLDED_BAR_PX}px 0` : `0 0 ${100 - top}% 0`;
+      }
+      consoles.forEach((sid, i) => {
+        const n = consoles.length;
+        const c = handles.get(sid)!.container;
+        const [l, r] = rdp === undefined ? [0, 1] : sidesRef.current;
+        const w = (r - l) / n;
+        c.style.inset = `${top}% ${(1 - l - w * (i + 1)) * 100}% 0 ${(l + w * i) * 100}%`;
+        if (fold) c.style.visibility = "hidden";
+      });
+      for (const sid of shown) handles.get(sid)!.container.classList.add("combo-pane");
+    }
+    requestAnimationFrame(() => {
+      for (const sid of shown) {
+        const h = handles.get(sid);
+        if (h?.kind === "pty") h.fit.fit();
+        else if (h) applyPixelSize(h.canvas); // the viewport may have changed
+      }
+    });
+  }, []);
+
   const showSession = useCallback((id: number) => {
     const grid = viewRef.current === "grid";
+    const shown = grid ? [] : shownWith(id);
     for (const [sid, handle] of handlesRef.current) {
-      handle.container.style.display = !grid && sid === id ? "" : "none";
+      handle.container.style.display = shown.includes(sid) ? "" : "none";
     }
     if (grid) {
       // No RDP session is shown in the grid, so do not bring remote copies into the local clipboard.
@@ -141,29 +237,34 @@ function App() {
       return;
     }
     const handle = handlesRef.current.get(id);
+    // Going to a console that is folded away brings the consoles back.
+    if (foldedRef.current && shown.length > 1 && handle?.kind === "pty") setFolded(false);
+    layoutShown(shown);
     if (handle) {
       requestAnimationFrame(() => {
+        const rdpShown = shown.find((sid) => handlesRef.current.get(sid)?.kind === "rdp");
+        // A canvas that was hidden may have lost its contents in WebKit, so ask for a full frame.
+        if (rdpShown !== undefined) invoke("rdp_refresh", { id: rdpShown }).catch(() => {});
         if (handle.kind === "pty") {
-          handle.fit.fit();
           handle.term.focus();
-          // While something other than RDP is shown, do not bring remote copies into the local clipboard.
-          invoke("rdp_set_active", { id: null }).catch(() => {});
+          // The clipboard follows the RDP session on show; with none on show, remote copies
+          // are not brought into the local clipboard.
+          invoke("rdp_set_active", { id: rdpShown ?? null }).catch(() => {});
         } else {
-          applyPixelSize(handle.canvas); // the viewport may have changed while it was hidden
           handle.canvas.focus();
-          // The canvas was hidden; WebKit may have dropped its contents, so ask for a full frame.
-          invoke("rdp_refresh", { id }).catch(() => {});
         }
       });
     }
-  }, []);
+  }, [shownWith, layoutShown, setFolded]);
 
   const focusSession = useCallback(
     (id: number) => {
+      // Going to a session outside the side-by-side set shows it alone (the marks stay).
+      if (comboRef.current && !comboRef.current.includes(id)) setCombo(null);
       setActiveId(id);
       showSession(id);
     },
-    [showSession],
+    [showSession, setCombo],
   );
 
   const updateSession = useCallback(
@@ -213,6 +314,13 @@ function App() {
     reconnect: (id) => reconnectRef.current(id),
   }).current;
 
+  /** Side by side, the session that was clicked (and so has the keyboard) is the active one. */
+  const trackPaneFocus = useCallback((id: number, handle: SessionHandle) => {
+    handle.container.addEventListener("focusin", () => {
+      if (comboRef.current?.includes(id) && activeIdRef.current !== id) setActiveId(id);
+    });
+  }, []);
+
   /**
    * Open a local shell as a new session. `initialInput` is typed into the shell right
    * away, the same way keystrokes are; the PTY buffers it until the shell reads it.
@@ -225,6 +333,7 @@ function App() {
       if (!created) return;
       const { id, handle } = created;
       if (initialInput) invoke("write_session", { id, data: initialInput }).catch(() => {});
+      trackPaneFocus(id, handle);
 
       handlesRef.current.set(id, handle);
       dirtyRef.current.add(id);
@@ -304,6 +413,12 @@ function App() {
         exitCode: null,
         message: null,
       };
+      trackPaneFocus(id, handle);
+      if (replaceId !== undefined) {
+        // Marks and the side-by-side set follow the session to its new id.
+        setMarked((m) => m.map((sid) => (sid === replaceId ? id : sid)));
+        if (comboRef.current) setCombo(comboRef.current.map((sid) => (sid === replaceId ? id : sid)));
+      }
       // A reconnect takes the place of the session it replaces; anything else goes last.
       setSessions((prev) =>
         prev.some((s) => s.id === replaceId)
@@ -656,6 +771,102 @@ function App() {
   const activeHandle = activeId !== null ? handlesRef.current.get(activeId) : undefined;
   const activeMagnify = activeHandle?.kind === "rdp" ? canvasMagnify(activeHandle.canvas) : 1;
 
+  /** Grid: mark / unmark a tile for showing side by side. Only one RDP session can be marked. */
+  const toggleMark = useCallback((id: number) => {
+    setMarked((m) => {
+      if (m.includes(id)) return m.filter((sid) => sid !== id);
+      const isRdp = (sid: number) => handlesRef.current.get(sid)?.kind === "rdp";
+      return [...(isRdp(id) ? m.filter((sid) => !isRdp(sid)) : m), id];
+    });
+  }, []);
+
+  /** Drag the bar between the RDP session and the consoles below it. */
+  const dragSplit = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      const area = mainAreaRef.current;
+      const id = activeIdRef.current;
+      if (!area || id === null || e.buttons !== 1) return;
+      if (splitPressRef.current !== null) {
+        // A double click must not move the bar: wait for a real drag.
+        if (Math.abs(e.clientY - splitPressRef.current) < 4) return;
+        splitPressRef.current = null;
+        if (foldedRef.current) setFolded(false);
+      }
+      const rect = area.getBoundingClientRect();
+      const next = Math.max(0.2, Math.min(0.85, (e.clientY - rect.top) / rect.height));
+      splitRef.current = next;
+      setSplit(next);
+      layoutShown(shownWith(id));
+    },
+    [layoutShown, shownWith, setFolded],
+  );
+
+  /** Drag the left (0) or right (1) edge of the console row. */
+  const dragSide = useCallback(
+    (edge: 0 | 1, e: React.PointerEvent<HTMLDivElement>) => {
+      const area = mainAreaRef.current;
+      const id = activeIdRef.current;
+      if (!area || id === null || e.buttons !== 1) return;
+      if (splitPressRef.current !== null) {
+        if (Math.abs(e.clientX - splitPressRef.current) < 4) return;
+        splitPressRef.current = null;
+      }
+      const rect = area.getBoundingClientRect();
+      let x = (e.clientX - rect.left) / rect.width;
+      if (x < 0.01) x = 0; // snap to the window's edge
+      if (x > 0.99) x = 1;
+      const [l, r] = sidesRef.current;
+      setSides(
+        edge === 0
+          ? [Math.max(0, Math.min(r - MIN_CONSOLE_ROW, x)), r]
+          : [l, Math.min(1, Math.max(l + MIN_CONSOLE_ROW, x))],
+      );
+      layoutShown(shownWith(id));
+    },
+    [layoutShown, shownWith, setSides],
+  );
+
+  /** Double click on an edge of the console row: back to the full width. */
+  const resetSides = useCallback(() => {
+    const id = activeIdRef.current;
+    setSides([0, 1]);
+    localStorage.setItem("iruka.comboSides", JSON.stringify([0, 1]));
+    if (id !== null) layoutShown(shownWith(id));
+  }, [layoutShown, shownWith, setSides]);
+
+  /**
+   * Double click on the bar: fold the consoles away so that the RDP session has the whole
+   * pane (the bar waits at the bottom), or bring them back. The keyboard goes to the RDP
+   * session when its console is folded away, and back to that console afterwards.
+   */
+  const toggleFold = useCallback(() => {
+    const id = activeIdRef.current;
+    if (id === null) return;
+    const shown = shownWith(id);
+    const rdp = shown.find((sid) => handlesRef.current.get(sid)?.kind === "rdp");
+    if (rdp === undefined || shown.length < 2) return;
+    if (!foldedRef.current) {
+      setFolded(true);
+      foldFocusRef.current = id !== rdp ? id : null;
+      if (id !== rdp) {
+        setActiveId(rdp);
+        showSession(rdp);
+      } else {
+        layoutShown(shown);
+      }
+    } else {
+      setFolded(false);
+      const back = foldFocusRef.current;
+      foldFocusRef.current = null;
+      if (back !== null && shown.includes(back)) {
+        setActiveId(back);
+        showSession(back);
+      } else {
+        layoutShown(shown);
+      }
+    }
+  }, [shownWith, layoutShown, showSession, setFolded]);
+
   /**
    * "Local desktop": step aside so that this computer's own desktop can be used, the way a
    * remote one is chosen. The window is minimized as it is (full screen included), with the
@@ -718,6 +929,11 @@ function App() {
     }
     everRunningRef.current.delete(id);
     rdpRequestsRef.current.delete(id);
+    setMarked((m) => m.filter((sid) => sid !== id));
+    if (comboRef.current?.includes(id)) {
+      const rest = comboRef.current.filter((sid) => sid !== id);
+      setCombo(rest.length > 1 ? rest : null);
+    }
     const handle = handlesRef.current.get(id);
     if (handle) {
       if (handle.kind === "pty") {
@@ -789,8 +1005,10 @@ function App() {
     const onWindowResize = () => {
       const id = activeIdRef.current;
       if (id === null) return;
-      const handle = handlesRef.current.get(id);
-      if (handle?.kind === "pty") handle.fit.fit();
+      for (const sid of shownWith(id)) {
+        const handle = handlesRef.current.get(sid);
+        if (handle?.kind === "pty") handle.fit.fit();
+      }
       // If the display scale or the viewport changed (another monitor, fullscreen, sidebar), re-apply the size.
       for (const h of handlesRef.current.values()) {
         if (h.kind === "rdp") applyPixelSize(h.canvas);
@@ -817,6 +1035,12 @@ function App() {
   }, []);
 
   const activeSession = sessions.find((s) => s.id === activeId) ?? null;
+  // The bar between an RDP session and the consoles shown below it.
+  const comboShown = view === "single" && activeId !== null && combo !== null && combo.includes(activeId);
+  const splitterShown =
+    comboShown &&
+    combo.some((sid) => handlesRef.current.get(sid)?.kind === "rdp") &&
+    combo.some((sid) => handlesRef.current.get(sid)?.kind === "pty");
 
   // The version of the running build (tauri.conf.json), shown beside the name.
   const [appVersion, setAppVersion] = useState("");
@@ -1003,18 +1227,66 @@ function App() {
             gridCanvasRef={gridCanvasRef}
             dirtyRef={dirtyRef}
             lastActivityRef={lastActivityRef}
+            marked={marked}
+            onToggleMark={toggleMark}
             onSelect={(id) => {
+              // Enter / click on a marked tile opens the marked sessions side by side, with
+              // the keyboard in the chosen one; on any other tile it opens that one alone.
+              const together =
+                marked.includes(id) && marked.length > 1
+                  ? sessions.filter((s) => marked.includes(s.id)).map((s) => s.id)
+                  : null;
+              setCombo(together);
               setView("single");
               focusSession(id);
               // A desktop chosen from the grid fills the screen, like the local one does;
-              // a console is shown in the window (full-screen text is hard to read).
-              const wantFullscreen = handlesRef.current.get(id)?.kind === "rdp";
+              // consoles are shown in the window (full-screen text is hard to read).
+              const wantFullscreen = (together ?? [id]).some(
+                (sid) => handlesRef.current.get(sid)?.kind === "rdp",
+              );
               if (wantFullscreen !== fullscreenRef.current) toggleFullscreen(wantFullscreen);
             }}
             onSelectLocal={goLocal}
             onReconnect={reconnect}
           />
         )}
+        {splitterShown && (
+          <div
+            className={`combo-splitter${folded ? " folded" : ""}`}
+            title={
+              folded
+                ? "Double click to show the consoles"
+                : "Drag to change the heights; double click to hide the consoles"
+            }
+            style={folded ? undefined : { top: `${split * 100}%` }}
+            onPointerDown={(e) => {
+              e.currentTarget.setPointerCapture(e.pointerId);
+              splitPressRef.current = e.clientY;
+            }}
+            onPointerMove={dragSplit}
+            onDoubleClick={toggleFold}
+            onPointerUp={() => localStorage.setItem("iruka.comboSplit", String(splitRef.current))}
+          />
+        )}
+        {splitterShown &&
+          !folded &&
+          ([0, 1] as const).map((edge) => (
+            <div
+              key={edge}
+              className="combo-side"
+              title="Drag to move this edge of the consoles; double click for the full width"
+              style={{ top: `${split * 100}%`, left: `${sides[edge] * 100}%` }}
+              onPointerDown={(e) => {
+                e.currentTarget.setPointerCapture(e.pointerId);
+                splitPressRef.current = e.clientX;
+              }}
+              onPointerMove={(e) => dragSide(edge, e)}
+              onPointerUp={() =>
+                localStorage.setItem("iruka.comboSides", JSON.stringify(sidesRef.current))
+              }
+              onDoubleClick={resetSides}
+            />
+          ))}
         {sessions.length > 0 && (
           <ViewToolbar
             view={view}

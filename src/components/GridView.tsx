@@ -41,6 +41,8 @@ export function GridView({
   gridCanvasRef,
   dirtyRef,
   lastActivityRef,
+  marked,
+  onToggleMark,
   onSelect,
   onSelectLocal,
   onReconnect,
@@ -52,6 +54,9 @@ export function GridView({
   gridCanvasRef: RefObject<Map<number, HTMLCanvasElement>>;
   dirtyRef: RefObject<Set<number>>;
   lastActivityRef: RefObject<Map<number, number>>;
+  /** Sessions marked for showing side by side (Space on the selected tile, or Ctrl+click). */
+  marked: number[];
+  onToggleMark: (id: number) => void;
   onSelect: (id: number) => void;
   /** Called when the "Local desktop" tile (always the last one) is chosen. */
   onSelectLocal: () => void;
@@ -73,18 +78,24 @@ export function GridView({
   }, [count]);
 
   // Arrow keys and Tab / Shift+Tab move the selection, Enter opens it. Ignored while typing in a form field.
-  const latest = useRef({ sessions, gridCols, focused, onSelect, onSelectLocal });
-  latest.current = { sessions, gridCols, focused, onSelect, onSelectLocal };
+  const latest = useRef({ sessions, gridCols, focused, onSelect, onSelectLocal, onToggleMark });
+  latest.current = { sessions, gridCols, focused, onSelect, onSelectLocal, onToggleMark };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target;
       if (t instanceof HTMLElement && ["INPUT", "SELECT", "TEXTAREA"].includes(t.tagName)) return;
       if (e.altKey || e.ctrlKey || e.metaKey) return;
-      const { sessions, gridCols, focused, onSelect, onSelectLocal } = latest.current;
+      const { sessions, gridCols, focused, onSelect, onSelectLocal, onToggleMark } = latest.current;
       const n = sessions.length + 1;
       let next = focused;
       // Shift+Tab may arrive as "ISO_Left_Tab" rather than "Tab" (WebKitGTK), so go by the
       // physical key for Tab.
+      if (e.code === "Space") {
+        // Mark / unmark the selected tile (the local desktop cannot be shown beside others).
+        e.preventDefault();
+        if (focused < sessions.length) onToggleMark(sessions[focused].id);
+        return;
+      }
       switch (e.code === "Tab" ? "Tab" : e.key) {
         case "ArrowLeft":
           next = Math.max(0, focused - 1);
@@ -150,9 +161,12 @@ export function GridView({
           key={s.id}
           className={`grid-tile ${s.id === activeId ? "active" : ""} ${i === focused ? "focused" : ""} ${
             s.kind === "rdp" && s.status === "exited" ? "disconnected" : ""
-          }`}
-          title="Click to show on its own (or select with the arrow keys or Tab and press Enter)"
-          onClick={() => onSelect(s.id)}
+          } ${marked.includes(s.id) ? "marked" : ""}`}
+          title={
+            "Click to show (or select with the arrow keys or Tab and press Enter). " +
+            "Space or Ctrl+click marks a tile; opening a marked tile shows all marked ones side by side"
+          }
+          onClick={(e) => (e.ctrlKey ? onToggleMark(s.id) : onSelect(s.id))}
           ref={(el) => {
             if (el) tileRefs.current.set(s.id, el);
             else tileRefs.current.delete(s.id);
@@ -161,6 +175,7 @@ export function GridView({
           <div className="grid-tile-header">
             <span className={`status-dot ${s.status}`} />
             <span className="session-kind">{s.kind === "rdp" ? "RDP" : ">_"}</span>
+            {marked.includes(s.id) && <span className="mark-check">✓</span>}
             <span className="session-title">{s.title}</span>
             <ActivityBadge session={s} lastActivity={lastActivityRef.current.get(s.id)} />
             {s.kind === "rdp" && s.status === "exited" && (
