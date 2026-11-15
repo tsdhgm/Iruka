@@ -60,6 +60,8 @@ export function ViewToolbar({
   pinned,
   fullscreen,
   scaled,
+  magnify,
+  onCycleMagnify,
   onToggleView,
   onChangeGridCols,
   onTogglePinned,
@@ -76,6 +78,9 @@ export function ViewToolbar({
   fullscreen: boolean;
   /** RDP screens fitted into the view instead of 1:1 (all sessions). */
   scaled: boolean;
+  /** Magnification of the RDP session on show (1 = off); this session only. */
+  magnify: number;
+  onCycleMagnify: (id: number) => void;
   onToggleView: () => void;
   onChangeGridCols: (cols: number) => void;
   onTogglePinned: () => void;
@@ -136,6 +141,18 @@ export function ViewToolbar({
         >
           {scaled ? "1:1" : "⤢"}
         </button>
+        {view === "single" && activeSession?.kind === "rdp" && (
+          <button
+            className={magnify > 1 ? "on" : ""}
+            title={
+              "Magnify this session's screen here in Iruka (100% → 150% → 200%); the remote's " +
+              "resolution is not changed, and what does not fit is reached with the scrollbars"
+            }
+            onClick={() => onCycleMagnify(activeSession.id)}
+          >
+            {`${Math.round(magnify * 100)}%`}
+          </button>
+        )}
         <button
           title={fullscreen ? "Exit fullscreen" : "Fullscreen"}
           onClick={() => onToggleFullscreen(!fullscreen)}

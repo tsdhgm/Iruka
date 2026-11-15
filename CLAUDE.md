@@ -233,6 +233,13 @@ KNOWN_ISSUES.md and TODO.md.
   order, the same host sits in a different place on each machine and invites a wrong click
   (Remmina as the model). Display only, `iruka.profiles` keeps its order. Checked by the owner in
   the repo's release build; not in the installed deb.
+- **2026-11-15: "Magnify" on the toolbar** (owner: text too small to read, without touching the
+  remote's resolution or scale). Per RDP session, 100% → 150% → 200%, not remembered
+  (`MAGNIFY_STEPS`, `setCanvasMagnify` in `src/rdpSession.ts`: only the canvas's CSS size
+  changes, so no memory or traffic cost; `image-rendering: pixelated` when a remote pixel maps to
+  a whole number of physical pixels). Excludes "Scaled" both ways. The remote's cursor is not
+  enlarged (offered, not asked for). Checked by the owner in the repo's release build; not in the
+  installed deb.
 - The deb from `scripts/make-deb.sh` is installed on the Ubuntu box (`/usr/bin/iruka`; installed
   2026-10-24 on the new box with `apt install`; on a box that already has it, reinstalling the same
   version 0.1.0 needs `sudo dpkg -i`, since `apt install` does not replace a same-version package);

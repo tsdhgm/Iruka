@@ -15,7 +15,15 @@ import {
 } from "./rdp";
 import { drawThumb, type SessionCallbacks, type SessionHandle, type SessionInfo } from "./session";
 import { createPtySession } from "./ptySession";
-import { applyPixelSize, createRdpSession, isScaledDisplay, setScaledDisplay } from "./rdpSession";
+import {
+  MAGNIFY_STEPS,
+  applyPixelSize,
+  canvasMagnify,
+  createRdpSession,
+  isScaledDisplay,
+  setCanvasMagnify,
+  setScaledDisplay,
+} from "./rdpSession";
 import { useWindowViewToggleKey } from "./hostKey";
 import {
   buildSshCommand,
@@ -616,9 +624,37 @@ function App() {
     setScaledDisplay(on);
     setScaled(on);
     for (const h of handlesRef.current.values()) {
-      if (h.kind === "rdp") applyPixelSize(h.canvas);
+      if (h.kind !== "rdp") continue;
+      // Fitting into the view and magnifying exclude each other.
+      if (on) setCanvasMagnify(h.canvas, 1);
+      else applyPixelSize(h.canvas);
     }
+    if (on) setMagnifyTick((t) => t + 1);
   }, []);
+
+  /** Toolbar "Magnify": step the session on show through MAGNIFY_STEPS (this session only). */
+  const [, setMagnifyTick] = useState(0);
+  const cycleMagnify = useCallback(
+    (id: number) => {
+      const handle = handlesRef.current.get(id);
+      if (handle?.kind !== "rdp") return;
+      const i = MAGNIFY_STEPS.indexOf(canvasMagnify(handle.canvas));
+      const next = MAGNIFY_STEPS[(i + 1) % MAGNIFY_STEPS.length];
+      if (next > 1 && isScaledDisplay()) {
+        setScaledDisplay(false);
+        setScaled(false);
+        for (const h of handlesRef.current.values()) {
+          if (h.kind === "rdp") applyPixelSize(h.canvas);
+        }
+      }
+      setCanvasMagnify(handle.canvas, next);
+      setMagnifyTick((t) => t + 1);
+      showSession(id); // the click took the focus from the canvas
+    },
+    [showSession],
+  );
+  const activeHandle = activeId !== null ? handlesRef.current.get(activeId) : undefined;
+  const activeMagnify = activeHandle?.kind === "rdp" ? canvasMagnify(activeHandle.canvas) : 1;
 
   /**
    * "Local desktop": step aside so that this computer's own desktop can be used, the way a
@@ -988,6 +1024,8 @@ function App() {
             pinned={toolbarPinned}
             fullscreen={fullscreen}
             scaled={scaled}
+            magnify={activeMagnify}
+            onCycleMagnify={cycleMagnify}
             onToggleView={toggleView}
             onChangeGridCols={changeGridCols}
             onTogglePinned={() => setToolbarPinned((v) => !v)}

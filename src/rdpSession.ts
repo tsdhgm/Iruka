@@ -26,14 +26,39 @@ export function setScaledDisplay(on: boolean) {
 }
 
 /**
+ * "Magnify": one session's screen shown larger than 1:1 on the Iruka side only (the remote's
+ * resolution and scale are untouched, nothing more is sent or received); what does not fit
+ * is reached with the scrollbars. Per session and not remembered: it is meant for a moment
+ * of reading small text. Steps of MAGNIFY_STEPS; 1 means off.
+ */
+export const MAGNIFY_STEPS = [1, 1.5, 2];
+const magnified = new WeakMap<HTMLCanvasElement, number>();
+export function canvasMagnify(canvas: HTMLCanvasElement): number {
+  return magnified.get(canvas) ?? 1;
+}
+export function setCanvasMagnify(canvas: HTMLCanvasElement, factor: number) {
+  if (factor === 1) magnified.delete(canvas);
+  else magnified.set(canvas, factor);
+  applyPixelSize(canvas);
+}
+
+/**
  * Size the canvas on screen: one remote pixel per physical pixel (cancelling out the OS
- * display scale), or, with the scaled display on, fitted into its scroller. Input mapping
- * (toRemoteCoords) works from the on-screen size, so it follows automatically; only the
- * remote's cursor shapes stay at their own pixel size.
+ * display scale), that times the session's magnification, or, with the scaled display on,
+ * fitted into its scroller. Input mapping (toRemoteCoords) works from the on-screen size,
+ * so it follows automatically; only the remote's cursor shapes stay at their own pixel size.
  */
 export function applyPixelSize(canvas: HTMLCanvasElement) {
   const dpr = window.devicePixelRatio || 1;
   const viewport = canvas.parentElement;
+  const magnify = canvasMagnify(canvas);
+  // A whole multiple of the remote's pixels keeps them as sharp blocks; anything else is smoothed.
+  canvas.style.imageRendering = magnify > 1 && Number.isInteger(magnify * dpr) ? "pixelated" : "";
+  if (magnify > 1) {
+    canvas.style.width = `${(canvas.width / dpr) * magnify}px`;
+    canvas.style.height = `${(canvas.height / dpr) * magnify}px`;
+    return;
+  }
   if (scaledDisplay && viewport && viewport.clientWidth > 0 && viewport.clientHeight > 0) {
     const scale = Math.min(viewport.clientWidth / canvas.width, viewport.clientHeight / canvas.height);
     canvas.style.width = `${Math.floor(canvas.width * scale)}px`;
