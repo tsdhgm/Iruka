@@ -117,11 +117,22 @@ application menu with its icon.
 
 ## Development
 
-### Requirements (Ubuntu)
+### Requirements (Ubuntu 26.04)
 
-- The Tauri 2 prerequisites (see the [Tauri documentation](https://v2.tauri.app/start/prerequisites/))
-- FreeRDP 3 development package: `sudo apt install freerdp3-dev`
-- Node.js and Rust
+Build tools and the Tauri 2 / WebKitGTK / FreeRDP development packages (`patchelf` is only needed
+for `scripts/make-tarball.sh`; see also the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)):
+
+```sh
+sudo apt install build-essential pkg-config curl \
+  libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libssl-dev \
+  libsoup-3.0-dev libayatana-appindicator3-dev libxdo-dev libdbus-1-dev \
+  freerdp3-dev patchelf
+```
+
+Node.js and Rust are installed separately, each with its own version manager:
+
+- **Rust** via [rustup](https://rustup.rs/) (`rustup toolchain install stable`)
+- **Node.js** via [nvm](https://github.com/nvm-sh/nvm) or your preferred manager (Node 24 or newer)
 
 ### Running
 

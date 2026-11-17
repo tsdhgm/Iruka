@@ -116,11 +116,22 @@ scripts/make-tarball.sh                      # -> release/iruka-<version>-linux-
 
 ## 開発
 
-### 必要なもの（Ubuntu）
+### 必要なもの（Ubuntu 26.04）
 
-- Tauri 2 の前提パッケージ（[Tauri のドキュメント](https://v2.tauri.app/start/prerequisites/)を参照）
-- FreeRDP 3 の開発用パッケージ: `sudo apt install freerdp3-dev`
-- Node.js と Rust
+ビルドツールと、Tauri 2 / WebKitGTK / FreeRDP の開発用パッケージ（`patchelf` は
+`scripts/make-tarball.sh` のときだけ必要。[Tauri の前提パッケージ](https://v2.tauri.app/start/prerequisites/)も参照）:
+
+```sh
+sudo apt install build-essential pkg-config curl \
+  libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libssl-dev \
+  libsoup-3.0-dev libayatana-appindicator3-dev libxdo-dev libdbus-1-dev \
+  freerdp3-dev patchelf
+```
+
+Node.js と Rust は、それぞれのバージョン管理ツールで別に入れる:
+
+- **Rust**: [rustup](https://rustup.rs/)（`rustup toolchain install stable`）
+- **Node.js**: [nvm](https://github.com/nvm-sh/nvm) などで（Node 24 以降）
 
 ### 起動
 
