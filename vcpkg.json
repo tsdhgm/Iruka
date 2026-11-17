@@ -1,0 +1,13 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "dependencies": [
+    {
+      "name": "freerdp",
+      "features": [
+        "client"
+      ]
+    },
+    "pkgconf"
+  ],
+  "builtin-baseline": "3e32077455d0ab8a87baaac61816e60f1719c1d6"
+}

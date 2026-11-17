@@ -4,10 +4,23 @@
 #   powershell -ExecutionPolicy Bypass -File scripts\make-zip.ps1
 # The zip lands in release\ (ignored). Unsigned: Smart App Control blocks it (KNOWN_ISSUES.md).
 param(
-    [string]$Vcpkg = "$env:USERPROFILE\Foundry\vcpkg\installed\x64-windows",
+    # The libraries' folder; by default vcpkg_installed\x64-windows in this clone
+    # (scripts\windows-deps.ps1), else taken from PKG_CONFIG_PATH (<that folder>\lib\pkgconfig).
+    [string]$Vcpkg = "",
     [string]$OutDir = "release"
 )
 $ErrorActionPreference = "Stop"
+
+if (-not $Vcpkg -and (Test-Path "vcpkg_installed\x64-windows\bin\freerdp3.dll")) {
+    $Vcpkg = "vcpkg_installed\x64-windows"
+}
+if (-not $Vcpkg) {
+    if (-not $env:PKG_CONFIG_PATH) {
+        throw "PKG_CONFIG_PATH is not set: dot-source the environment script first, or pass -Vcpkg <vcpkg>\installed\x64-windows"
+    }
+    $Vcpkg = Split-Path (Split-Path (($env:PKG_CONFIG_PATH -split ";")[0]))
+}
+if (-not (Test-Path "$Vcpkg\bin\freerdp3.dll")) { throw "freerdp3.dll not found under $Vcpkg\bin" }
 
 $exe = "src-tauri\target\release\iruka.exe"
 if (-not (Test-Path $exe)) { throw "$exe not found; run 'tauri.cmd build --no-bundle' first" }
@@ -18,7 +31,9 @@ $stage = Join-Path $OutDir $name
 # Everything iruka.exe loads from vcpkg; legacy.dll is OpenSSL's legacy provider (NTLM), found
 # through OPENSSL_MODULES, which Iruka points at its own folder at startup (src-tauri/src/lib.rs).
 $dlls = "freerdp3.dll", "freerdp-client3.dll", "winpr3.dll", "libcrypto-3-x64.dll",
-    "libssl-3-x64.dll", "legacy.dll", "z.dll", "cjson.dll"
+    "libssl-3-x64.dll", "legacy.dll", "cjson.dll"
+# zlib's DLL is libz.dll since vcpkg's zlib 1.4 (vcpkg.json baseline of 2026-11-18), z.dll before.
+$dlls += @("libz.dll", "z.dll" | Where-Object { Test-Path (Join-Path "$Vcpkg\bin" $_) })[0]
 
 Write-Host "== Staging $stage"
 if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }

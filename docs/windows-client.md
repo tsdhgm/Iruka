@@ -11,15 +11,45 @@ The step-by-step history with the dead ends is in [windows-client-log.md](window
 
 | What | How | Notes |
 | --- | --- | --- |
-| Visual Studio C++ tools | "Desktop development with C++" (Build Tools are enough) | MSVC compiles the C bridge and links; 2022 used first, Community 2026 (18.11) also works (2026-10-26) |
+| Visual Studio C++ tools | "Desktop development with C++" (Community or Build Tools) | MSVC compiles the C bridge and links; 2022 used first, Community 2026 also works |
+| vcpkg | see [vcpkg](#vcpkg) below | builds FreeRDP 3 and its libraries from `vcpkg.json` |
 | WebView2 | preinstalled on Windows 11 | |
-| Node.js | 22 and 26 used | |
-| Rust | `winget install --id Rustlang.Rustup -e` | per user, no admin; stable `x86_64-pc-windows-msvc` |
-| vcpkg | `git clone https://github.com/microsoft/vcpkg.git` then `bootstrap-vcpkg.bat -disableMetrics` | |
-| FreeRDP 3 | `vcpkg install "freerdp[client]:x64-windows" "pkgconf:x64-windows"` | 20 min the first time; FreeRDP 3.32.1 |
+| Node.js | 22, 24 and 26 used | |
+| Rust | `winget install --id Rustlang.Rustup -e` (or rustup-init.exe from rustup.rs) | per user, no admin; stable `x86_64-pc-windows-msvc` |
 | `ssh.exe` | preinstalled (OpenSSH client) | for "+ SSH" |
-| Git | Git for Windows (native setup), or WSL's git (WSL setup) | |
+| Git | Git for Windows (native setup), or WSL's git (WSL setup) | vcpkg needs Git too |
 | Smart App Control off | Windows Security → App & browser control | otherwise the built `iruka.exe` is blocked (os error 4551); see KNOWN_ISSUES.md |
+
+Visual Studio does not need to be on `Path`, and no restart is needed after installing it: cargo
+and `scripts\windows-deps.ps1` find it through `vswhere.exe`.
+
+## vcpkg
+
+Iruka uses vcpkg in **manifest mode**: `vcpkg.json` at the repository root names the libraries
+(`freerdp[client]`, `pkgconf`) and pins their versions with `builtin-baseline`, and they are built
+into `vcpkg_installed\x64-windows\` inside the clone (ignored by git). Any vcpkg will do; it only
+has to be found:
+
+1. **You already develop with Visual Studio.** If you have your own clone of microsoft/vcpkg, set
+   `VCPKG_ROOT` to it (a Developer PowerShell sets it too); `git pull` it first if it is older than
+   the baseline in `vcpkg.json`. Otherwise use the vcpkg that comes with Visual Studio: in Visual
+   Studio Installer → Modify → Individual components, tick "vcpkg package manager" if it is not
+   there yet (an older Community 2022 installation may lack it).
+2. **You install a build environment for Iruka for the first time.** Install Visual Studio
+   Community 2026 with "Desktop development with C++" and its default selection: that includes
+   "vcpkg package manager" (checked 2026-11-18). Nothing else to do.
+
+Then, from the clone (10–20 minutes the first time):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\windows-deps.ps1
+```
+
+The script takes `-Vcpkg <path to vcpkg.exe>`, else `$env:VCPKG_ROOT\vcpkg.exe`, else Visual
+Studio's. Visual Studio's vcpkg has no classic mode (`vcpkg install <port>` outside a manifest fails
+with "this vcpkg instance requires a manifest"), which is why the repository carries `vcpkg.json`.
+To move to newer library versions, run `vcpkg x-update-baseline` in the clone and commit the
+changed `vcpkg.json`.
 
 ## Two ways to develop
 
@@ -28,35 +58,33 @@ Both build natively on Windows; they differ in where the shell (and Claude Code)
 | | Native (PowerShell) | From WSL |
 | --- | --- | --- |
 | Shell, Claude Code | PowerShell, Claude Code for Windows | bash in WSL, Claude Code for Linux |
-| Clone | anywhere on the Windows file system, for example `%USERPROFILE%\Foundry\iruka` | on the Windows file system; it can be the same clone as the native setup (`/mnt/c/Users/<user>/Foundry/iruka` from WSL) |
+| Clone | anywhere on the Windows file system, for example `C:\src\iruka` | on the Windows file system; it can be the same clone as the native setup (`/mnt/c/src/iruka` from WSL) |
 | Git | Git for Windows | WSL's git |
 | Build commands | run directly after dot-sourcing the environment script | through `powershell.exe`, see [Developing from WSL](#developing-from-wsl) |
 
-The prerequisites, vcpkg and the environment script below are shared; one vcpkg installation serves
-both. Do not let both setups build the same clone at once (they share `src-tauri\target`).
+The prerequisites, the libraries in `vcpkg_installed` and the environment script are shared. Do not
+let both setups build the same clone at once (they share `src-tauri\target`).
 
 ## Environment
 
-Every PowerShell session that builds or runs Iruka needs these (paths assume vcpkg in
-`%USERPROFILE%\Foundry\vcpkg`; keep them in a script and dot-source it):
+Every PowerShell session that builds or runs Iruka needs vcpkg's libraries on `Path` and a few
+variables. `scripts\windows-env.ps1` sets them, with every path relative to the clone; dot-source it:
 
 ```powershell
-$vcpkg = "$env:USERPROFILE\Foundry\vcpkg\installed\x64-windows"
-$env:Path = "$env:USERPROFILE\.cargo\bin;$vcpkg\bin;$vcpkg\tools\pkgconf;" + $env:Path
-$env:PKG_CONFIG = "$vcpkg\tools\pkgconf\pkgconf.exe"   # build: build.rs finds FreeRDP through pkg-config
-$env:PKG_CONFIG_PATH = "$vcpkg\lib\pkgconfig"
-$env:OPENSSL_MODULES = "$vcpkg\bin"                    # run: OpenSSL legacy provider, see KNOWN_ISSUES.md
+. scripts\windows-env.ps1
 ```
 
-`$vcpkg\bin` on `Path` is how `iruka.exe` finds `freerdp3.dll`, `freerdp-client3.dll`, `winpr3.dll`
-and the OpenSSL / zlib / cJSON DLLs at run time.
+What it sets (`$v` is `<clone>\vcpkg_installed\x64-windows`): `$v\bin` and `$v\tools\pkgconf` on
+`Path` (`$v\bin` is how `iruka.exe` finds `freerdp3.dll`, `freerdp-client3.dll`, `winpr3.dll` and the
+OpenSSL / zlib / cJSON DLLs at run time); `PKG_CONFIG` and `PKG_CONFIG_PATH`, through which
+`build.rs` finds FreeRDP; and `OPENSSL_MODULES`, OpenSSL's legacy provider for NTLM (KNOWN_ISSUES.md).
 
 ## Build and run
 
 In a native PowerShell, from the clone:
 
 ```powershell
-. $env:USERPROFILE\Foundry\iruka-env.ps1
+. scripts\windows-env.ps1
 npm install
 .\node_modules\.bin\tauri.cmd dev                                            # FreeRDP + IronRDP (default)
 .\node_modules\.bin\tauri.cmd dev --features ironrdp -- --no-default-features # IronRDP only, no vcpkg needed
@@ -98,9 +126,9 @@ For use without a development environment (unsigned; see TODO.md for the distrib
 
 Then `powershell -ExecutionPolicy Bypass -File scripts\make-zip.ps1` stages and zips everything into
 `release\iruka-<version>-windows-x64.zip` (since 2026-10-26; it also adds the FreeRDP and OpenSSL
-copyright files). What it does, by hand: put next to `iruka.exe`, from vcpkg's `installed\x64-windows\bin`: `freerdp3.dll`,
+copyright files). What it does, by hand: put next to `iruka.exe`, from `vcpkg_installed\x64-windows\bin`: `freerdp3.dll`,
 `freerdp-client3.dll`, `winpr3.dll`, `libcrypto-3-x64.dll`, `libssl-3-x64.dll`, `legacy.dll`,
-`z.dll`, `cjson.dll` (not `pkgconf-8.dll`, not the `.pdb` files), plus `LICENSE.txt` and a short
+`libz.dll` (`z.dll` before vcpkg's zlib 1.4), `cjson.dll` (not `pkgconf-8.dll`, not the `.pdb` files), plus `LICENSE.txt` and a short
 `README.txt`, and zip the folder. 2026-10-16: 26 MB unpacked, 9.7 MB zipped.
 
 At startup on Windows Iruka sets `OPENSSL_MODULES` to its own folder when `legacy.dll` is there and
@@ -115,10 +143,10 @@ line.
 Claude Code can run inside WSL and drive the Windows build (the 2026-10-16 setup):
 
 - Build natively on Windows: a build inside WSL produces a Linux binary that only runs under WSLg.
-- Keep the clone on the Windows file system (for example `C:\Users\<user>\Foundry\iruka`, which is
-  `/mnt/c/Users/<user>/Foundry/iruka` from WSL); WSL's git works there, so Git for Windows is optional.
-  Windows paths ignore case, so `Foundry\Iruka` and `Foundry\iruka` are the same folder.
-- Call `powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '. <env script>; …'` from bash.
+- Keep the clone on the Windows file system (for example `C:\src\iruka`, which is `/mnt/c/src/iruka`
+  from WSL); WSL's git works there, so Git for Windows is optional. Windows paths ignore case, so
+  `C:\src\Iruka` and `C:\src\iruka` are the same folder, although WSL spells them differently.
+- Call `powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '. scripts\windows-env.ps1; …'` from bash.
   Windows processes started from WSL inherit the PATH from when WSL started, so a fresh install of
   Rust is not on it; the environment script handles that.
 - Stopping the WSL-side job does not stop the Windows processes it started (tauri / vite / cargo /

@@ -155,39 +155,35 @@ Windows もクライアントとして動く（vcpkg 経由の FreeRDP 3）。�
 
 ### 前提
 
-- **Visual Studio の C++ ツール** — 「C++ によるデスクトップ開発」（Build Tools だけでよい）。MSVC が C ブリッジをコンパイルする。
+- **Visual Studio の C++ ツール** — 「C++ によるデスクトップ開発」。MSVC が C ブリッジをコンパイルする。
+- **vcpkg** — リポジトリの `vcpkg.json` から FreeRDP 3 とそのライブラリをビルドする（マニフェスト モード）。どちらでもよい:
+  1. *すでに Visual Studio で開発している人*: 自分で clone した vcpkg（`VCPKG_ROOT` をそこに向ける）、または Visual Studio の「vcpkg パッケージ マネージャー」コンポーネント（なければ Visual Studio Installer → 個別のコンポーネントで追加）。
+  2. *Iruka のために初めてビルド環境を入れる人*: Visual Studio Community 2026 を「C++ によるデスクトップ開発」の既定の選択で入れれば含まれている。
 - **WebView2** — Windows 11 にはプリインストール済み。
-- **Node.js**（24 以降）と **Rust**（`winget install --id Rustlang.Rustup -e`。stable の `x86_64-pc-windows-msvc`。ユーザー単位でインストールでき、管理者権限は不要）。
-- FreeRDP 3 入りの **vcpkg**（初回は 20 分ほど）:
-
-  ```powershell
-  git clone https://github.com/microsoft/vcpkg.git
-  .\vcpkg\bootstrap-vcpkg.bat -disableMetrics
-  .\vcpkg\vcpkg.exe install "freerdp[client]:x64-windows" "pkgconf:x64-windows"
-  ```
-
+- **Node.js**（24 以降）、**Git**、**Rust**（`winget install --id Rustlang.Rustup -e`。stable の `x86_64-pc-windows-msvc`。ユーザー単位でインストールでき、管理者権限は不要）。
 - **Smart App Control をオフにする**（Windows セキュリティ → アプリとブラウザー コントロール）。そうしないとビルドした `iruka.exe` がブロックされる（os error 4551。KNOWN_ISSUES_JA.md を参照）。
 - 「+ SSH」にはプリインストールの OpenSSH クライアント（`ssh.exe`）を使う。
 
-### 環境変数
+### ライブラリと環境変数
 
-Iruka をビルド・実行する PowerShell のセッションには、毎回 `Path` に vcpkg を通し、いくつかの変数を
-設定する必要がある（パスは vcpkg が `%USERPROFILE%\Foundry\vcpkg` にある前提。スクリプトに入れて
-dot-source するとよい）:
+クローンのディレクトリで、ライブラリを一度だけ `vcpkg_installed\` にビルドする（初回は 10〜20 分。
+スクリプトは `VCPKG_ROOT` または Visual Studio から vcpkg を見つける。Visual Studio を入れたあとの
+再起動は不要）:
 
 ```powershell
-$vcpkg = "$env:USERPROFILE\Foundry\vcpkg\installed\x64-windows"
-$env:Path = "$env:USERPROFILE\.cargo\bin;$vcpkg\bin;$vcpkg\tools\pkgconf;" + $env:Path
-$env:PKG_CONFIG = "$vcpkg\tools\pkgconf\pkgconf.exe"   # ビルド時: build.rs が pkg-config 経由で FreeRDP を見つける
-$env:PKG_CONFIG_PATH = "$vcpkg\lib\pkgconfig"
-$env:OPENSSL_MODULES = "$vcpkg\bin"                    # 実行時: NTLM 用の OpenSSL legacy プロバイダ
+powershell -ExecutionPolicy Bypass -File scripts\windows-deps.ps1
 ```
+
+以後、Iruka をビルド・実行する PowerShell のセッションでは毎回 `scripts\windows-env.ps1` を
+dot-source する。これがそのライブラリを `Path` に通し、`PKG_CONFIG`、`PKG_CONFIG_PATH`、
+`OPENSSL_MODULES` をすべてクローンからの相対パスで設定する。
 
 ### ビルド・実行・パッケージ
 
 ネイティブの PowerShell で、クローンのディレクトリから:
 
 ```powershell
+. scripts\windows-env.ps1
 npm install
 .\node_modules\.bin\tauri.cmd dev                              # 開発（初回ビルドは 7 分ほど）
 .\node_modules\.bin\tauri.cmd build --no-bundle                # リリース版 src-tauri\target\release\iruka.exe

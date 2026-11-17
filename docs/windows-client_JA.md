@@ -11,15 +11,44 @@ vcpkg の FreeRDP 3.32.1 で Ubuntu（GNOME Remote Desktop）に接続できた�
 
 | 何を | どうやって | メモ |
 | --- | --- | --- |
-| Visual Studio の C++ ツール | 「C++ によるデスクトップ開発」（Build Tools で足りる） | C ブリッジのコンパイルとリンクに MSVC を使う。最初は 2022、Community 2026（18.11）でも動く（2026-10-26） |
+| Visual Studio の C++ ツール | 「C++ によるデスクトップ開発」（Community または Build Tools） | C ブリッジのコンパイルとリンクに MSVC を使う。最初は 2022、Community 2026 でも動く |
+| vcpkg | 下の [vcpkg](#vcpkg) 参照 | `vcpkg.json` から FreeRDP 3 とそのライブラリをビルドする |
 | WebView2 | Windows 11 には入っている | |
-| Node.js | 22 と 26 を使った | |
-| Rust | `winget install --id Rustlang.Rustup -e` | ユーザー単位、管理者権限不要。stable `x86_64-pc-windows-msvc` |
-| vcpkg | `git clone https://github.com/microsoft/vcpkg.git` の後 `bootstrap-vcpkg.bat -disableMetrics` | |
-| FreeRDP 3 | `vcpkg install "freerdp[client]:x64-windows" "pkgconf:x64-windows"` | 初回 20 分。FreeRDP 3.32.1 |
+| Node.js | 22、24、26 を使った | |
+| Rust | `winget install --id Rustlang.Rustup -e`（または rustup.rs の rustup-init.exe） | ユーザー単位、管理者権限不要。stable `x86_64-pc-windows-msvc` |
 | `ssh.exe` | 最初から入っている（OpenSSH クライアント） | 「+ SSH」で使う |
-| Git | Git for Windows（ネイティブ構成）、または WSL の git（WSL 構成） | |
+| Git | Git for Windows（ネイティブ構成）、または WSL の git（WSL 構成） | vcpkg も Git を使う |
 | スマート アプリ コントロールをオフ | Windows セキュリティ → アプリとブラウザーの制御 | オンのままだとビルドした `iruka.exe` が止められる（os error 4551）。KNOWN_ISSUES_JA.md 参照 |
+
+Visual Studio を `Path` に通す必要はなく、インストール後の再起動も要らない。cargo と
+`scripts\windows-deps.ps1` は `vswhere.exe` で Visual Studio を見つける。
+
+## vcpkg
+
+Iruka は vcpkg を**マニフェスト モード**で使う。リポジトリ直下の `vcpkg.json` がライブラリ
+（`freerdp[client]`、`pkgconf`）を挙げ、`builtin-baseline` でバージョンを固定する。ライブラリは clone の
+中の `vcpkg_installed\x64-windows\` にビルドされる（git では無視）。vcpkg はどれでもよく、見つかれば動く:
+
+1. **すでに Visual Studio で開発している人。** 自分で clone した microsoft/vcpkg があれば `VCPKG_ROOT` を
+   そこに向ける（Developer PowerShell も設定する）。`vcpkg.json` の baseline より古ければ先に `git pull`
+   する。なければ Visual Studio 付属の vcpkg を使う。Visual Studio Installer → 変更 → 個別のコンポーネント
+   で「vcpkg パッケージ マネージャー」が入っていなければチェックを入れる（以前に入れた Community 2022 には
+   入っていないことがある）。
+2. **Iruka のために初めてビルド環境を入れる人。** Visual Studio Community 2026 を「C++ によるデスクトップ
+   開発」で既定の選択のまま入れる。これに「vcpkg パッケージ マネージャー」が含まれる（2026-11-18 に確認）。
+   ほかに何もしなくてよい。
+
+そのあと clone から実行する（初回 10〜20 分）:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\windows-deps.ps1
+```
+
+スクリプトは `-Vcpkg <vcpkg.exe のパス>`、なければ `$env:VCPKG_ROOT\vcpkg.exe`、なければ Visual Studio
+付属のものを使う。Visual Studio 付属の vcpkg にはクラシック モードがない（マニフェストの外で
+`vcpkg install <port>` とすると "this vcpkg instance requires a manifest" で失敗する）。リポジトリが
+`vcpkg.json` を持つのはこのため。ライブラリを新しい版に上げるときは、clone で `vcpkg x-update-baseline`
+を実行し、変わった `vcpkg.json` をコミットする。
 
 ## 開発の 2 つのやり方
 
@@ -28,35 +57,33 @@ vcpkg の FreeRDP 3.32.1 で Ubuntu（GNOME Remote Desktop）に接続できた�
 | | ネイティブ（PowerShell） | WSL から |
 | --- | --- | --- |
 | シェル、Claude Code | PowerShell、Windows 版 Claude Code | WSL の bash、Linux 版 Claude Code |
-| clone | Windows のファイルシステムのどこでも。例: `%USERPROFILE%\Foundry\iruka` | Windows のファイルシステム上。ネイティブ構成と同じ clone でもよい（WSL からは `/mnt/c/Users/<user>/Foundry/iruka`） |
+| clone | Windows のファイルシステムのどこでも。例: `C:\src\iruka` | Windows のファイルシステム上。ネイティブ構成と同じ clone でもよい（WSL からは `/mnt/c/src/iruka`） |
 | Git | Git for Windows | WSL の git |
 | ビルドのコマンド | 環境スクリプトを読み込んでから直接実行 | `powershell.exe` 経由。[WSL から開発する](#wsl-から開発する) 参照 |
 
-下の前提、vcpkg、環境スクリプトは共通で、vcpkg は 1 つで両方に使える。同じ clone を両方の構成で
-同時にビルドしないこと（`src-tauri\target` を共有するため）。
+前提、`vcpkg_installed` のライブラリ、環境スクリプトは共通。同じ clone を両方の構成で同時にビルド
+しないこと（`src-tauri\target` を共有するため）。
 
 ## 環境変数
 
-Iruka をビルド・実行する PowerShell では毎回これが必要（vcpkg を `%USERPROFILE%\Foundry\vcpkg` に
-置いた場合。スクリプトにして `. ` で読み込む）:
+Iruka をビルド・実行する PowerShell では毎回、vcpkg のライブラリを `Path` に通し、いくつかの変数を設定
+する必要がある。`scripts\windows-env.ps1` がそれを clone からの相対パスで行うので、`. ` で読み込む:
 
 ```powershell
-$vcpkg = "$env:USERPROFILE\Foundry\vcpkg\installed\x64-windows"
-$env:Path = "$env:USERPROFILE\.cargo\bin;$vcpkg\bin;$vcpkg\tools\pkgconf;" + $env:Path
-$env:PKG_CONFIG = "$vcpkg\tools\pkgconf\pkgconf.exe"   # ビルド: build.rs は pkg-config で FreeRDP を探す
-$env:PKG_CONFIG_PATH = "$vcpkg\lib\pkgconfig"
-$env:OPENSSL_MODULES = "$vcpkg\bin"                    # 実行: OpenSSL の legacy プロバイダー。KNOWN_ISSUES_JA.md 参照
+. scripts\windows-env.ps1
 ```
 
-`Path` に `$vcpkg\bin` を入れることで、実行時に `iruka.exe` が `freerdp3.dll`、`freerdp-client3.dll`、
-`winpr3.dll`、OpenSSL / zlib / cJSON の DLL を見つけられる。
+設定する内容（`$v` は `<clone>\vcpkg_installed\x64-windows`）: `Path` に `$v\bin` と `$v\tools\pkgconf`
+（`$v\bin` により、実行時に `iruka.exe` が `freerdp3.dll`、`freerdp-client3.dll`、`winpr3.dll`、
+OpenSSL / zlib / cJSON の DLL を見つけられる）。`build.rs` が FreeRDP を見つけるための `PKG_CONFIG` と
+`PKG_CONFIG_PATH`。NTLM 用の OpenSSL legacy プロバイダーを指す `OPENSSL_MODULES`（KNOWN_ISSUES_JA.md）。
 
 ## ビルドと実行
 
 ネイティブの PowerShell で、clone したフォルダーから:
 
 ```powershell
-. $env:USERPROFILE\Foundry\iruka-env.ps1
+. scripts\windows-env.ps1
 npm install
 .\node_modules\.bin\tauri.cmd dev                                            # FreeRDP + IronRDP（既定）
 .\node_modules\.bin\tauri.cmd dev --features ironrdp -- --no-default-features # IronRDP のみ。vcpkg 不要
@@ -98,8 +125,8 @@ npm install
 
 その後、`powershell -ExecutionPolicy Bypass -File scripts\make-zip.ps1` で全部を集めて
 `release\iruka-<version>-windows-x64.zip` にする（2026-10-26 から。FreeRDP と OpenSSL の著作権表示ファイルも
-入れる）。手作業でやる場合の中身: vcpkg の `installed\x64-windows\bin` から `freerdp3.dll`、`freerdp-client3.dll`、`winpr3.dll`、
-`libcrypto-3-x64.dll`、`libssl-3-x64.dll`、`legacy.dll`、`z.dll`、`cjson.dll` を `iruka.exe` の横に置き
+入れる）。手作業でやる場合の中身: `vcpkg_installed\x64-windows\bin` から `freerdp3.dll`、`freerdp-client3.dll`、`winpr3.dll`、
+`libcrypto-3-x64.dll`、`libssl-3-x64.dll`、`legacy.dll`、`libz.dll`（vcpkg の zlib 1.4 より前は `z.dll`）、`cjson.dll` を `iruka.exe` の横に置き
 （`pkgconf-8.dll` と `.pdb` は不要）、`LICENSE.txt` と短い `README.txt` を添えてフォルダーごと zip にする。
 2026-10-16: 展開後 26 MB、zip で 9.7 MB。
 
@@ -115,10 +142,10 @@ WSL 内の Claude Code から Windows のビルドを動かせる（2026-10-16 �
 
 - ビルドは Windows ネイティブで行う。WSL 内でビルドすると Linux のバイナリになり、WSLg 上で
   動くだけになる。
-- clone は Windows のファイルシステムに置く（例: `C:\Users\<user>\Foundry\iruka`。WSL からは
-  `/mnt/c/Users/<user>/Foundry/iruka`）。そこでは WSL の git が使えるので、Git for Windows はなくてもよい。
-  Windows のパスは大文字と小文字を区別しないので、`Foundry\Iruka` と `Foundry\iruka` は同じフォルダー。
-- bash から `powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '. <環境スクリプト>; …'` で呼ぶ。
+- clone は Windows のファイルシステムに置く（例: `C:\src\iruka`。WSL からは `/mnt/c/src/iruka`）。
+  そこでは WSL の git が使えるので、Git for Windows はなくてもよい。Windows のパスは大文字と小文字を
+  区別しないので、`C:\src\Iruka` と `C:\src\iruka` は同じフォルダー（WSL 側では別の綴りになる）。
+- bash から `powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '. scripts\windows-env.ps1; …'` で呼ぶ。
   WSL から起動した Windows プロセスは WSL 起動時の PATH を引き継ぐので、後から入れた Rust は PATH に
   入っていない。環境スクリプトで補う。
 - WSL 側のジョブを止めても、そこから起動した Windows のプロセス（tauri / vite / cargo / `iruka.exe`）

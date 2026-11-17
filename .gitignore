@@ -32,3 +32,6 @@ dist-ssr
 # Tarballs from scripts/make-tarball.sh
 /release
 Pict/*
+
+# vcpkg manifest-mode libraries (scripts/windows-deps.ps1)
+/vcpkg_installed

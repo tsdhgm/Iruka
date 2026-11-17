@@ -157,38 +157,37 @@ procedure, with the dead ends and everything that was checked, is in
 
 ### Prerequisites
 
-- **Visual Studio C++ tools** — "Desktop development with C++" (the Build Tools are enough); MSVC compiles the C bridge.
+- **Visual Studio C++ tools** — "Desktop development with C++"; MSVC compiles the C bridge.
+- **vcpkg** — builds FreeRDP 3 and its libraries from the repository's `vcpkg.json` (manifest mode). Either one works:
+  1. *You already develop with Visual Studio*: your own vcpkg clone with `VCPKG_ROOT` pointing at it, or Visual Studio's "vcpkg package manager" component (add it in Visual Studio Installer → Individual components if it is missing).
+  2. *First build environment, for Iruka*: Visual Studio Community 2026 with "Desktop development with C++" in its default selection already includes it.
 - **WebView2** — preinstalled on Windows 11.
-- **Node.js** (24 or newer) and **Rust** (`winget install --id Rustlang.Rustup -e`; stable `x86_64-pc-windows-msvc`, installed per user, no admin).
-- **vcpkg** with FreeRDP 3 (20 min the first time):
-
-  ```powershell
-  git clone https://github.com/microsoft/vcpkg.git
-  .\vcpkg\bootstrap-vcpkg.bat -disableMetrics
-  .\vcpkg\vcpkg.exe install "freerdp[client]:x64-windows" "pkgconf:x64-windows"
-  ```
-
+- **Node.js** (24 or newer), **Git** and **Rust** (`winget install --id Rustlang.Rustup -e`; stable `x86_64-pc-windows-msvc`, installed per user, no admin).
 - **Smart App Control off** (Windows Security → App & browser control), otherwise the built `iruka.exe` is blocked (os error 4551; see KNOWN_ISSUES.md).
 - `ssh.exe` (the preinstalled OpenSSH client) is used for "+ SSH".
 
 ### Environment
 
-Every PowerShell session that builds or runs Iruka needs vcpkg on `Path` and a few variables (paths
-assume vcpkg in `%USERPROFILE%\Foundry\vcpkg`; keep them in a script and dot-source it):
+### Libraries and environment
+
+From the clone, build the libraries once into `vcpkg_installed\` (10–20 min the first time; the
+script finds vcpkg through `VCPKG_ROOT` or Visual Studio, and no restart is needed after installing
+Visual Studio):
 
 ```powershell
-$vcpkg = "$env:USERPROFILE\Foundry\vcpkg\installed\x64-windows"
-$env:Path = "$env:USERPROFILE\.cargo\bin;$vcpkg\bin;$vcpkg\tools\pkgconf;" + $env:Path
-$env:PKG_CONFIG = "$vcpkg\tools\pkgconf\pkgconf.exe"   # build: build.rs finds FreeRDP through pkg-config
-$env:PKG_CONFIG_PATH = "$vcpkg\lib\pkgconfig"
-$env:OPENSSL_MODULES = "$vcpkg\bin"                    # run: OpenSSL legacy provider for NTLM
+powershell -ExecutionPolicy Bypass -File scripts\windows-deps.ps1
 ```
+
+Every PowerShell session that builds or runs Iruka then dot-sources `scripts\windows-env.ps1`, which
+puts those libraries on `Path` and sets `PKG_CONFIG`, `PKG_CONFIG_PATH` and `OPENSSL_MODULES`, all
+relative to the clone.
 
 ### Build, run and package
 
 In a native PowerShell, from the clone:
 
 ```powershell
+. scripts\windows-env.ps1
 npm install
 .\node_modules\.bin\tauri.cmd dev                              # develop (first build about 7 min)
 .\node_modules\.bin\tauri.cmd build --no-bundle                # release src-tauri\target\release\iruka.exe
