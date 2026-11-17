@@ -71,7 +71,7 @@ Tauri 2 + React + TypeScript。RDP は FreeRDP 3 を使う（予備として Iro
 
 ## 調査メモ
 
-- [docs/windows-client_JA.md](docs/windows-client_JA.md): Windows で Iruka を動かす（前提、vcpkg での FreeRDP。未着手）。
+- [docs/windows-client_JA.md](docs/windows-client_JA.md): Windows で Iruka を動かす詳細（前提、vcpkg での FreeRDP、ポータブル zip、試行錯誤の記録）。ビルドの要約は下の [Windows でのビルド](#windows-でのビルド)にある。
 - [docs/mac-target_JA.md](docs/mac-target_JA.md): Mac を接続先にする方法の調査と、macrdp での接続結果（2026-10-13）。
 - [docs/realtime-kill_JA.md](docs/realtime-kill_JA.md): 高負荷時に Iruka が SIGKILL で消えた理由（WebKitGTK のリアルタイム IPC スレッド）、追跡の手順、そこから出た Remmina との設計比較（2026-10-23）。
 - [docs/memory-reduction_JA.md](docs/memory-reduction_JA.md): セッションのメモリは減らせるか。圧縮率を上げてもフレームを多く捨てても効かない理由と、効きそうな手（検討、2026-10-26。未実装）。
@@ -147,6 +147,56 @@ scripts/install-desktop-entry.sh
 ```
 
 RDP の調査用ログは、環境変数 `IRUKA_LOG` で絞り込める（例: `IRUKA_LOG=iruka_mem=debug`）。
+
+## Windows でのビルド
+
+Windows もクライアントとして動く（vcpkg 経由の FreeRDP 3）。ここは要約で、試行錯誤や確認した項目を
+含む詳細な手順は [docs/windows-client_JA.md](docs/windows-client_JA.md) にある。
+
+### 前提
+
+- **Visual Studio の C++ ツール** — 「C++ によるデスクトップ開発」（Build Tools だけでよい）。MSVC が C ブリッジをコンパイルする。
+- **WebView2** — Windows 11 にはプリインストール済み。
+- **Node.js**（24 以降）と **Rust**（`winget install --id Rustlang.Rustup -e`。stable の `x86_64-pc-windows-msvc`。ユーザー単位でインストールでき、管理者権限は不要）。
+- FreeRDP 3 入りの **vcpkg**（初回は 20 分ほど）:
+
+  ```powershell
+  git clone https://github.com/microsoft/vcpkg.git
+  .\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+  .\vcpkg\vcpkg.exe install "freerdp[client]:x64-windows" "pkgconf:x64-windows"
+  ```
+
+- **Smart App Control をオフにする**（Windows セキュリティ → アプリとブラウザー コントロール）。そうしないとビルドした `iruka.exe` がブロックされる（os error 4551。KNOWN_ISSUES_JA.md を参照）。
+- 「+ SSH」にはプリインストールの OpenSSH クライアント（`ssh.exe`）を使う。
+
+### 環境変数
+
+Iruka をビルド・実行する PowerShell のセッションには、毎回 `Path` に vcpkg を通し、いくつかの変数を
+設定する必要がある（パスは vcpkg が `%USERPROFILE%\Foundry\vcpkg` にある前提。スクリプトに入れて
+dot-source するとよい）:
+
+```powershell
+$vcpkg = "$env:USERPROFILE\Foundry\vcpkg\installed\x64-windows"
+$env:Path = "$env:USERPROFILE\.cargo\bin;$vcpkg\bin;$vcpkg\tools\pkgconf;" + $env:Path
+$env:PKG_CONFIG = "$vcpkg\tools\pkgconf\pkgconf.exe"   # ビルド時: build.rs が pkg-config 経由で FreeRDP を見つける
+$env:PKG_CONFIG_PATH = "$vcpkg\lib\pkgconfig"
+$env:OPENSSL_MODULES = "$vcpkg\bin"                    # 実行時: NTLM 用の OpenSSL legacy プロバイダ
+```
+
+### ビルド・実行・パッケージ
+
+ネイティブの PowerShell で、クローンのディレクトリから:
+
+```powershell
+npm install
+.\node_modules\.bin\tauri.cmd dev                              # 開発（初回ビルドは 7 分ほど）
+.\node_modules\.bin\tauri.cmd build --no-bundle                # リリース版 src-tauri\target\release\iruka.exe
+powershell -ExecutionPolicy Bypass -File scripts\make-zip.ps1  # -> release\iruka-<version>-windows-x64.zip
+```
+
+`scripts\make-zip.ps1` は `iruka.exe` に FreeRDP と OpenSSL の DLL（NTLM 用の `legacy.dll` を含む）と
+ライセンスファイルをまとめ、フォルダーを zip にする。できたポータブル zip は、開発環境のない別の
+Windows マシンでもそのまま動く。このプロジェクトはインストーラーではなく、素の zip を配布している。
 
 ## ライセンス
 

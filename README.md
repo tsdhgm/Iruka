@@ -71,7 +71,7 @@ See [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
 
 ## Research notes
 
-- [docs/windows-client.md](docs/windows-client.md): running Iruka on Windows (prerequisites, FreeRDP via vcpkg; not tried yet).
+- [docs/windows-client.md](docs/windows-client.md): running Iruka on Windows in full (prerequisites, FreeRDP via vcpkg, the portable zip, and the step-by-step history with the dead ends). A short build summary is under [Building on Windows](#building-on-windows) below.
 - [docs/mac-target.md](docs/mac-target.md): how to use a Mac as a target, and the results of connecting through macrdp (2026-10-13).
 - [docs/realtime-kill.md](docs/realtime-kill.md): why Iruka was SIGKILLed under load (WebKitGTK's real-time IPC threads), how it was traced, and the design comparison with Remmina that came out of it (2026-10-23).
 - [docs/memory-reduction.md](docs/memory-reduction.md): can a session use less memory? Why a higher compression ratio or more dropped frames would not help, and what would (study, 2026-10-26; nothing implemented).
@@ -148,6 +148,56 @@ scripts/install-desktop-entry.sh
 ```
 
 The RDP diagnostic logs can be filtered with the `IRUKA_LOG` environment variable (e.g. `IRUKA_LOG=iruka_mem=debug`).
+
+## Building on Windows
+
+Windows is a supported client (FreeRDP 3 through vcpkg). This is the short version; the full
+procedure, with the dead ends and everything that was checked, is in
+[docs/windows-client.md](docs/windows-client.md).
+
+### Prerequisites
+
+- **Visual Studio C++ tools** — "Desktop development with C++" (the Build Tools are enough); MSVC compiles the C bridge.
+- **WebView2** — preinstalled on Windows 11.
+- **Node.js** (24 or newer) and **Rust** (`winget install --id Rustlang.Rustup -e`; stable `x86_64-pc-windows-msvc`, installed per user, no admin).
+- **vcpkg** with FreeRDP 3 (20 min the first time):
+
+  ```powershell
+  git clone https://github.com/microsoft/vcpkg.git
+  .\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+  .\vcpkg\vcpkg.exe install "freerdp[client]:x64-windows" "pkgconf:x64-windows"
+  ```
+
+- **Smart App Control off** (Windows Security → App & browser control), otherwise the built `iruka.exe` is blocked (os error 4551; see KNOWN_ISSUES.md).
+- `ssh.exe` (the preinstalled OpenSSH client) is used for "+ SSH".
+
+### Environment
+
+Every PowerShell session that builds or runs Iruka needs vcpkg on `Path` and a few variables (paths
+assume vcpkg in `%USERPROFILE%\Foundry\vcpkg`; keep them in a script and dot-source it):
+
+```powershell
+$vcpkg = "$env:USERPROFILE\Foundry\vcpkg\installed\x64-windows"
+$env:Path = "$env:USERPROFILE\.cargo\bin;$vcpkg\bin;$vcpkg\tools\pkgconf;" + $env:Path
+$env:PKG_CONFIG = "$vcpkg\tools\pkgconf\pkgconf.exe"   # build: build.rs finds FreeRDP through pkg-config
+$env:PKG_CONFIG_PATH = "$vcpkg\lib\pkgconfig"
+$env:OPENSSL_MODULES = "$vcpkg\bin"                    # run: OpenSSL legacy provider for NTLM
+```
+
+### Build, run and package
+
+In a native PowerShell, from the clone:
+
+```powershell
+npm install
+.\node_modules\.bin\tauri.cmd dev                              # develop (first build about 7 min)
+.\node_modules\.bin\tauri.cmd build --no-bundle                # release src-tauri\target\release\iruka.exe
+powershell -ExecutionPolicy Bypass -File scripts\make-zip.ps1  # -> release\iruka-<version>-windows-x64.zip
+```
+
+`scripts\make-zip.ps1` stages `iruka.exe` with the FreeRDP and OpenSSL DLLs (including `legacy.dll`
+for NTLM) and the licence files, then zips the folder. The resulting portable zip runs on another
+Windows machine without the development environment; the project ships a plain zip, not an installer.
 
 ## License
 
