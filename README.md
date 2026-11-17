@@ -92,7 +92,7 @@ and KDE or other desktops are untested.
 
 ```sh
 scripts/make-deb.sh                          # -> release/iruka_<version>_amd64.deb
-sudo apt install ./release/iruka_0.1.2_amd64.deb
+sudo apt install ./release/iruka_0.1.3_amd64.deb
 ```
 
 The package depends on Ubuntu's own FreeRDP 3 (`libfreerdp-client3-3`), WebKitGTK and GTK packages, so
