@@ -309,3 +309,31 @@ Windows でクライアントとして Iruka を動かすまでの作業を、�
 - 確認: vcpkg を `PATH` から外し `OPENSSL_MODULES` なしで、展開したコピーが起動する（ウィンドウが
   開く）。その後オーナーがそこから RDP と SSH に接続: どちらも問題なし。
 - GitHub release `v0.1.2`（Latest、pre-release ではない）として commit b7774aa で公開。
+
+## 2026-11-18: vcpkg をマニフェスト モードに、Windows 版 0.1.3 のリリース（T480）
+
+- マシン: T480（Lenovo、8 スレッド、16 GB、Windows 11 Pro ビルド 26100）。clone は
+  `C:\Users\tosihide\Foundry\Repo\Iruka`。Node 22.17.1、Git、rustc 1.99.1、`gh`。セッション中に
+  オーナーが Visual Studio Community 2026 を「C++ によるデスクトップ開発」の既定の選択で入れた
+  （Community 2022 と 2019 は以前から入っていた）。既定のインストールで Iruka をビルドできるかの確認も兼ねる。
+- 分かったこと: Community 2026 の既定の選択には「vcpkg パッケージ マネージャー」が含まれる
+  （`VC\vcpkg\vcpkg.exe`、ツールは 2026-09-26）。ここの Community 2022 には入っていない。この vcpkg には
+  クラシック モードがない: `vcpkg search` → "this vcpkg instance requires a manifest with a specified
+  baseline"、`vcpkg list` → "This vcpkg distribution does not have a classic mode instance"。従来の
+  `vcpkg install "freerdp[client]:x64-windows"` はこれでは動かない。
+- 変更: リポジトリ直下に `vcpkg.json`（`freerdp[client]`、`pkgconf`、`vcpkg x-update-baseline
+  --add-initial-baseline` で入れた `builtin-baseline`）。`scripts\windows-deps.ps1` が vcpkg を探し
+  （`-Vcpkg`、`VCPKG_ROOT`、vswhere で Visual Studio 付属のもの）、clone 内の `vcpkg_installed\x64-windows\`
+  にビルドする。`scripts\windows-env.ps1` がマシンごとの `iruka-env.ps1` に代わり、clone からの相対パスで
+  設定する。ドキュメントは `%USERPROFILE%\Foundry` を前提にしなくなった。
+- Visual Studio を入れたあとの再起動は不要だった。`Path` に通す必要のあるものはない。
+- Visual Studio 付属の vcpkg で `windows-deps.ps1`: 26 分（実時間 28.8 分）。FreeRDP 3.32.2、
+  OpenSSL 3.6.5、zlib 1.4。`vcpkg_installed` は 1.7 GB（Program Files の下に書けないため、ビルド
+  ツリーもここに入る）。zlib 1.4 の DLL 名は `z.dll` ではなく `libz.dll`。`make-zip.ps1` はどちらも扱う。
+- `npm ci` + `tauri build --no-bundle`: 13.8 分（cargo 12 分 31 秒）、警告なし。`make-zip.ps1` →
+  `release\iruka-0.1.3-windows-x64.zip`（9.7 MB、展開後 27.0 MB）。
+- 確認: vcpkg を `Path` に入れず `OPENSSL_MODULES` なしで、展開したコピーが起動する。オーナーが
+  そこから接続: 動作した。commit 177bc0b。
+- 公開: 既存の GitHub release `v0.1.3` に zip を追加（deb と同じソース。タグ以降のコミットは
+  ドキュメントのみ）。タイトルを "Iruka 0.1.3 (Linux deb, Windows portable zip)" にし、ノートに
+  Windows の段落を足した。アセットを再ダウンロードし、ローカルのファイルと sha256 が一致。

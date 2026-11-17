@@ -305,7 +305,26 @@ KNOWN_ISSUES.md and TODO.md.
   `target/release/iruka` in exactly **3
   bytes** at offset 3197024, `UNK` → `DEB` — Tauri's "Patching with bundle type information", not
   a mismatch. **Next:** the voice-input check of the side-by-side view, and a Windows 0.1.3 zip
-  (the Windows side is still 0.1.2).
+  (the Windows side is still 0.1.2). (The Windows zip followed on 2026-11-18, see below.)
+- **2026-11-18: Windows build moved to vcpkg manifest mode; Windows 0.1.3 released** (another
+  Windows machine, hostname `T480`, 8 threads, 16 GB, Windows 11 Pro build 26100; clone at
+  `C:\Users\tosihide\Foundry\Repo\Iruka`; docs/windows-client-log.md "2026-11-18"). The owner
+  installed Visual Studio Community 2026 with the C++ workload in its **default selection**, partly
+  to check that a default install is enough. It includes the "vcpkg package manager" component,
+  but that vcpkg has **no classic mode**, so the old `vcpkg install "freerdp[client]:x64-windows"`
+  cannot work with it. Owner's wish: the docs must not impose the owner's own `Foundry` folder
+  layout, and must cover both (1) someone who already develops with Visual Studio and (2) someone
+  setting up a build environment for Iruka for the first time. Now: `vcpkg.json` at the repo root
+  (FreeRDP 3.32.2 pinned by `builtin-baseline`), `scripts\windows-deps.ps1` (finds vcpkg through
+  `-Vcpkg`, `VCPKG_ROOT` or vswhere; builds into `vcpkg_installed\` in the clone, ignored) and
+  `scripts\windows-env.ps1` (dot-sourced, paths relative to the clone; replaces the per-machine
+  `Foundry\iruka-env.ps1`, which still works on the older machines, as does `make-zip.ps1` through
+  `PKG_CONFIG_PATH`). No restart needed after installing Visual Studio. Libraries 26 min, release
+  build 13.8 min, zip 9.7 MB; zlib 1.4 renamed `z.dll` to `libz.dll` (`make-zip.ps1` takes both).
+  The owner connected from the unpacked zip: works. The zip was **added to the existing GitHub
+  release v0.1.3** (the commits after the tag are docs only), now titled "Iruka 0.1.3 (Linux deb,
+  Windows portable zip)", still Latest; the downloaded asset matches the local sha256. Not checked:
+  whether the Build Tools (not Community) default selection also includes vcpkg.
 - The deb from `scripts/make-deb.sh` is installed on the Ubuntu box (`/usr/bin/iruka`; installed
   2026-10-24 on the new box with `apt install`; on a box that already has it, reinstalling the same
   version 0.1.0 needs `sudo dpkg -i`, since `apt install` does not replace a same-version package);

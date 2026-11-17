@@ -313,3 +313,34 @@ Windows lets stay in RAM.
 - Checked: the unpacked copy starts (window opens) with no vcpkg on `PATH` and `OPENSSL_MODULES`
   unset; the owner then connected RDP and SSH from it: both work.
 - Published as GitHub release `v0.1.2` (Latest, not a pre-release) on commit b7774aa.
+
+## 2026-11-18: vcpkg in manifest mode, release 0.1.3 for Windows (T480)
+
+- Machine: T480 (Lenovo, 8 threads, 16 GB, Windows 11 Pro build 26100); clone at
+  `C:\Users\tosihide\Foundry\Repo\Iruka`. Node 22.17.1, Git, rustc 1.99.1, `gh`. The owner
+  installed Visual Studio Community 2026 with "Desktop development with C++" in its default
+  selection during the session (Community 2022 and 2019 were already there), also to check that a
+  default installation is enough to build Iruka.
+- Finding: the default selection of Community 2026 includes the "vcpkg package manager" component
+  (`VC\vcpkg\vcpkg.exe`, tool 2026-09-26); Community 2022 here does not have it. That vcpkg has no
+  classic mode: `vcpkg search` → "this vcpkg instance requires a manifest with a specified
+  baseline", `vcpkg list` → "This vcpkg distribution does not have a classic mode instance". So
+  the old `vcpkg install "freerdp[client]:x64-windows"` cannot work with it.
+- Change: `vcpkg.json` at the repository root (`freerdp[client]`, `pkgconf`, `builtin-baseline`
+  from `vcpkg x-update-baseline --add-initial-baseline`); `scripts\windows-deps.ps1` finds vcpkg
+  (`-Vcpkg`, `VCPKG_ROOT`, or Visual Studio's through vswhere) and builds into
+  `vcpkg_installed\x64-windows\` in the clone; `scripts\windows-env.ps1` replaces the per-machine
+  `iruka-env.ps1` with paths relative to the clone. The docs no longer assume `%USERPROFILE%\Foundry`.
+- No restart was needed after installing Visual Studio: nothing needs it on `Path`.
+- `windows-deps.ps1` with Visual Studio's vcpkg: 26 min (28.8 min wall clock), FreeRDP 3.32.2,
+  OpenSSL 3.6.5, zlib 1.4. `vcpkg_installed` is 1.7 GB (it also holds the build trees, since
+  Visual Studio's vcpkg cannot write under Program Files). zlib 1.4 names its DLL `libz.dll`, not
+  `z.dll`; `make-zip.ps1` now takes either.
+- `npm ci` + `tauri build --no-bundle`: 13.8 min (cargo 12 min 31 s), no warnings. `make-zip.ps1`
+  → `release\iruka-0.1.3-windows-x64.zip` (9.7 MB; 27.0 MB unpacked).
+- Checked: the unpacked copy starts with no vcpkg on `Path` and `OPENSSL_MODULES` unset; the owner
+  connected from it: works. Commit 177bc0b.
+- Published: the zip added to the existing GitHub release `v0.1.3` (same source as the deb, the
+  commits since the tag are docs only), title "Iruka 0.1.3 (Linux deb, Windows portable zip)",
+  notes extended with a Windows paragraph. The asset was downloaded again: same sha256 as the local
+  file.
