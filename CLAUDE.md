@@ -258,8 +258,54 @@ KNOWN_ISSUES.md and TODO.md.
   replace it); `/usr/bin/iruka` verified byte for byte against the package, and the owner saw the
   "Local desktop" tile in the installed copy. The sidebar still says 0.1.2, so this build and the
   one of 2026-11-11 cannot be told apart by the number: the "Local desktop" tile is the sign of
-  the new one. The Windows release v0.1.2 has none of these features. **Next:** the voice-input
-  check of the side-by-side view, then a version bump when the owner asks.
+  the new one. The Windows release v0.1.2 has none of these features.
+- **2026-11-17: another Ubuntu machine** (hostname `linux`, 32 CPUs, 61 GiB, 8 GiB swap, Ubuntu
+  26.04.1, kernel 7.0.0-43, GNOME/Wayland, one 937 GB disk). The repo sits at
+  `/_export/shared/Foundry/Repo/Iruka` and is also reachable as
+  `/home/tosihide/Foundry/Repo/Iruka`, because `/home/tosihide/Foundry` is a symlink to
+  `/_Mnt/Foundry`; both paths are the same files on the local disk. The tree was **copied from
+  another machine, not freshly cloned**: it carried a `node_modules` from July, a `dist`, a
+  `release/` with 0.1.0 artifacts and a 1.9 GB `src-tauri/target` built by a rustc that was not
+  installed here, so all of that was removed and `npm ci` run again. Already present: Node 24.18.0
+  through nvm, `build-essential`, `pkg-config`, `git`, `curl`, `dpkg-deb`, `gh` (logged in),
+  `dbus-run-session`, `gnome-keyring-daemon`. Installed: the Tauri `-dev` packages
+  (`libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `librsvg2-dev`, `libssl-dev`, `libsoup-3.0-dev`,
+  `libayatana-appindicator3-dev`, `libxdo-dev`, `libdbus-1-dev`), `freerdp3-dev` 3.32.2,
+  `patchelf`, and rustup stable → **rustc/cargo 1.100.0**, newer than the 1.99.1 on the other
+  boxes; the build produced no warnings on it. Verified here: `cargo test` 8 passed, and **both
+  `#[ignore]`d tests pass too** — the real GNOME Keyring round trip, and
+  `survives_a_keyring_daemon_restart`, which only runs through the `dbus-run-session` recipe in
+  the doc comment of `credentials.rs` (run plainly it refuses, by design, with "refusing to
+  replace the keyring daemon of a real session"). `tsc --noEmit` and `npm run build` are clean,
+  the release binary resolves every library and links Ubuntu's own FreeRDP 3.32.2. With no
+  sessions open the memory sampler reports 432–487 MB and the process starts at 188 MB RSS. The
+  owner connected RDP and SSH from the repo's release build: both work. Build time was not
+  recorded (the owner ran the first build); the incremental rebuild for the deb took 14.3 s.
+  From the one run that was watched end to end: baseline 488 MB, and **one 3840×2160 session cost
+  about 585 MB**, a little above the 525–551 MB of the other boxes. The window was closed with
+  that session still open and the process **exited 0** — the glibc "corrupted double-linked list"
+  crash on close seen on the 8 GB laptop (KNOWN_ISSUES.md) did not happen here, though one run
+  proves nothing. `lag_ms_max` was 2 ms and `copy_ms` 0.003 ms, which is what 32 threads buy.
+- **2026-11-17: version 0.1.3 and the first Linux binary on GitHub.** No code change — 0.1.3 is
+  exactly the 2026-11-15 feature set with a number on it, so that the deb and the sidebar stop
+  saying 0.1.2 for two different builds (commit 4bd7dce). The version lives in six places:
+  `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`,
+  `src-tauri/tauri.conf.json`, and the `apt install` line of README.md and README_JA.md.
+  `release/iruka_0.1.3_amd64.deb` (7.1 MB) was published as **GitHub release v0.1.3, marked
+  Latest**; v0.1.0 and v0.1.2 were Windows zips, so this is the first deb on GitHub. The asset was
+  downloaded again and matches the local file byte for byte. Since v0.1.3 is Latest and holds only
+  a deb, a Windows visitor lands on a Linux package until the Windows zip catches up; the release
+  notes say so, and the owner chose to leave it Latest anyway and build the Windows 0.1.3 on
+  another machine. The package was installed here with `apt install` (nothing was installed
+  before on this box, so no `dpkg -i` was needed): `/usr/bin/iruka` is byte for byte the binary in
+  the deb, `dpkg -V` is clean, and the owner confirmed the sidebar now reads **0.1.3**, which also
+  makes this build distinguishable from the two different 0.1.2 debs. Two things worth
+  remembering: `gh release create --target` needs a **full** sha (a short one gives HTTP 422
+  "Release.target_commitish is invalid"), and the binary inside the deb differs from
+  `target/release/iruka` in exactly **3
+  bytes** at offset 3197024, `UNK` → `DEB` — Tauri's "Patching with bundle type information", not
+  a mismatch. **Next:** the voice-input check of the side-by-side view, and a Windows 0.1.3 zip
+  (the Windows side is still 0.1.2).
 - The deb from `scripts/make-deb.sh` is installed on the Ubuntu box (`/usr/bin/iruka`; installed
   2026-10-24 on the new box with `apt install`; on a box that already has it, reinstalling the same
   version 0.1.0 needs `sudo dpkg -i`, since `apt install` does not replace a same-version package);
