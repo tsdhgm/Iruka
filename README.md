@@ -223,9 +223,25 @@ In a native PowerShell, from the clone:
 . scripts\windows-env.ps1
 npm install
 .\node_modules\.bin\tauri.cmd dev                              # develop (first build about 7 min)
-.\node_modules\.bin\tauri.cmd build --no-bundle                # release src-tauri\target\release\iruka.exe
+.\node_modules\.bin\tauri.cmd build --no-bundle                # release exe only, no installer -> src-tauri\target\release\iruka.exe
 powershell -ExecutionPolicy Bypass -File scripts\make-zip.ps1  # -> release\iruka-<version>-windows-x64.zip
 ```
+
+What each line does, if Node.js or Tauri is new to you:
+
+- `npm install` downloads the JavaScript packages listed in `package.json` (React, xterm.js, the
+  Tauri command-line tool, …) into `node_modules\` inside the clone. It installs nothing on the
+  system; run it again after `package.json` changes.
+- `tauri.cmd` is the Tauri command-line tool that `npm install` just put into
+  `node_modules\.bin\`; nothing else has to be installed for it.
+- `tauri.cmd dev` builds a debug version and starts it; it rebuilds when you change the code.
+  Stop it with Ctrl+C.
+- `tauri.cmd build` builds the release version. On its own it would then also make installers
+  (MSI and NSIS setup.exe); `--no-bundle` means **stop after the exe and make no installer**. It is
+  not something to install. Iruka ships a plain zip instead, because Tauri's installers would not
+  contain the FreeRDP DLLs.
+- `make-zip.ps1` puts `iruka.exe` together with the FreeRDP and OpenSSL DLLs into a zip that runs on
+  another Windows machine without any of the above.
 
 `scripts\make-zip.ps1` stages `iruka.exe` with the FreeRDP and OpenSSL DLLs (including `legacy.dll`
 for NTLM) and the licence files, then zips the folder. The resulting portable zip runs on another

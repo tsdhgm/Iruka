@@ -344,3 +344,28 @@ Windows lets stay in RAM.
   commits since the tag are docs only), title "Iruka 0.1.3 (Linux deb, Windows portable zip)",
   notes extended with a Windows paragraph. The asset was downloaded again: same sha256 as the local
   file.
+
+## 2026-11-18 (afternoon): the README steps followed on another fresh machine
+
+Another Windows machine (hostname `GALLERIA-RM5C-R64T`, 16 threads, 64 GB, Windows 11 Pro build
+26300; clone at `C:\Users\tosihide\Foundry\Repo\Iruka`; Visual Studio Community 2026, 18.12).
+The owner followed README's "Building on Windows" and stopped three times; each stop became a
+README fix (commit ffcb9b1):
+
+- Rust: "stable `x86_64-pc-windows-msvc`" read like a second thing to install, and the winget
+  command looked incomplete. In fact winget's rustup already installs that toolchain; the README now
+  says so and gives `rustup show` as the check. rustc 1.100.0 here.
+- Node.js was not installed at all (`npm` not recognized). Now a prerequisite of its own:
+  `winget install --id OpenJS.NodeJS.LTS -e` (nodejs.org's MSI, 26.13.1, npm 11.20.0, all users,
+  one UAC prompt), a single installation only, and a new PowerShell afterwards for `Path`.
+- `. scripts\windows-env.ps1`, and after that `npm` itself (`npm.ps1`), failed with "running
+  scripts is disabled on this system": Windows PowerShell 5.1 defaults to `Restricted`. The
+  per-window `Set-ExecutionPolicy -Scope Process Bypass -Force` was lost with the next new window,
+  so the README now has `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned -Force` once, as a
+  prerequisite (no admin). Without `-Force`, 5.1 asks for a confirmation.
+
+Then `npm install` and `tauri.cmd build --no-bundle` went through; the owner also asked what
+`--no-bundle` means (it skips Tauri's MSI / NSIS installers; not something to install), so README
+now explains each build line for newcomers to Node.js and Tauri. A zip was made too
+(`release\iruka-0.1.3-windows-x64.zip`, 9.7 MB). The owner connected RDP and SSH, saw 0.1.3 in the
+sidebar, and found the behaviour the same as the latest Ubuntu build.

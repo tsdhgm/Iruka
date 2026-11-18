@@ -337,3 +337,27 @@ Windows でクライアントとして Iruka を動かすまでの作業を、�
 - 公開: 既存の GitHub release `v0.1.3` に zip を追加（deb と同じソース。タグ以降のコミットは
   ドキュメントのみ）。タイトルを "Iruka 0.1.3 (Linux deb, Windows portable zip)" にし、ノートに
   Windows の段落を足した。アセットを再ダウンロードし、ローカルのファイルと sha256 が一致。
+
+## 2026-11-18（午後）: README の手順を別の新しいマシンでたどる
+
+別の Windows マシン（ホスト名 `GALLERIA-RM5C-R64T`、16 スレッド、64 GB、Windows 11 Pro build 26300。
+clone は `C:\Users\tosihide\Foundry\Repo\Iruka`。Visual Studio Community 2026、18.12）。オーナーが
+README の「Windows でのビルド」をたどり、3 回止まった。そのたびに README を直した（commit ffcb9b1）:
+
+- Rust: 「stable の `x86_64-pc-windows-msvc`」が別にインストールするものに読め、winget のコマンドが
+  足りないように見えた。実際は winget の rustup がそのツールチェーンも入れる。README にそう書き、確認に
+  `rustup show` を挙げた。ここでは rustc 1.100.0。
+- Node.js がまったく入っていなかった（`npm` が見つからない）。独立した前提にした:
+  `winget install --id OpenJS.NodeJS.LTS -e`（nodejs.org 公式の MSI、26.13.1、npm 11.20.0、全ユーザー、
+  UAC が一度出る）。入れるのはこれ 1 つだけ、終わったら新しい PowerShell を開く（`Path` のため）。
+- `. scripts\windows-env.ps1`、続いて `npm` そのもの（`npm.ps1`）が「running scripts is disabled on
+  this system」で止まった。Windows PowerShell 5.1 の既定が `Restricted` のため。ウィンドウ単位の
+  `Set-ExecutionPolicy -Scope Process Bypass -Force` は次に新しいウィンドウを開くと消えたので、README では
+  `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned -Force` を一度だけ実行する前提にした（管理者不要）。
+  5.1 では `-Force` がないと確認を求められる。
+
+そのあと `npm install` と `tauri.cmd build --no-bundle` が通った。オーナーから `--no-bundle` の意味の
+質問があった（Tauri の MSI / NSIS インストーラーを作らない指定で、何かをインストールするものではない）
+ので、README に Node.js や Tauri に慣れていない人向けに各行の意味を書いた。zip も作った
+（`release\iruka-0.1.3-windows-x64.zip`、9.7 MB）。オーナーが RDP と SSH で接続し、サイドバーの 0.1.3 を
+確認し、動作が最新の Ubuntu 版と同じであることを確かめた。

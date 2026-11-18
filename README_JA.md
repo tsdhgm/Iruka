@@ -221,9 +221,24 @@ dot-source する。これがそのライブラリを `Path` に通し、`PKG_CO
 . scripts\windows-env.ps1
 npm install
 .\node_modules\.bin\tauri.cmd dev                              # 開発（初回ビルドは 7 分ほど）
-.\node_modules\.bin\tauri.cmd build --no-bundle                # リリース版 src-tauri\target\release\iruka.exe
+.\node_modules\.bin\tauri.cmd build --no-bundle                # リリース版の exe だけ（インストーラーなし）-> src-tauri\target\release\iruka.exe
 powershell -ExecutionPolicy Bypass -File scripts\make-zip.ps1  # -> release\iruka-<version>-windows-x64.zip
 ```
+
+Node.js や Tauri に慣れていない人向けに、各行の意味:
+
+- `npm install` は `package.json` に書かれた JavaScript のパッケージ（React、xterm.js、Tauri の
+  コマンドラインツールなど）を、clone の中の `node_modules\` にダウンロードする。システムには何も
+  インストールしない。`package.json` が変わったらもう一度実行する。
+- `tauri.cmd` は、`npm install` が `node_modules\.bin\` に置いた Tauri のコマンドラインツール。
+  別にインストールするものはない。
+- `tauri.cmd dev` はデバッグ版をビルドして起動する。コードを変えると作り直す。Ctrl+C で止める。
+- `tauri.cmd build` はリリース版をビルドする。そのままだと続けてインストーラー（MSI と NSIS の
+  setup.exe）も作るが、`--no-bundle` は「**exe を作ったところで止め、インストーラーは作らない**」
+  という意味。何かをインストールする指定ではない。Tauri のインストーラーには FreeRDP の DLL が
+  入らないので、Iruka は代わりに素の zip を配っている。
+- `make-zip.ps1` は `iruka.exe` に FreeRDP と OpenSSL の DLL を添えて zip にする。この zip は、上の
+  どれも入っていない別の Windows マシンでそのまま動く。
 
 `scripts\make-zip.ps1` は `iruka.exe` に FreeRDP と OpenSSL の DLL（NTLM 用の `legacy.dll` を含む）と
 ライセンスファイルをまとめ、フォルダーを zip にする。できたポータブル zip は、開発環境のない別の

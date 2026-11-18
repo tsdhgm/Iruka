@@ -325,6 +325,18 @@ KNOWN_ISSUES.md and TODO.md.
   release v0.1.3** (the commits after the tag are docs only), now titled "Iruka 0.1.3 (Linux deb,
   Windows portable zip)", still Latest; the downloaded asset matches the local sha256. Not checked:
   whether the Build Tools (not Community) default selection also includes vcpkg.
+- **2026-11-18 (afternoon): the README's Windows steps tried on another fresh machine** (hostname
+  `GALLERIA-RM5C-R64T`, 16 threads, 64 GB, Windows 11 Pro build 26300; clone at
+  `C:\Users\tosihide\Foundry\Repo\Iruka`; Visual Studio Community 2026). The owner, who rarely uses
+  Windows, followed README and stopped three times, each now fixed in README (commit ffcb9b1):
+  the Rust line read as if `x86_64-pc-windows-msvc` needed a separate install (winget's rustup
+  already brings it); Node.js was missing (now `winget install --id OpenJS.NodeJS.LTS -e`, 26.13.1,
+  one installation only); and PowerShell's default `Restricted` policy blocked both
+  `windows-env.ps1` and `npm.ps1` (now `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned -Force`
+  once, a prerequisite). README also explains each build line (`npm install`, `tauri.cmd dev`,
+  `--no-bundle` = no installer) for newcomers. Release build and zip done; the owner connected RDP
+  and SSH, saw 0.1.3, same behaviour as the latest Ubuntu build. Lesson: write the Windows docs
+  for someone who does not know PowerShell, Node.js or Tauri (docs/windows-client-log.md).
 - The deb from `scripts/make-deb.sh` is installed on the Ubuntu box (`/usr/bin/iruka`; installed
   2026-10-24 on the new box with `apt install`; on a box that already has it, reinstalling the same
   version 0.1.0 needs `sudo dpkg -i`, since `apt install` does not replace a same-version package);

@@ -127,6 +127,9 @@ npm install
 .\node_modules\.bin\tauri.cmd build --no-bundle   # src-tauri\target\release\iruka.exe。フロントエンドを埋め込み（約 10 分）
 ```
 
+`--no-bundle` は exe を作ったところで止める指定。付けないと `tauri build` は MSI と NSIS の setup.exe
+も作る（`tauri.conf.json` が `"targets": "all"`）が、それには FreeRDP の DLL が入らない。
+
 その後、`powershell -ExecutionPolicy Bypass -File scripts\make-zip.ps1` で全部を集めて
 `release\iruka-<version>-windows-x64.zip` にする（2026-10-26 から。FreeRDP と OpenSSL の著作権表示ファイルも
 入れる）。手作業でやる場合の中身: `vcpkg_installed\x64-windows\bin` から `freerdp3.dll`、`freerdp-client3.dll`、`winpr3.dll`、

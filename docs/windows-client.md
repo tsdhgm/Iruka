@@ -128,6 +128,9 @@ For use without a development environment (unsigned; see TODO.md for the distrib
 .\node_modules\.bin\tauri.cmd build --no-bundle   # src-tauri\target\release\iruka.exe, frontend embedded (about 10 min)
 ```
 
+`--no-bundle` stops after the exe: without it `tauri build` would also make an MSI and an NSIS
+setup.exe (`tauri.conf.json` has `"targets": "all"`), which would not contain the FreeRDP DLLs.
+
 Then `powershell -ExecutionPolicy Bypass -File scripts\make-zip.ps1` stages and zips everything into
 `release\iruka-<version>-windows-x64.zip` (since 2026-10-26; it also adds the FreeRDP and OpenSSL
 copyright files). What it does, by hand: put next to `iruka.exe`, from `vcpkg_installed\x64-windows\bin`: `freerdp3.dll`,
