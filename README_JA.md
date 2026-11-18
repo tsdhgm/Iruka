@@ -160,7 +160,42 @@ Windows もクライアントとして動く（vcpkg 経由の FreeRDP 3）。�
   1. *すでに Visual Studio で開発している人*: 自分で clone した vcpkg（`VCPKG_ROOT` をそこに向ける）、または Visual Studio の「vcpkg パッケージ マネージャー」コンポーネント（なければ Visual Studio Installer → 個別のコンポーネントで追加）。
   2. *Iruka のために初めてビルド環境を入れる人*: Visual Studio Community 2026 を「C++ によるデスクトップ開発」の既定の選択で入れれば含まれている。
 - **WebView2** — Windows 11 にはプリインストール済み。
-- **Node.js**（24 以降）、**Git**、**Rust**（`winget install --id Rustlang.Rustup -e`。stable の `x86_64-pc-windows-msvc`。ユーザー単位でインストールでき、管理者権限は不要）。
+- **Git**（Git for Windows）。
+- **PowerShell でスクリプトの実行を許可する** — Windows は既定では `.ps1` を実行しない。そのため
+  `npm`（PowerShell では `npm.ps1`）も下のスクリプトも「cannot be loaded because running scripts is
+  disabled on this system」で止まる。次を**一度だけ**実行する。管理者権限は不要で、以後に開く
+  どの PowerShell ウィンドウにも効く:
+
+  ```powershell
+  Set-ExecutionPolicy -Scope CurrentUser RemoteSigned -Force
+  ```
+
+  `RemoteSigned` は、このマシンで作ったスクリプトや Git で clone したスクリプトは実行し、
+  ブラウザーでダウンロードした署名のないスクリプトは止める。`Get-ExecutionPolicy` で確認できる
+  （`RemoteSigned` と出ればよい）。設定を残したくなければ、代わりに
+  `Set-ExecutionPolicy -Scope Process Bypass -Force` を**ウィンドウを開くたびに**最初に実行する。
+- **Node.js**（24 以降）— 公式の LTS インストーラーを winget で入れる:
+
+  ```powershell
+  winget install --id OpenJS.NodeJS.LTS -e
+  ```
+
+  中身は nodejs.org 公式の MSI（LTS。2026 年 11 月時点で 26.x）。全ユーザー向けに
+  `C:\Program Files\nodejs` に入るので、管理者の承認を一度求められる。入れるのはこの 1 つだけにして、
+  nvm-windows、Chocolatey、Scoop、Microsoft Store から別の Node.js を足さないこと（`node` と `npm`
+  が別々の場所から来るちぐはぐな構成になりうる）。インストーラーの「Tools for Native Modules」は
+  不要（winget では選ばれない）。終わったら**新しい** PowerShell を開き（`node` と `npm` が `Path`
+  に入るように）、`node -v` と `npm -v` で確認する。
+- **Rust** — コマンド 1 つ。ユーザー単位で入り、管理者権限は不要:
+
+  ```powershell
+  winget install --id Rustlang.Rustup -e
+  ```
+
+  これだけでよい。Iruka が使う `x86_64-pc-windows-msvc` 向けの stable ツールチェーンも一緒に
+  入るので、別にインストールするものはない。確かめるには、**新しい** PowerShell を開き（`cargo`
+  が `Path` に入るように）`rustup show` を実行する。`stable-x86_64-pc-windows-msvc (active, default)`
+  と出ればよい。
 - **Smart App Control をオフにする**（Windows セキュリティ → アプリとブラウザー コントロール）。そうしないとビルドした `iruka.exe` がブロックされる（os error 4551。KNOWN_ISSUES_JA.md を参照）。
 - 「+ SSH」にはプリインストールの OpenSSH クライアント（`ssh.exe`）を使う。
 

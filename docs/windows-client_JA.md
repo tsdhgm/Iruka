@@ -14,8 +14,9 @@ vcpkg の FreeRDP 3.32.1 で Ubuntu（GNOME Remote Desktop）に接続できた�
 | Visual Studio の C++ ツール | 「C++ によるデスクトップ開発」（Community または Build Tools） | C ブリッジのコンパイルとリンクに MSVC を使う。最初は 2022、Community 2026 でも動く |
 | vcpkg | 下の [vcpkg](#vcpkg) 参照 | `vcpkg.json` から FreeRDP 3 とそのライブラリをビルドする |
 | WebView2 | Windows 11 には入っている | |
-| Node.js | 22、24、26 を使った | |
-| Rust | `winget install --id Rustlang.Rustup -e`（または rustup.rs の rustup-init.exe） | ユーザー単位、管理者権限不要。stable `x86_64-pc-windows-msvc` |
+| PowerShell でスクリプトの実行を許可 | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned -Force` を一度だけ | ユーザー単位、管理者不要、以後のどのウィンドウにも効く。Windows は既定で `.ps1` を実行しないので、`npm`（`npm.ps1`）も `. scripts\windows-env.ps1` も「running scripts is disabled on this system」で止まる。`Get-ExecutionPolicy` で確認。設定を残したくなければ、ウィンドウを開くたびに `Set-ExecutionPolicy -Scope Process Bypass -Force` |
+| Node.js | `winget install --id OpenJS.NodeJS.LTS -e`（nodejs.org 公式の MSI） | 24 以降。22、24、26 を使った。全ユーザー向けで、管理者の承認を一度求められる。入れるのはこれ 1 つだけ（nvm-windows / Chocolatey / Scoop / Store の Node.js を併用しない）。新しい PowerShell で `node -v` で確認 |
+| Rust | `winget install --id Rustlang.Rustup -e`（または rustup.rs の rustup-init.exe） | ユーザー単位、管理者権限不要。このコマンド 1 つで stable の `x86_64-pc-windows-msvc` ツールチェーンも入り、別にインストールするものはない（新しい PowerShell で `rustup show` で確認） |
 | `ssh.exe` | 最初から入っている（OpenSSH クライアント） | 「+ SSH」で使う |
 | Git | Git for Windows（ネイティブ構成）、または WSL の git（WSL 構成） | vcpkg も Git を使う |
 | スマート アプリ コントロールをオフ | Windows セキュリティ → アプリとブラウザーの制御 | オンのままだとビルドした `iruka.exe` が止められる（os error 4551）。KNOWN_ISSUES_JA.md 参照 |
@@ -72,6 +73,9 @@ Iruka をビルド・実行する PowerShell では毎回、vcpkg のライブ�
 ```powershell
 . scripts\windows-env.ps1
 ```
+
+「cannot be loaded because running scripts is disabled on this system」と出たら、PowerShell で
+まだスクリプトの実行が許可されていない。前提の「PowerShell でスクリプトの実行を許可」を参照。
 
 設定する内容（`$v` は `<clone>\vcpkg_installed\x64-windows`）: `Path` に `$v\bin` と `$v\tools\pkgconf`
 （`$v\bin` により、実行時に `iruka.exe` が `freerdp3.dll`、`freerdp-client3.dll`、`winpr3.dll`、

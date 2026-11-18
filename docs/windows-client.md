@@ -14,8 +14,9 @@ The step-by-step history with the dead ends is in [windows-client-log.md](window
 | Visual Studio C++ tools | "Desktop development with C++" (Community or Build Tools) | MSVC compiles the C bridge and links; 2022 used first, Community 2026 also works |
 | vcpkg | see [vcpkg](#vcpkg) below | builds FreeRDP 3 and its libraries from `vcpkg.json` |
 | WebView2 | preinstalled on Windows 11 | |
-| Node.js | 22, 24 and 26 used | |
-| Rust | `winget install --id Rustlang.Rustup -e` (or rustup-init.exe from rustup.rs) | per user, no admin; stable `x86_64-pc-windows-msvc` |
+| Scripts allowed in PowerShell | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned -Force`, once | per user, no admin, every window from then on. Windows runs no `.ps1` by default, so `npm` (`npm.ps1`) and `. scripts\windows-env.ps1` fail with "running scripts is disabled on this system". Check with `Get-ExecutionPolicy`. To change nothing permanently: `Set-ExecutionPolicy -Scope Process Bypass -Force` at the start of every window |
+| Node.js | `winget install --id OpenJS.NodeJS.LTS -e` (nodejs.org's MSI) | 24 or newer; 22, 24 and 26 used. All users, asks for admin approval once. Keep to this one installation (no nvm-windows / Chocolatey / Scoop / Store Node.js beside it); open a new PowerShell, check with `node -v` |
+| Rust | `winget install --id Rustlang.Rustup -e` (or rustup-init.exe from rustup.rs) | per user, no admin; this one command also installs the stable `x86_64-pc-windows-msvc` toolchain, nothing else to install (check in a new PowerShell with `rustup show`) |
 | `ssh.exe` | preinstalled (OpenSSH client) | for "+ SSH" |
 | Git | Git for Windows (native setup), or WSL's git (WSL setup) | vcpkg needs Git too |
 | Smart App Control off | Windows Security → App & browser control | otherwise the built `iruka.exe` is blocked (os error 4551); see KNOWN_ISSUES.md |
@@ -73,6 +74,9 @@ variables. `scripts\windows-env.ps1` sets them, with every path relative to the 
 ```powershell
 . scripts\windows-env.ps1
 ```
+
+If this answers "cannot be loaded because running scripts is disabled on this system", PowerShell is
+not allowed to run scripts yet: see "Scripts allowed in PowerShell" under Prerequisites.
 
 What it sets (`$v` is `<clone>\vcpkg_installed\x64-windows`): `$v\bin` and `$v\tools\pkgconf` on
 `Path` (`$v\bin` is how `iruka.exe` finds `freerdp3.dll`, `freerdp-client3.dll`, `winpr3.dll` and the

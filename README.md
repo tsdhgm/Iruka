@@ -162,11 +162,44 @@ procedure, with the dead ends and everything that was checked, is in
   1. *You already develop with Visual Studio*: your own vcpkg clone with `VCPKG_ROOT` pointing at it, or Visual Studio's "vcpkg package manager" component (add it in Visual Studio Installer → Individual components if it is missing).
   2. *First build environment, for Iruka*: Visual Studio Community 2026 with "Desktop development with C++" in its default selection already includes it.
 - **WebView2** — preinstalled on Windows 11.
-- **Node.js** (24 or newer), **Git** and **Rust** (`winget install --id Rustlang.Rustup -e`; stable `x86_64-pc-windows-msvc`, installed per user, no admin).
+- **Git** (Git for Windows).
+- **PowerShell allowed to run scripts** — Windows runs no `.ps1` by default, and both `npm` (which
+  is `npm.ps1` in PowerShell) and the scripts below fail with "cannot be loaded because running
+  scripts is disabled on this system". Run this **once**; it needs no admin and applies to every
+  new PowerShell window from then on:
+
+  ```powershell
+  Set-ExecutionPolicy -Scope CurrentUser RemoteSigned -Force
+  ```
+
+  `RemoteSigned` runs scripts made on this machine or cloned with Git, and stops unsigned scripts
+  downloaded through a browser. Check with `Get-ExecutionPolicy` (it should say `RemoteSigned`). If
+  you would rather change nothing permanently, run
+  `Set-ExecutionPolicy -Scope Process Bypass -Force` instead at the start of **every** window.
+- **Node.js** (24 or newer) — the official LTS installer through winget:
+
+  ```powershell
+  winget install --id OpenJS.NodeJS.LTS -e
+  ```
+
+  This is nodejs.org's own MSI (LTS, 26.x in November 2026). It installs for all users into
+  `C:\Program Files\nodejs`, so Windows asks once for administrator approval. Keep to this one
+  installation: do not add a second Node.js from nvm-windows, Chocolatey, Scoop or the Microsoft
+  Store, or `node` and `npm` may come from different places. The installer's "Tools for Native
+  Modules" option is not needed (winget leaves it off). Open a **new** PowerShell afterwards so that
+  `Path` includes `node` and `npm`, and check with `node -v` and `npm -v`.
+- **Rust** — one command, per user, no admin:
+
+  ```powershell
+  winget install --id Rustlang.Rustup -e
+  ```
+
+  That is all: it also installs the stable toolchain for `x86_64-pc-windows-msvc`, the toolchain
+  Iruka needs, so there is nothing else to install. To check, open a **new** PowerShell (so that
+  `Path` includes `cargo`) and run `rustup show`: it should list
+  `stable-x86_64-pc-windows-msvc (active, default)`.
 - **Smart App Control off** (Windows Security → App & browser control), otherwise the built `iruka.exe` is blocked (os error 4551; see KNOWN_ISSUES.md).
 - `ssh.exe` (the preinstalled OpenSSH client) is used for "+ SSH".
-
-### Environment
 
 ### Libraries and environment
 
