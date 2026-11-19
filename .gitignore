@@ -35,3 +35,6 @@ Pict/*
 
 # vcpkg manifest-mode libraries (scripts/windows-deps.ps1)
 /vcpkg_installed
+
+# Local notes unrelated to Iruka (not shared)
+/security-notes/
